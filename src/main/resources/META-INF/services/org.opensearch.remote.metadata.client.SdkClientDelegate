@@ -1,0 +1,3 @@
+org.opensearch.remote.metadata.client.impl.RemoteClusterIndicesClient
+org.opensearch.remote.metadata.client.impl.AOSOpenSearchClient
+org.opensearch.remote.metadata.client.impl.DDBOpenSearchClient

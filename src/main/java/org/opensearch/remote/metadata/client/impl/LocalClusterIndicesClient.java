@@ -25,7 +25,6 @@ import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.update.UpdateRequest;
 import org.opensearch.action.update.UpdateResponse;
 import org.opensearch.client.Client;
-import org.opensearch.common.inject.Inject;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.common.Strings;
 import org.opensearch.core.rest.RestStatus;
@@ -60,6 +59,7 @@ import org.opensearch.search.builder.SearchSourceBuilder;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
@@ -77,20 +77,22 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
 
     private final Client client;
     private final NamedXContentRegistry xContentRegistry;
-    private final String tenantIdField;
+
+    @Override
+    public boolean supportsMetadataType(String metadataType) {
+        return Strings.isNullOrEmpty(metadataType);
+    }
 
     /**
-     * Instantiate this object with an OpenSearch client.
-     *
-     * @param client The client to wrap
-     * @param xContentRegistry the registry of XContent objects
-     * @param tenantIdField the field name for the tenant id
+     * Instantiate this client
+     * @param client The OpenSearch Node Client. May be null if the implementation doesn't need it.
+     * @param xContentRegistry The OpenSearch NamedXContentRegistry. May be null if the implementation doesn't need it.
+     * @param metadataSettings The map of metadata settings.
      */
-    @Inject
-    public LocalClusterIndicesClient(Client client, NamedXContentRegistry xContentRegistry, String tenantIdField) {
+    public LocalClusterIndicesClient(Client client, NamedXContentRegistry xContentRegistry, Map<String, String> metadataSettings) {
+        super.initialize(metadataSettings);
         this.client = client;
         this.xContentRegistry = xContentRegistry;
-        this.tenantIdField = tenantIdField;
     }
 
     @Override
@@ -354,5 +356,10 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
             DeprecationHandler.IGNORE_DEPRECATIONS,
             Strings.toString(MediaTypeRegistry.JSON, obj)
         );
+    }
+
+    @Override
+    public void close() throws Exception {
+        // No resources to close, OpenSearch manages the NodeClient
     }
 }

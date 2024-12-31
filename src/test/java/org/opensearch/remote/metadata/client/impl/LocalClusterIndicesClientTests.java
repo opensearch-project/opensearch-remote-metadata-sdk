@@ -82,6 +82,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
+import static org.opensearch.remote.metadata.common.CommonValue.TENANT_ID_FIELD_KEY;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -128,7 +129,12 @@ public class LocalClusterIndicesClientTests {
     public void setup() {
         MockitoAnnotations.openMocks(this);
 
-        sdkClient = new SdkClient(new LocalClusterIndicesClient(mockedClient, xContentRegistry, TENANT_ID_FIELD), true);
+        LocalClusterIndicesClient innerClient = new LocalClusterIndicesClient(
+            mockedClient,
+            xContentRegistry,
+            Map.of(TENANT_ID_FIELD_KEY, TENANT_ID_FIELD)
+        );
+        sdkClient = new SdkClient(innerClient, true);
 
         testDataObject = new TestDataObject("foo");
     }
@@ -729,7 +735,12 @@ public class LocalClusterIndicesClientTests {
         when(mockedClient.search(any(SearchRequest.class))).thenReturn(future);
         when(future.actionGet()).thenReturn(searchResponse);
 
-        SdkClient sdkClientNoTenant = new SdkClient(new LocalClusterIndicesClient(mockedClient, xContentRegistry, TEST_TENANT_ID), false);
+        LocalClusterIndicesClient innerClient = new LocalClusterIndicesClient(
+            mockedClient,
+            xContentRegistry,
+            Map.of(TENANT_ID_FIELD_KEY, TENANT_ID_FIELD)
+        );
+        SdkClient sdkClientNoTenant = new SdkClient(innerClient, false);
         SearchDataObjectResponse response = sdkClientNoTenant.searchDataObjectAsync(
             searchRequest,
             testThreadPool.executor(GENERAL_THREAD_POOL)
@@ -822,7 +833,12 @@ public class LocalClusterIndicesClientTests {
     @Test
     public void testSearchDataObject_NullTenantNoMultitenancy() throws IOException {
         // Tests no status exception if multitenancy not enabled
-        SdkClient sdkClientNoTenant = new SdkClient(new LocalClusterIndicesClient(mockedClient, xContentRegistry, TEST_TENANT_ID), false);
+        LocalClusterIndicesClient innerClient = new LocalClusterIndicesClient(
+            mockedClient,
+            xContentRegistry,
+            Map.of(TENANT_ID_FIELD_KEY, TENANT_ID_FIELD)
+        );
+        SdkClient sdkClientNoTenant = new SdkClient(innerClient, false);
 
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
         SearchDataObjectRequest searchRequest = SearchDataObjectRequest.builder()

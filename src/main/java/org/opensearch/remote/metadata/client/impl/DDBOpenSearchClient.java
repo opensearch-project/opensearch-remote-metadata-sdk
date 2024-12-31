@@ -12,6 +12,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProviderChain;
+import software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
@@ -27,6 +33,7 @@ import software.amazon.awssdk.services.dynamodb.model.UpdateItemResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.opensearch.ExceptionsHelper;
+import org.opensearch.OpenSearchException;
 import org.opensearch.OpenSearchStatusException;
 import org.opensearch.action.DocWriteRequest.OpType;
 import org.opensearch.action.DocWriteResponse;
@@ -80,9 +87,12 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static org.opensearch.common.util.concurrent.ThreadContextAccess.doPrivileged;
 import static org.opensearch.common.xcontent.json.JsonXContent.jsonXContent;
 import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_PRIMARY_TERM;
 import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
+import static org.opensearch.remote.metadata.common.CommonValue.AWS_DYNAMO_DB;
+import static org.opensearch.remote.metadata.common.CommonValue.VALID_AWS_OPENSEARCH_SERVICE_NAMES;
 
 /**
  * DDB implementation of {@link SdkClient}. DDB table name will be mapped to index name.
@@ -104,19 +114,38 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
     // TENANT_ID hash key requires non-null value
     private static final String DEFAULT_TENANT = "DEFAULT_TENANT";
 
-    private final DynamoDbClient dynamoDbClient;
-    private final RemoteClusterIndicesClient remoteClusterIndicesClient;
-    private final String tenantIdField;
+    private DynamoDbClient dynamoDbClient;
+    private RemoteClusterIndicesClient remoteClusterIndicesClient;
+
+    @Override
+    public boolean supportsMetadataType(String metadataType) {
+        return AWS_DYNAMO_DB.equals(metadataType);
+    }
+
+    @Override
+    public void initialize(Map<String, String> metadataSettings) {
+        super.initialize(metadataSettings);
+        validateAwsParams(remoteMetadataType, remoteMetadataEndpoint, region, serviceName);
+
+        this.dynamoDbClient = createDynamoDbClient(region);
+        this.remoteClusterIndicesClient = new RemoteClusterIndicesClient();
+        this.remoteClusterIndicesClient.initialize(metadataSettings);
+    }
 
     /**
-     * Default constructor
+     * Empty constructor for SPI
+     */
+    public DDBOpenSearchClient() {}
+
+    /**
+     * Package private constructor for testing
      *
      * @param dynamoDbClient AWS DDB client to perform CRUD operations on a DDB table.
      * @param remoteClusterIndicesClient Remote opensearch client to perform search operations. Documents written to DDB
      *                                  needs to be synced offline with remote opensearch.
      * @param tenantIdField the field name for the tenant id
      */
-    public DDBOpenSearchClient(DynamoDbClient dynamoDbClient, RemoteClusterIndicesClient remoteClusterIndicesClient, String tenantIdField) {
+    DDBOpenSearchClient(DynamoDbClient dynamoDbClient, RemoteClusterIndicesClient remoteClusterIndicesClient, String tenantIdField) {
         this.dynamoDbClient = dynamoDbClient;
         this.remoteClusterIndicesClient = remoteClusterIndicesClient;
         this.tenantIdField = tenantIdField;
@@ -582,5 +611,44 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
             );
         sb.append("\"_source\":").append(source).append("}");
         return sb.toString();
+    }
+
+    private static void validateAwsParams(String clientType, String remoteMetadataEndpoint, String region, String serviceName) {
+        if (Strings.isNullOrEmpty(remoteMetadataEndpoint) || Strings.isNullOrEmpty(region)) {
+            throw new OpenSearchException(clientType + " client requires a metadata endpoint and region.");
+        }
+        if (serviceName == null) {
+            throw new OpenSearchException(clientType + " client requires a service name.");
+        }
+        if (!VALID_AWS_OPENSEARCH_SERVICE_NAMES.contains(serviceName)) {
+            throw new OpenSearchException(clientType + " client only supports service names " + VALID_AWS_OPENSEARCH_SERVICE_NAMES);
+        }
+    }
+
+    private static DynamoDbClient createDynamoDbClient(String region) {
+        if (region == null) {
+            throw new IllegalStateException("REGION environment variable needs to be set!");
+        }
+        return doPrivileged(
+            () -> DynamoDbClient.builder().region(Region.of(region)).credentialsProvider(createCredentialsProvider()).build()
+        );
+    }
+
+    private static AwsCredentialsProvider createCredentialsProvider() {
+        return AwsCredentialsProviderChain.builder()
+            .addCredentialsProvider(EnvironmentVariableCredentialsProvider.create())
+            .addCredentialsProvider(ContainerCredentialsProvider.builder().build())
+            .addCredentialsProvider(InstanceProfileCredentialsProvider.create())
+            .build();
+    }
+
+    @Override
+    public void close() throws Exception {
+        if (dynamoDbClient != null) {
+            dynamoDbClient.close();
+        }
+        if (remoteClusterIndicesClient != null) {
+            remoteClusterIndicesClient.close();
+        }
     }
 }

@@ -8,13 +8,29 @@
  */
 package org.opensearch.remote.metadata.client;
 
+import org.opensearch.remote.metadata.common.CommonValue;
+
+import java.util.Map;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 
 /**
  * An interface required by a client implementation, which is wrapped in the SdkClient
  */
-public interface SdkClientDelegate {
+public interface SdkClientDelegate extends AutoCloseable {
+
+    /**
+     * Which metadata type the implementation supports
+     * @param metadataType A matching value for the {@link CommonValue.REMOTE_METADATA_TYPE_KEY}
+     * @return true if this implementation supports that metadata type
+     */
+    boolean supportsMetadataType(String metadataType);
+
+    /**
+     * Initialize this client
+     * @param metadataSettings The map of metadata settings needed for initialization
+     */
+    void initialize(Map<String, String> metadataSettings);
 
     /**
      * Create/Put/Index a data object/document into a table/index.

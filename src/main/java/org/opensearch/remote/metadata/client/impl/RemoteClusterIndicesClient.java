@@ -8,11 +8,29 @@
  */
 package org.opensearch.remote.metadata.client.impl;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+
+import org.apache.hc.client5.http.auth.AuthScope;
+import org.apache.hc.client5.http.auth.UsernamePasswordCredentials;
+import org.apache.hc.client5.http.impl.auth.BasicCredentialsProvider;
+import org.apache.hc.client5.http.impl.nio.PoolingAsyncClientConnectionManager;
+import org.apache.hc.client5.http.impl.nio.PoolingAsyncClientConnectionManagerBuilder;
+import org.apache.hc.client5.http.ssl.ClientTlsStrategyBuilder;
+import org.apache.hc.core5.http.HttpHost;
+import org.apache.hc.core5.http.URIScheme;
+import org.apache.hc.core5.http.nio.ssl.TlsStrategy;
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
+import org.apache.http.ssl.SSLContextBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.opensearch.OpenSearchStatusException;
 import org.opensearch.client.json.JsonpMapper;
 import org.opensearch.client.json.JsonpSerializable;
+import org.opensearch.client.json.jackson.JacksonJsonpMapper;
 import org.opensearch.client.opensearch.OpenSearchClient;
 import org.opensearch.client.opensearch._types.FieldValue;
 import org.opensearch.client.opensearch._types.OpType;
@@ -37,6 +55,8 @@ import org.opensearch.client.opensearch.core.UpdateRequest.Builder;
 import org.opensearch.client.opensearch.core.UpdateResponse;
 import org.opensearch.client.opensearch.core.bulk.BulkOperation;
 import org.opensearch.client.opensearch.core.bulk.BulkResponseItem;
+import org.opensearch.client.transport.httpclient5.ApacheHttpClient5Transport;
+import org.opensearch.client.transport.httpclient5.ApacheHttpClient5TransportBuilder;
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.json.JsonXContent;
@@ -67,11 +87,14 @@ import org.opensearch.remote.metadata.client.UpdateDataObjectResponse;
 import org.opensearch.remote.metadata.common.JsonTransformer;
 import org.opensearch.remote.metadata.common.SdkClientUtils;
 
+import javax.net.ssl.SSLContext;
+
 import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletionStage;
@@ -81,6 +104,8 @@ import jakarta.json.stream.JsonGenerator;
 import jakarta.json.stream.JsonParser;
 
 import static org.opensearch.common.xcontent.json.JsonXContent.jsonXContent;
+import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_OPENSEARCH;
+import static org.opensearch.remote.metadata.common.CommonValue.TENANT_ID_FIELD_KEY;
 
 /**
  * An implementation of {@link SdkClient} that stores data in a remote
@@ -90,22 +115,37 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
     private static final Logger log = LogManager.getLogger(RemoteClusterIndicesClient.class);
 
     @SuppressWarnings("unchecked")
-    private static final Class<Map<String, Object>> MAP_DOCTYPE = (Class<Map<String, Object>>) (Class<?>) Map.class;
+    protected static final Class<Map<String, Object>> MAP_DOCTYPE = (Class<Map<String, Object>>) (Class<?>) Map.class;
 
-    private final OpenSearchClient openSearchClient;
-    private final JsonpMapper mapper;
-    private final String tenantIdField;
+    protected OpenSearchClient openSearchClient;
+    protected JsonpMapper mapper;
+
+    @Override
+    public boolean supportsMetadataType(String metadataType) {
+        return REMOTE_OPENSEARCH.equals(metadataType);
+    }
+
+    @Override
+    public void initialize(Map<String, String> metadataSettings) {
+        super.initialize(metadataSettings);
+        this.openSearchClient = createOpenSearchClient();
+        this.mapper = openSearchClient._transport().jsonpMapper();
+    }
 
     /**
-     * Instantiate this object with an OpenSearch Java client.
-     *
-     * @param openSearchClient The client to wrap
-     * @param tenantIdField the field name for the tenant id
+     * Empty constructor for SPI
      */
-    public RemoteClusterIndicesClient(OpenSearchClient openSearchClient, String tenantIdField) {
-        this.openSearchClient = openSearchClient;
+    public RemoteClusterIndicesClient() {}
+
+    /**
+     * Package Private constructor for testing
+     * @param mockedOpenSearchClient an OpenSearch client
+     * @param tenantIdField the tenant ID field
+     */
+    RemoteClusterIndicesClient(OpenSearchClient mockedOpenSearchClient, String tenantIdField) {
+        super.initialize(Collections.singletonMap(TENANT_ID_FIELD_KEY, tenantIdField));
+        this.openSearchClient = mockedOpenSearchClient;
         this.mapper = openSearchClient._transport().jsonpMapper();
-        this.tenantIdField = tenantIdField;
     }
 
     @Override
@@ -429,5 +469,53 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
             mapper.serialize(obj, generator);
         }
         return jsonXContent.createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.IGNORE_DEPRECATIONS, stringWriter.toString());
+    }
+
+    protected OpenSearchClient createOpenSearchClient() {
+        try {
+            Map<String, String> env = System.getenv();
+            String user = env.getOrDefault("user", "admin");
+            String pass = env.getOrDefault("password", "admin");
+            // Endpoint syntax: https://127.0.0.1:9200
+            HttpHost host = HttpHost.create(remoteMetadataEndpoint);
+            SSLContext sslContext = SSLContextBuilder.create().loadTrustMaterial(null, (chain, authType) -> true).build();
+            ApacheHttpClient5Transport transport = ApacheHttpClient5TransportBuilder.builder(host)
+                .setMapper(
+                    new JacksonJsonpMapper(
+                        new ObjectMapper().setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
+                            .setSerializationInclusion(JsonInclude.Include.NON_NULL)
+                            .registerModule(new JavaTimeModule())
+                            .configure(SerializationFeature.WRITE_DATE_TIMESTAMPS_AS_NANOSECONDS, false)
+                    )
+                )
+                .setHttpClientConfigCallback(httpClientBuilder -> {
+                    BasicCredentialsProvider credentialsProvider = new BasicCredentialsProvider();
+                    credentialsProvider.setCredentials(new AuthScope(host), new UsernamePasswordCredentials(user, pass.toCharArray()));
+                    if (URIScheme.HTTP.getId().equalsIgnoreCase(host.getSchemeName())) {
+                        // No SSL/TLS
+                        return httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider);
+                    }
+                    // Disable SSL/TLS verification as our local testing clusters use self-signed certificates
+                    final TlsStrategy tlsStrategy = ClientTlsStrategyBuilder.create()
+                        .setSslContext(sslContext)
+                        .setHostnameVerifier(NoopHostnameVerifier.INSTANCE)
+                        .build();
+                    final PoolingAsyncClientConnectionManager connectionManager = PoolingAsyncClientConnectionManagerBuilder.create()
+                        .setTlsStrategy(tlsStrategy)
+                        .build();
+                    return httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider).setConnectionManager(connectionManager);
+                })
+                .build();
+            return new OpenSearchClient(transport);
+        } catch (Exception e) {
+            throw new org.opensearch.OpenSearchException(e);
+        }
+    }
+
+    @Override
+    public void close() throws Exception {
+        if (openSearchClient != null && openSearchClient._transport() != null) {
+            openSearchClient._transport().close();
+        }
     }
 }

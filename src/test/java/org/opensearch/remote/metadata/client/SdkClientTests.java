@@ -135,6 +135,14 @@ public class SdkClientTests {
             ) {
                 return CompletableFuture.completedFuture(searchResponse);
             }
+
+            @Override
+            public boolean supportsMetadataType(String metadataType) {
+                return false;
+            }
+
+            @Override
+            public void close() throws Exception {}
         });
         sdkClient = new SdkClient(sdkClientImpl, true);
         testException = new OpenSearchStatusException("Test", RestStatus.BAD_REQUEST);
