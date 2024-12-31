@@ -471,6 +471,10 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         return jsonXContent.createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.IGNORE_DEPRECATIONS, stringWriter.toString());
     }
 
+    /**
+     * Create an instance of {@link OpenSearchClient}
+     * @return An OpenSearchClient instance
+     */
     protected OpenSearchClient createOpenSearchClient() {
         try {
             Map<String, String> env = System.getenv();

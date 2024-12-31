@@ -8,3 +8,5 @@
  */
 
 rootProject.name = 'opensearch-remote-metadata-sdk'
+include 'core'
+project(":core").name = rootProject.name + "-core"

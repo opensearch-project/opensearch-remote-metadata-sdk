@@ -21,7 +21,7 @@ public interface SdkClientDelegate extends AutoCloseable {
 
     /**
      * Which metadata type the implementation supports
-     * @param metadataType A matching value for the {@link CommonValue.REMOTE_METADATA_TYPE_KEY}
+     * @param metadataType A matching value for the {@link CommonValue#REMOTE_METADATA_TYPE_KEY}
      * @return true if this implementation supports that metadata type
      */
     boolean supportsMetadataType(String metadataType);

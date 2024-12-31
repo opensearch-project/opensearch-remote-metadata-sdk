@@ -1,12 +1,9 @@
-apply plugin: 'java'
-apply plugin: 'idea'
-apply plugin: 'java-library'
-apply plugin: 'maven-publish'
-apply plugin: 'eclipse'
-apply plugin: 'jacoco'
-apply plugin: 'com.diffplug.spotless'
-apply from: 'formatter/formatting.gradle'
-apply plugin: 'checkstyle' // for javadocs and checks spotless doesn't do
+/*
+ * Copyright OpenSearch Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import org.opensearch.gradle.VersionProperties
 
 buildscript {
     ext {
@@ -37,158 +34,45 @@ buildscript {
     }
 }
 
-repositories {
-    mavenLocal()
-    maven { url "https://aws.oss.sonatype.org/content/repositories/snapshots" }
-    mavenCentral()
-    maven { url "https://plugins.gradle.org/m2/" }
-}
+allprojects {
+    apply plugin: 'java'
+    apply plugin: 'idea'
+    apply plugin: 'java-library'
+    apply plugin: 'maven-publish'
+    apply plugin: 'eclipse'
+    apply plugin: 'jacoco'
+    apply plugin: 'com.diffplug.spotless'
+    apply plugin: 'checkstyle'
 
-java {
-    targetCompatibility = JavaVersion.VERSION_21
-    sourceCompatibility = JavaVersion.VERSION_21
-    withSourcesJar()
-    withJavadocJar()
-}
-
-dependencies {
-    implementation "org.opensearch:opensearch:${opensearch_version}"
-    implementation "org.apache.logging.log4j:log4j-api:${log4j_version}"
-    implementation "org.apache.logging.log4j:log4j-core:${log4j_version}"
-    implementation "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:${jackson_version}"
-
-    // For Remote Client: TODO move to new module with SPI
-    implementation "org.opensearch.client:opensearch-java:2.19.0"
-    api "org.apache.httpcomponents.client5:httpclient5:${apache_http_components_version}"
-    api "org.apache.httpcomponents.core5:httpcore5:${apache_http_core_version}"
-
-    // For AWS OpenSearch Service and DDB Client: TODO move to new module with SPI
-    implementation(platform("software.amazon.awssdk:bom:${aws_sdk_version}"))
-    implementation("software.amazon.awssdk:apache-client")
-    implementation("software.amazon.awssdk:sdk-core")
-    implementation("software.amazon.awssdk:aws-core")
-    implementation("software.amazon.awssdk:aws-json-protocol")
-    implementation("software.amazon.awssdk:auth")
-    implementation("software.amazon.awssdk:checksums")
-    implementation("software.amazon.awssdk:checksums-spi")
-    implementation("software.amazon.awssdk:dynamodb")
-    implementation("software.amazon.awssdk:endpoints-spi")
-    implementation("software.amazon.awssdk:http-auth-aws")
-    implementation("software.amazon.awssdk:http-auth-spi")
-    implementation("software.amazon.awssdk:http-client-spi")
-    implementation("software.amazon.awssdk:identity-spi")
-    implementation("software.amazon.awssdk:json-utils")
-    implementation("software.amazon.awssdk:metrics-spi")
-    implementation("software.amazon.awssdk:profiles")
-    implementation("software.amazon.awssdk:protocol-core")
-    implementation("software.amazon.awssdk:regions")
-    implementation("software.amazon.awssdk:third-party-jackson-core")
-    implementation("software.amazon.awssdk:url-connection-client")
-    implementation("software.amazon.awssdk:utils")
-
-    testImplementation "org.opensearch.test:framework:${opensearch_version}"
-    testImplementation "org.junit.jupiter:junit-jupiter:${junit_version}"
-    testImplementation "org.mockito:mockito-core:${mockito_version}"
-}
-
-test {
-    include '**/*Tests.class'
-    systemProperty 'tests.security.manager', 'false'
-    useJUnitPlatform()
-    outputs.upToDateWhen { false }
-    testLogging {
-        events "failed", "skipped"
-        showExceptions true
-        showCauses true
-        showStackTraces true
-        exceptionFormat "full"
-    }
-    afterSuite { desc, result ->
-        if (!desc.parent) {
-            println "\nTest result: ${result.resultType}"
-            println "Test summary: ${result.testCount} tests, " +
-                    "${result.successfulTestCount} succeeded, " +
-                    "${result.failedTestCount} failed, " +
-                    "${result.skippedTestCount} skipped"
-        }
-    }
-}
-
-jacocoTestReport {
-    dependsOn test
-    reports {
-        xml.required = true
-    }
-}
-tasks.named("check").configure { dependsOn(jacocoTestReport) }
-
-publishing {
     repositories {
-        maven {
-            name = 'staging'
-            url = "${rootProject.buildDir}/local-staging-repo"
-        }
-        maven {
-            name = "Snapshots"
-            url = "https://aws.oss.sonatype.org/content/repositories/snapshots"
-            credentials {
-                username "$System.env.SONATYPE_USERNAME"
-                password "$System.env.SONATYPE_PASSWORD"
-            }
-        }
-    }
-    publications {
-        mavenJava(MavenPublication) {
-            from components.java
-            groupId = project.ext.opensearch_group
-            version = project.ext.opensearch_version +
-              // (project.ext.is_snapshot ? "-SNAPSHOT" : "") +
-              (project.ext.build_version_qualifier ? "-${ext.build_version_qualifier}" : "")
-            artifactId = 'opensearch-remote-metadata-sdk'
-
-            pom {
-                name = "OpenSearch Remote Metadata SDK for Java"
-                packaging = "jar"
-                url = "https://github.com/opensearch-project/opensearch-remote-metadata-sdk"
-                description = "OpenSearch Remote Metadata SDK for Java"
-                scm {
-                    connection = "scm:git@github.com:opensearch-project/opensearch-remote-metadata-sdk.git"
-                    developerConnection = "scm:git@github.com:opensearch-project/opensearch-remote-metadata-sdk.git"
-                    url = "git@github.com:opensearch-project/opensearch-remote-metadata-sdk.git"
-                }
-                licenses {
-                    license {
-                        name = "The Apache License, Version 2.0"
-                        url = "http://www.apache.org/licenses/LICENSE-2.0.txt"
-                    }
-                }
-                developers {
-                    developer {
-                        id = "amazonwebservices"
-                        organization = "Amazon Web Services"
-                        organizationUrl = "https://aws.amazon.com"
-                    }
-                }
-            }
-        }
+        mavenLocal()
+        maven { url "https://aws.oss.sonatype.org/content/repositories/snapshots" }
+        mavenCentral()
+        maven { url "https://plugins.gradle.org/m2/" }
+        maven { url "https://artifacts.opensearch.org/releases/" }
     }
 
-    gradle.startParameter.setShowStacktrace(ShowStacktrace.ALWAYS)
-    gradle.startParameter.setLogLevel(LogLevel.DEBUG)
+    group = opensearch_group
+    version = opensearch_version +
+        (is_snapshot ? "-SNAPSHOT" : "") +
+        (build_version_qualifier ? "-${project.ext.build_version_qualifier}" : "")
+
+    java {
+        targetCompatibility = JavaVersion.VERSION_21
+        sourceCompatibility = JavaVersion.VERSION_21
+        withSourcesJar()
+        withJavadocJar()
+    }
 }
 
-// checkstyle gives us the warnings we need, suppress overzelous jdk checks
-tasks.withType(Javadoc) {
-    options.addStringOption('Xdoclint:none', '-quiet')
-}
+apply from: rootProject.file('formatter/formatting.gradle')
 
-// updateVersion: Task to auto update version to the next development iteration
+// Task to update version
 task updateVersion {
     onlyIf { System.getProperty('newVersion') }
     doLast {
         ext.newVersion = System.getProperty('newVersion')
         println "Setting version to ${newVersion}."
-         // String tokenization to support -SNAPSHOT
         ant.replaceregexp(file:'build.gradle', match: '"opensearch.version", "\\d.*"', replace: '"opensearch.version", "' + newVersion.tokenize('-')[0] + '-SNAPSHOT"', flags:'g', byline:true)
     }
 }
