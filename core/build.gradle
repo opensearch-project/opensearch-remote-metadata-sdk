@@ -3,12 +3,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-dependencies {
-    implementation "org.opensearch:opensearch:${opensearch_version}"
-    implementation "org.apache.logging.log4j:log4j-api:${log4j_version}"
-    implementation "org.apache.logging.log4j:log4j-core:${log4j_version}"
-    implementation "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:${jackson_version}"
+plugins {
+    id 'java-test-fixtures'
+}
 
+java {
+    registerFeature('testFixtures') {
+        usingSourceSet(sourceSets.testFixtures)  
+    }
+}
+
+dependencies {
+    testFixturesImplementation "org.opensearch:opensearch:${opensearch_version}"
+    
     // For Remote Client: TODO move to new module with SPI
     implementation "org.opensearch.client:opensearch-java:2.10.2"
     api "org.apache.httpcomponents.client5:httpclient5:${apache_http_components_version}"
@@ -23,7 +30,6 @@ dependencies {
     implementation("software.amazon.awssdk:auth")
     implementation("software.amazon.awssdk:checksums")
     implementation("software.amazon.awssdk:checksums-spi")
-    implementation("software.amazon.awssdk:dynamodb")
     implementation("software.amazon.awssdk:endpoints-spi")
     implementation("software.amazon.awssdk:http-auth-aws")
     implementation("software.amazon.awssdk:http-auth-spi")
@@ -37,10 +43,6 @@ dependencies {
     implementation("software.amazon.awssdk:third-party-jackson-core")
     implementation("software.amazon.awssdk:url-connection-client")
     implementation("software.amazon.awssdk:utils")
-
-    testImplementation "org.opensearch.test:framework:${opensearch_version}"
-    testImplementation "org.junit.jupiter:junit-jupiter:${junit_version}"
-    testImplementation "org.mockito:mockito-core:${mockito_version}"
 }
 
 test {
@@ -73,43 +75,6 @@ jacocoTestReport {
     }
 }
 tasks.named("check").configure { dependsOn(jacocoTestReport) }
-
-publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            from components.java
-            groupId = opensearch_group
-            version = opensearch_version +
-              (build_version_qualifier ? "-${ext.build_version_qualifier}" : "")
-            artifactId = 'opensearch-remote-metadata-sdk'
-
-            pom {
-                name = "OpenSearch Remote Metadata SDK for Java"
-                packaging = "jar"
-                url = "https://github.com/opensearch-project/opensearch-remote-metadata-sdk"
-                description = "OpenSearch Remote Metadata SDK for Java"
-                scm {
-                    connection = "scm:git@github.com:opensearch-project/opensearch-remote-metadata-sdk.git"
-                    developerConnection = "scm:git@github.com:opensearch-project/opensearch-remote-metadata-sdk.git"
-                    url = "git@github.com:opensearch-project/opensearch-remote-metadata-sdk.git"
-                }
-                licenses {
-                    license {
-                        name = "The Apache License, Version 2.0"
-                        url = "http://www.apache.org/licenses/LICENSE-2.0.txt"
-                    }
-                }
-                developers {
-                    developer {
-                        id = "amazonwebservices"
-                        organization = "Amazon Web Services"
-                        organizationUrl = "https://aws.amazon.com"
-                    }
-                }
-            }
-        }
-    }
-}
 
 // checkstyle gives us the warnings we need, suppress overzelous jdk checks
 tasks.withType(Javadoc) {

@@ -37,7 +37,6 @@ buildscript {
 allprojects {
     apply plugin: 'java'
     apply plugin: 'idea'
-    apply plugin: 'java-library'
     apply plugin: 'maven-publish'
     apply plugin: 'eclipse'
     apply plugin: 'jacoco'
@@ -62,6 +61,81 @@ allprojects {
         sourceCompatibility = JavaVersion.VERSION_21
         withSourcesJar()
         withJavadocJar()
+    }
+}
+
+subprojects {
+    apply plugin: 'java-library'
+
+    dependencies {
+        // Common dependencies for all subprojects
+        implementation "org.opensearch:opensearch:${opensearch_version}"
+        implementation "org.apache.logging.log4j:log4j-api:${log4j_version}"
+        implementation "org.apache.logging.log4j:log4j-core:${log4j_version}"
+
+        implementation "com.fasterxml.jackson.core:jackson-databind:${jackson_version}"
+        implementation "com.fasterxml.jackson.core:jackson-core:${jackson_version}"
+        implementation "com.fasterxml.jackson.core:jackson-annotations:${jackson_version}"
+        implementation "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:${jackson_version}"
+
+        testImplementation "org.opensearch.test:framework:${opensearch_version}"
+        testImplementation "org.junit.jupiter:junit-jupiter:${junit_version}"
+        testImplementation "org.mockito:mockito-core:${mockito_version}"
+    }
+
+    test {
+        useJUnitPlatform()
+    }
+
+    java {
+        withSourcesJar()
+        withJavadocJar()
+    }
+
+    publishing {
+        publications {
+            mavenJava(MavenPublication) {
+                from components.java
+
+				// These are for unpublished test classes
+		        suppressPomMetadataWarningsFor('testFixturesApiElements')
+		        suppressPomMetadataWarningsFor('testFixturesRuntimeElements')
+
+                // Customize artifact ID for core project
+                if (project.name == 'opensearch-remote-metadata-sdk-core') {
+                    artifactId = 'opensearch-remote-metadata-sdk'
+                }
+
+                pom {
+                    name = project.name == 'opensearch-remote-metadata-sdk-core'
+                        ? "OpenSearch Remote Metadata SDK for Java"
+                        : "OpenSearch Remote Metadata SDK for Java - ${project.name}"
+                    packaging = "jar"
+                    description = project.name == 'opensearch-remote-metadata-sdk-core'
+                        ? "OpenSearch Remote Metadata SDK for Java"
+                        : "OpenSearch Remote Metadata SDK for Java - ${project.name}"
+                    url = "https://github.com/opensearch-project/opensearch-remote-metadata-sdk"
+                    scm {
+                        connection = "scm:git@github.com:opensearch-project/opensearch-remote-metadata-sdk.git"
+                        developerConnection = "scm:git@github.com:opensearch-project/opensearch-remote-metadata-sdk.git"
+                        url = "git@github.com:opensearch-project/opensearch-remote-metadata-sdk.git"
+                    }
+                    licenses {
+                        license {
+                            name = "The Apache License, Version 2.0"
+                            url = "http://www.apache.org/licenses/LICENSE-2.0.txt"
+                        }
+                    }
+                    developers {
+                        developer {
+                            id = "amazonwebservices"
+                            organization = "Amazon Web Services"
+                            organizationUrl = "https://aws.amazon.com"
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -10,3 +10,5 @@
 rootProject.name = 'opensearch-remote-metadata-sdk'
 include 'core'
 project(":core").name = rootProject.name + "-core"
+include 'ddb-client'
+project(":ddb-client").name = rootProject.name + "-ddb-client"

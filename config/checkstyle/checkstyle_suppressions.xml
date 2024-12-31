@@ -14,5 +14,6 @@
 <suppressions>
     <!-- No javadoc checks on test classes -->
     <suppress checks="Javadoc*" files="[\\/]src[\\/]test[\\/].*" />
+    <suppress checks="Javadoc*" files="[\\/]src[\\/]testFixtures[\\/].*" />
     <suppress checks="Javadoc*" files="[\\/]src[\\/]yamlRestTest[\\/].*" />
 </suppressions>

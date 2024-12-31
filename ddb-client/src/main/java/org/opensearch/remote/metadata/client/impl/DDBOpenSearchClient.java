@@ -71,7 +71,6 @@ import org.opensearch.remote.metadata.client.SearchDataObjectRequest;
 import org.opensearch.remote.metadata.client.SearchDataObjectResponse;
 import org.opensearch.remote.metadata.client.UpdateDataObjectRequest;
 import org.opensearch.remote.metadata.client.UpdateDataObjectResponse;
-import org.opensearch.remote.metadata.common.JsonTransformer;
 import org.opensearch.remote.metadata.common.SdkClientUtils;
 
 import java.io.IOException;
@@ -174,7 +173,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 Long sequenceNumber = initOrIncrementSeqNo(getItemResponse);
                 String source = Strings.toString(MediaTypeRegistry.JSON, request.dataObject());
                 JsonNode jsonNode = OBJECT_MAPPER.readTree(source);
-                Map<String, AttributeValue> sourceMap = JsonTransformer.convertJsonObjectToDDBAttributeMap(jsonNode);
+                Map<String, AttributeValue> sourceMap = DDBJsonTransformer.convertJsonObjectToDDBAttributeMap(jsonNode);
                 if (request.tenantId() != null) {
                     sourceMap.put(this.tenantIdField, AttributeValue.builder().s(tenantId).build());
                 }
@@ -231,7 +230,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                     sourceObject = null;
                 } else {
                     found = true;
-                    sourceObject = JsonTransformer.convertDDBAttributeValueMapToObjectNode(getItemResponse.item().get(SOURCE).m());
+                    sourceObject = DDBJsonTransformer.convertDDBAttributeValueMapToObjectNode(getItemResponse.item().get(SOURCE).m());
                     if (getItemResponse.item().containsKey(SEQ_NO_KEY)) {
                         sequenceNumberString = getItemResponse.item().get(SEQ_NO_KEY).n();
                     }
@@ -306,7 +305,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
     }
 
     private Long updateItemWithRetryOnConflict(String tenantId, JsonNode jsonNode, UpdateDataObjectRequest request) {
-        Map<String, AttributeValue> updateItem = JsonTransformer.convertJsonObjectToDDBAttributeMap(jsonNode);
+        Map<String, AttributeValue> updateItem = DDBJsonTransformer.convertJsonObjectToDDBAttributeMap(jsonNode);
         updateItem.remove(this.tenantIdField);
         updateItem.remove(RANGE_KEY);
         Map<String, AttributeValue> updateKey = new HashMap<>();
