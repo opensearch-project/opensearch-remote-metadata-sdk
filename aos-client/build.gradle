@@ -6,10 +6,9 @@
 dependencies {
     implementation project(':opensearch-remote-metadata-sdk-core')
     testImplementation testFixtures(project(':opensearch-remote-metadata-sdk-core'))
+    implementation project(':opensearch-remote-metadata-sdk-remote-client')
 
     implementation "org.opensearch.client:opensearch-java:${opensearch_java_version}"
-    api "org.apache.httpcomponents.client5:httpclient5:${apache_http_components_version}"
-    api "org.apache.httpcomponents.core5:httpcore5:${apache_http_core_version}"
 
     implementation(platform("software.amazon.awssdk:bom:${aws_sdk_version}"))
     implementation("software.amazon.awssdk:apache-client")

@@ -94,4 +94,19 @@ public class DDBSdkClientFactoryTests {
         assertTrue(client.getDelegate() instanceof DDBOpenSearchClient);
         resourcesToClose.add(client.getDelegate());
     }
+
+    @Test
+    public void testCreateSdkClient_NoSuitableImplementation() {
+        Map<String, String> metadataSettings = new HashMap<>();
+        metadataSettings.put(REMOTE_METADATA_TYPE_KEY, "UNSUPPORTED_TYPE");
+        metadataSettings.put(TENANT_AWARE_KEY, "true");
+        metadataSettings.put(REMOTE_METADATA_ENDPOINT_KEY, "http://example.org");
+
+        Thread.currentThread().setContextClassLoader(new TestClassLoader());
+
+        SdkClient client = SdkClientFactory.createSdkClient(mock(Client.class), NamedXContentRegistry.EMPTY, metadataSettings);
+
+        assertNotNull(client);
+        assertTrue(client.getDelegate() instanceof LocalClusterIndicesClient);
+    }
 }

@@ -12,7 +12,7 @@ public class TestClassLoader extends ClassLoader {
     public Enumeration<URL> getResources(String name) throws IOException {
         if (SERVICE_FILE.equals(name)) {
             URL url = getClass().getClassLoader().getResource(name);
-            return Collections.enumeration(Collections.singletonList(url));
+            return url == null ? Collections.emptyEnumeration() : Collections.enumeration(Collections.singletonList(url));
         }
         return super.getResources(name);
     }

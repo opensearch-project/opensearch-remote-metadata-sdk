@@ -6,7 +6,7 @@
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
  */
-package org.opensearch.remote.metadata.common;
+package org.opensearch.remote.metadata.client.impl;
 
 import org.opensearch.OpenSearchStatusException;
 import org.opensearch.client.json.JsonpMapper;

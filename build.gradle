@@ -10,7 +10,16 @@ buildscript {
         is_snapshot = "true" == System.getProperty("build.snapshot", "true")
         build_version_qualifier = System.getProperty("build.version_qualifier", "")
 
-        opensearch_java_version = '2.10.2'
+        version_tokens = opensearch_version.tokenize('-')
+        opensearch_build = version_tokens[0]
+        if (build_version_qualifier) {
+            opensearch_build += "-${build_version_qualifier}"
+        }
+        if (is_snapshot) {
+            opensearch_build += "-SNAPSHOT"
+        }
+
+        opensearch_java_version = '2.19.0'
         log4j_version = '2.24.3'
         jackson_version = '2.18.2'
         apache_http_components_version = '5.4.1'
@@ -51,9 +60,7 @@ allprojects {
     }
 
     group = opensearch_group
-    version = opensearch_version +
-        (is_snapshot ? "-SNAPSHOT" : "") +
-        (build_version_qualifier ? "-${project.ext.build_version_qualifier}" : "")
+    version = opensearch_build
 
     java {
         targetCompatibility = JavaVersion.VERSION_21
@@ -77,6 +84,9 @@ subprojects {
         implementation "com.fasterxml.jackson.core:jackson-annotations:${jackson_version}"
         implementation "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:${jackson_version}"
 
+        implementation "org.apache.httpcomponents.client5:httpclient5:${apache_http_components_version}"
+        implementation "org.apache.httpcomponents.core5:httpcore5:${apache_http_core_version}"
+
         testImplementation "org.opensearch.test:framework:${opensearch_version}"
         testImplementation "org.junit.jupiter:junit-jupiter:${junit_version}"
         testImplementation "org.mockito:mockito-core:${mockito_version}"
@@ -87,12 +97,48 @@ subprojects {
     }
 
     test {
+        include '**/*Tests.class'
+        systemProperty 'tests.security.manager', 'false'
         useJUnitPlatform()
+        outputs.upToDateWhen { false }
+        testLogging {
+            events "failed", "skipped"
+            showExceptions true
+            showCauses true
+            showStackTraces true
+            exceptionFormat "full"
+        }
+        afterSuite { desc, result ->
+            if (!desc.parent) {
+                println "\nTest result: ${result.resultType}"
+                println "Test summary: ${result.testCount} tests, " +
+                        "${result.successfulTestCount} succeeded, " +
+                        "${result.failedTestCount} failed, " +
+                        "${result.skippedTestCount} skipped"
+            }
+        }
     }
+
+    jacocoTestReport {
+        dependsOn test
+        reports {
+            xml.required = true
+        }
+    }
+    tasks.named("check").configure { dependsOn(jacocoTestReport) }
 
     java {
         withSourcesJar()
         withJavadocJar()
+    }
+
+    checkstyle {
+        toolVersion = "10.21.1"
+    }
+
+    // checkstyle gives us the warnings we need, suppress overzelous jdk checks
+    tasks.withType(Javadoc) {
+        options.addStringOption('Xdoclint:none', '-quiet')
     }
 
     publishing {

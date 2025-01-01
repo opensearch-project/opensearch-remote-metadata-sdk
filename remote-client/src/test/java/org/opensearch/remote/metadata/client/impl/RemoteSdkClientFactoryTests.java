@@ -21,18 +21,17 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.opensearch.remote.metadata.common.CommonValue.AWS_OPENSEARCH_SERVICE;
 import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_ENDPOINT_KEY;
 import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_REGION_KEY;
-import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_SERVICE_NAME_KEY;
 import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_TYPE_KEY;
+import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_OPENSEARCH;
 import static org.opensearch.remote.metadata.common.CommonValue.TENANT_AWARE_KEY;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
-public class AOSSdkClientFactoryTests {
+public class RemoteSdkClientFactoryTests {
 
     private static final List<AutoCloseable> resourcesToClose = new ArrayList<>();
 
@@ -45,42 +44,40 @@ public class AOSSdkClientFactoryTests {
     }
 
     @Test
-    public void testLocalBinding() {
-        SdkClient sdkClient = SdkClientFactory.createSdkClient(mock(Client.class), NamedXContentRegistry.EMPTY, Map.of());
-        assertTrue(sdkClient.getDelegate() instanceof LocalClusterIndicesClient);
-    }
-
-    @Test
-    public void testAwsOpenSearchServiceBinding() {
+    public void testRemoteOpenSearchBinding() {
         Map<String, String> settings = Map.ofEntries(
-            Map.entry(REMOTE_METADATA_TYPE_KEY, AWS_OPENSEARCH_SERVICE),
-            Map.entry(REMOTE_METADATA_ENDPOINT_KEY, "example.org"),
-            Map.entry(REMOTE_METADATA_REGION_KEY, "eu-west-3"),
-            Map.entry(REMOTE_METADATA_SERVICE_NAME_KEY, "es")
+            Map.entry(REMOTE_METADATA_TYPE_KEY, REMOTE_OPENSEARCH),
+            Map.entry(REMOTE_METADATA_ENDPOINT_KEY, "http://example.org"),
+            Map.entry(REMOTE_METADATA_REGION_KEY, "eu-west-3")
         );
         SdkClient sdkClient = SdkClientFactory.createSdkClient(mock(Client.class), NamedXContentRegistry.EMPTY, settings);
-        assertTrue(sdkClient.getDelegate() instanceof AOSOpenSearchClient);
+        assertTrue(sdkClient.getDelegate() instanceof RemoteClusterIndicesClient);
         resourcesToClose.add(sdkClient.getDelegate());
     }
 
     @Test
-    public void testAwsOpenSearchServiceBindingException() {
-        Map<String, String> settings = Map.of(REMOTE_METADATA_TYPE_KEY, AWS_OPENSEARCH_SERVICE);
+    public void testRemoteOpenSearchBindingException() {
+        Map<String, String> settings = Map.of(REMOTE_METADATA_TYPE_KEY, REMOTE_OPENSEARCH);
         assertThrows(
             OpenSearchException.class,
             () -> SdkClientFactory.createSdkClient(mock(Client.class), NamedXContentRegistry.EMPTY, settings)
         );
+    }
 
-        Map<String, String> settings2 = Map.ofEntries(
-            Map.entry(REMOTE_METADATA_TYPE_KEY, AWS_OPENSEARCH_SERVICE),
-            Map.entry(REMOTE_METADATA_ENDPOINT_KEY, "example.org"),
-            Map.entry(REMOTE_METADATA_REGION_KEY, "eu-west-3"),
-            Map.entry(REMOTE_METADATA_SERVICE_NAME_KEY, "invalid")
-        );
-        assertThrows(
-            OpenSearchException.class,
-            () -> SdkClientFactory.createSdkClient(mock(Client.class), NamedXContentRegistry.EMPTY, settings2)
-        );
+    @Test
+    public void testCreateSdkClient_RemoteCluster() {
+        Map<String, String> metadataSettings = new HashMap<>();
+        metadataSettings.put(REMOTE_METADATA_TYPE_KEY, REMOTE_OPENSEARCH);
+        metadataSettings.put(TENANT_AWARE_KEY, "true");
+        metadataSettings.put(REMOTE_METADATA_ENDPOINT_KEY, "http://example.org");
+
+        Thread.currentThread().setContextClassLoader(new TestClassLoader());
+
+        SdkClient client = SdkClientFactory.createSdkClient(mock(Client.class), NamedXContentRegistry.EMPTY, metadataSettings);
+
+        assertNotNull(client);
+        assertTrue(client.getDelegate() instanceof RemoteClusterIndicesClient);
+        resourcesToClose.add(client.getDelegate());
     }
 
     @Test

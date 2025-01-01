@@ -14,3 +14,5 @@ include 'ddb-client'
 project(":ddb-client").name = rootProject.name + "-ddb-client"
 include 'aos-client'
 project(":aos-client").name = rootProject.name + "-aos-client"
+include 'remote-client'
+project(":remote-client").name = rootProject.name + "-remote-client"
