@@ -3,25 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-plugins {
-    id 'java-test-fixtures'
-}
-
-java {
-    registerFeature('testFixtures') {
-        usingSourceSet(sourceSets.testFixtures)  
-    }
-}
-
 dependencies {
-    testFixturesImplementation "org.opensearch:opensearch:${opensearch_version}"
-    
-    // For Remote Client: TODO move to new module with SPI
+    implementation project(':opensearch-remote-metadata-sdk-core')
+    testImplementation testFixtures(project(':opensearch-remote-metadata-sdk-core'))
+
     implementation "org.opensearch.client:opensearch-java:${opensearch_java_version}"
     api "org.apache.httpcomponents.client5:httpclient5:${apache_http_components_version}"
     api "org.apache.httpcomponents.core5:httpcore5:${apache_http_core_version}"
 
-    // For AWS OpenSearch Service and DDB Client: TODO move to new module with SPI
     implementation(platform("software.amazon.awssdk:bom:${aws_sdk_version}"))
     implementation("software.amazon.awssdk:apache-client")
     implementation("software.amazon.awssdk:sdk-core")
@@ -43,40 +32,4 @@ dependencies {
     implementation("software.amazon.awssdk:third-party-jackson-core")
     implementation("software.amazon.awssdk:url-connection-client")
     implementation("software.amazon.awssdk:utils")
-}
-
-test {
-    include '**/*Tests.class'
-    systemProperty 'tests.security.manager', 'false'
-    useJUnitPlatform()
-    outputs.upToDateWhen { false }
-    testLogging {
-        events "failed", "skipped"
-        showExceptions true
-        showCauses true
-        showStackTraces true
-        exceptionFormat "full"
-    }
-    afterSuite { desc, result ->
-        if (!desc.parent) {
-            println "\nTest result: ${result.resultType}"
-            println "Test summary: ${result.testCount} tests, " +
-                    "${result.successfulTestCount} succeeded, " +
-                    "${result.failedTestCount} failed, " +
-                    "${result.skippedTestCount} skipped"
-        }
-    }
-}
-
-jacocoTestReport {
-    dependsOn test
-    reports {
-        xml.required = true
-    }
-}
-tasks.named("check").configure { dependsOn(jacocoTestReport) }
-
-// checkstyle gives us the warnings we need, suppress overzelous jdk checks
-tasks.withType(Javadoc) {
-    options.addStringOption('Xdoclint:none', '-quiet')
 }

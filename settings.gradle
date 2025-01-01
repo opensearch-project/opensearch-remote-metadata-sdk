@@ -12,3 +12,5 @@ include 'core'
 project(":core").name = rootProject.name + "-core"
 include 'ddb-client'
 project(":ddb-client").name = rootProject.name + "-ddb-client"
+include 'aos-client'
+project(":aos-client").name = rootProject.name + "-aos-client"

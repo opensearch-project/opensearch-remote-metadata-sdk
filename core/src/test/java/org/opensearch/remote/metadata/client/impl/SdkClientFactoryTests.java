@@ -21,14 +21,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.opensearch.remote.metadata.common.CommonValue.AWS_OPENSEARCH_SERVICE;
 import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_ENDPOINT_KEY;
 import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_REGION_KEY;
-import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_SERVICE_NAME_KEY;
 import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_TYPE_KEY;
 import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_OPENSEARCH;
 import static org.opensearch.remote.metadata.common.CommonValue.TENANT_AWARE_KEY;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
@@ -61,20 +58,6 @@ public class SdkClientFactoryTests {
         );
         SdkClient sdkClient = SdkClientFactory.createSdkClient(mock(Client.class), NamedXContentRegistry.EMPTY, settings);
         assertTrue(sdkClient.getDelegate() instanceof RemoteClusterIndicesClient);
-        assertFalse(sdkClient.getDelegate() instanceof AOSOpenSearchClient);
-        resourcesToClose.add(sdkClient.getDelegate());
-    }
-
-    @Test
-    public void testAwsOpenSearchServiceBinding() {
-        Map<String, String> settings = Map.ofEntries(
-            Map.entry(REMOTE_METADATA_TYPE_KEY, AWS_OPENSEARCH_SERVICE),
-            Map.entry(REMOTE_METADATA_ENDPOINT_KEY, "example.org"),
-            Map.entry(REMOTE_METADATA_REGION_KEY, "eu-west-3"),
-            Map.entry(REMOTE_METADATA_SERVICE_NAME_KEY, "es")
-        );
-        SdkClient sdkClient = SdkClientFactory.createSdkClient(mock(Client.class), NamedXContentRegistry.EMPTY, settings);
-        assertTrue(sdkClient.getDelegate() instanceof AOSOpenSearchClient);
         resourcesToClose.add(sdkClient.getDelegate());
     }
 
@@ -84,26 +67,6 @@ public class SdkClientFactoryTests {
         assertThrows(
             OpenSearchException.class,
             () -> SdkClientFactory.createSdkClient(mock(Client.class), NamedXContentRegistry.EMPTY, settings)
-        );
-    }
-
-    @Test
-    public void testAwsOpenSearchServiceBindingException() {
-        Map<String, String> settings = Map.of(REMOTE_METADATA_TYPE_KEY, AWS_OPENSEARCH_SERVICE);
-        assertThrows(
-            OpenSearchException.class,
-            () -> SdkClientFactory.createSdkClient(mock(Client.class), NamedXContentRegistry.EMPTY, settings)
-        );
-
-        Map<String, String> settings2 = Map.ofEntries(
-            Map.entry(REMOTE_METADATA_TYPE_KEY, AWS_OPENSEARCH_SERVICE),
-            Map.entry(REMOTE_METADATA_ENDPOINT_KEY, "example.org"),
-            Map.entry(REMOTE_METADATA_REGION_KEY, "eu-west-3"),
-            Map.entry(REMOTE_METADATA_SERVICE_NAME_KEY, "invalid")
-        );
-        assertThrows(
-            OpenSearchException.class,
-            () -> SdkClientFactory.createSdkClient(mock(Client.class), NamedXContentRegistry.EMPTY, settings2)
         );
     }
 
@@ -132,7 +95,6 @@ public class SdkClientFactoryTests {
 
         assertNotNull(client);
         assertTrue(client.getDelegate() instanceof RemoteClusterIndicesClient);
-        assertFalse(client.getDelegate() instanceof AOSOpenSearchClient);
         resourcesToClose.add(client.getDelegate());
     }
 

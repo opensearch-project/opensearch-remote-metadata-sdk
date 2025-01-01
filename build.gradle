@@ -3,8 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import org.opensearch.gradle.VersionProperties
-
 buildscript {
     ext {
         opensearch_group = "org.opensearch"
@@ -12,6 +10,7 @@ buildscript {
         is_snapshot = "true" == System.getProperty("build.snapshot", "true")
         build_version_qualifier = System.getProperty("build.version_qualifier", "")
 
+        opensearch_java_version = '2.10.2'
         log4j_version = '2.24.3'
         jackson_version = '2.18.2'
         apache_http_components_version = '5.4.1'
@@ -83,6 +82,10 @@ subprojects {
         testImplementation "org.mockito:mockito-core:${mockito_version}"
     }
 
+    configurations {
+        testImplementation.extendsFrom testFixtures
+    }
+
     test {
         useJUnitPlatform()
     }
@@ -97,9 +100,9 @@ subprojects {
             mavenJava(MavenPublication) {
                 from components.java
 
-				// These are for unpublished test classes
-		        suppressPomMetadataWarningsFor('testFixturesApiElements')
-		        suppressPomMetadataWarningsFor('testFixturesRuntimeElements')
+                // These are for unpublished test classes
+                suppressPomMetadataWarningsFor('testFixturesApiElements')
+                suppressPomMetadataWarningsFor('testFixturesRuntimeElements')
 
                 // Customize artifact ID for core project
                 if (project.name == 'opensearch-remote-metadata-sdk-core') {
