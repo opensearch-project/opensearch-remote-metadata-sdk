@@ -107,7 +107,7 @@ public class DDBOpenSearchClientTests {
     @Mock
     private DynamoDbClient dynamoDbClient;
     @Mock
-    private RemoteClusterIndicesClient remoteClusterIndicesClient;
+    private AOSOpenSearchClient aosOpenSearchClient;
     @Captor
     private ArgumentCaptor<PutItemRequest> putItemRequestArgumentCaptor;
     @Captor
@@ -141,7 +141,7 @@ public class DDBOpenSearchClientTests {
         MockitoAnnotations.openMocks(this);
 
         sdkClient = SdkClientFactory.wrapSdkClientDelegate(
-            new DDBOpenSearchClient(dynamoDbClient, remoteClusterIndicesClient, TENANT_ID_FIELD),
+            new DDBOpenSearchClient(dynamoDbClient, aosOpenSearchClient, TENANT_ID_FIELD),
             true
         );
         testDataObject = new TestDataObject("foo");
@@ -753,11 +753,11 @@ public class DDBOpenSearchClientTests {
             .build();
         @SuppressWarnings("unchecked")
         CompletionStage<SearchDataObjectResponse> searchDataObjectResponse = mock(CompletionStage.class);
-        when(remoteClusterIndicesClient.searchDataObjectAsync(any(), any(), anyBoolean())).thenReturn(searchDataObjectResponse);
+        when(aosOpenSearchClient.searchDataObjectAsync(any(), any(), anyBoolean())).thenReturn(searchDataObjectResponse);
         CompletionStage<SearchDataObjectResponse> searchResponse = sdkClient.searchDataObjectAsync(searchDataObjectRequest);
 
         assertEquals(searchDataObjectResponse, searchResponse);
-        verify(remoteClusterIndicesClient).searchDataObjectAsync(searchDataObjectRequestArgumentCaptor.capture(), any(), anyBoolean());
+        verify(aosOpenSearchClient).searchDataObjectAsync(searchDataObjectRequestArgumentCaptor.capture(), any(), anyBoolean());
         assertEquals(TENANT_ID, searchDataObjectRequestArgumentCaptor.getValue().tenantId());
         assertEquals(TEST_INDEX, searchDataObjectRequestArgumentCaptor.getValue().indices()[0]);
         assertEquals(TEST_INDEX_2, searchDataObjectRequestArgumentCaptor.getValue().indices()[1]);
@@ -774,11 +774,11 @@ public class DDBOpenSearchClientTests {
             .build();
         @SuppressWarnings("unchecked")
         CompletionStage<SearchDataObjectResponse> searchDataObjectResponse = mock(CompletionStage.class);
-        when(remoteClusterIndicesClient.searchDataObjectAsync(any(), any(), anyBoolean())).thenReturn(searchDataObjectResponse);
+        when(aosOpenSearchClient.searchDataObjectAsync(any(), any(), anyBoolean())).thenReturn(searchDataObjectResponse);
         CompletionStage<SearchDataObjectResponse> searchResponse = sdkClient.searchDataObjectAsync(searchDataObjectRequest);
 
         assertEquals(searchDataObjectResponse, searchResponse);
-        verify(remoteClusterIndicesClient).searchDataObjectAsync(searchDataObjectRequestArgumentCaptor.capture(), any(), anyBoolean());
+        verify(aosOpenSearchClient).searchDataObjectAsync(searchDataObjectRequestArgumentCaptor.capture(), any(), anyBoolean());
         assertEquals("test_index", searchDataObjectRequestArgumentCaptor.getValue().indices()[0]);
     }
 

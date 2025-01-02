@@ -62,6 +62,10 @@ allprojects {
     group = opensearch_group
     version = opensearch_build
 
+    tasks.withType(JavaCompile) {
+        options.encoding = 'UTF-8'
+    }
+
     java {
         targetCompatibility = JavaVersion.VERSION_21
         sourceCompatibility = JavaVersion.VERSION_21

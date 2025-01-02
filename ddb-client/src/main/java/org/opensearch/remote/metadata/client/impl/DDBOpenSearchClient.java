@@ -114,7 +114,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
     private static final String DEFAULT_TENANT = "DEFAULT_TENANT";
 
     private DynamoDbClient dynamoDbClient;
-    private RemoteClusterIndicesClient remoteClusterIndicesClient;
+    private AOSOpenSearchClient aosOpenSearchClient;
 
     @Override
     public boolean supportsMetadataType(String metadataType) {
@@ -127,8 +127,8 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         validateAwsParams(remoteMetadataType, remoteMetadataEndpoint, region, serviceName);
 
         this.dynamoDbClient = createDynamoDbClient(region);
-        this.remoteClusterIndicesClient = new RemoteClusterIndicesClient();
-        this.remoteClusterIndicesClient.initialize(metadataSettings);
+        this.aosOpenSearchClient = new AOSOpenSearchClient();
+        this.aosOpenSearchClient.initialize(metadataSettings);
     }
 
     /**
@@ -140,13 +140,13 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
      * Package private constructor for testing
      *
      * @param dynamoDbClient AWS DDB client to perform CRUD operations on a DDB table.
-     * @param remoteClusterIndicesClient Remote opensearch client to perform search operations. Documents written to DDB
+     * @param aosOpenSearchClient Remote opensearch client to perform search operations. Documents written to DDB
      *                                  needs to be synced offline with remote opensearch.
      * @param tenantIdField the field name for the tenant id
      */
-    DDBOpenSearchClient(DynamoDbClient dynamoDbClient, RemoteClusterIndicesClient remoteClusterIndicesClient, String tenantIdField) {
+    DDBOpenSearchClient(DynamoDbClient dynamoDbClient, AOSOpenSearchClient aosOpenSearchClient, String tenantIdField) {
         this.dynamoDbClient = dynamoDbClient;
-        this.remoteClusterIndicesClient = remoteClusterIndicesClient;
+        this.aosOpenSearchClient = aosOpenSearchClient;
         this.tenantIdField = tenantIdField;
     }
 
@@ -543,7 +543,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
             request.tenantId(),
             request.searchSourceBuilder()
         );
-        return this.remoteClusterIndicesClient.searchDataObjectAsync(searchDataObjectRequest, executor, isMultiTenancyEnabled);
+        return this.aosOpenSearchClient.searchDataObjectAsync(searchDataObjectRequest, executor, isMultiTenancyEnabled);
     }
 
     private String getIndexName(String index) {
@@ -646,8 +646,8 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         if (dynamoDbClient != null) {
             dynamoDbClient.close();
         }
-        if (remoteClusterIndicesClient != null) {
-            remoteClusterIndicesClient.close();
+        if (aosOpenSearchClient != null) {
+            aosOpenSearchClient.close();
         }
     }
 }
