@@ -1,11 +1,10 @@
-name: Publish snapshots to maven
+name: Publish snapshots to Maven
 
 on:
   workflow_dispatch:
   push:
     branches:
       - 'main'
-      - '1.*'
       - '2.*'
 
 jobs:
@@ -35,4 +34,4 @@ jobs:
           export SONATYPE_PASSWORD=$(aws secretsmanager get-secret-value --secret-id maven-snapshots-password --query SecretString --output text)
           echo "::add-mask::$SONATYPE_USERNAME"
           echo "::add-mask::$SONATYPE_PASSWORD"
-          ./gradlew publishPluginZipPublicationToSnapshotsRepository
+          ./gradlew publishMavenJavaPublicationToSnapshotsRepository
