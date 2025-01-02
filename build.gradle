@@ -19,7 +19,7 @@ buildscript {
         jackson_version = '2.18.2'
         apache_http_components_version = '5.3.1'
         apache_http_core_version = '5.3.1'
-        aws_sdk_version = '2.25.40'
+        aws_sdk_version = '2.29.43'
         junit_version = '5.11.4'
         mockito_version = '5.14.2'
     }
