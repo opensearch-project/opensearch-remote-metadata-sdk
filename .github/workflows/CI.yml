@@ -47,7 +47,7 @@ jobs:
         java:
           - 21
           - 23
-    name: Build and Test
+    name: Linux JDK ${{ matrix.java }}
     runs-on: ubuntu-latest
     container:
       # using the same image which is used by opensearch-build team to build the OpenSearch Distribution
@@ -69,7 +69,7 @@ jobs:
       run: |
         chown -R 1000:1000 `pwd`
         su `id -un 1000` -c 'whoami && java -version &&
-                             echo "build and run tests" && ./gradlew build &&
+                             echo "build and run tests" && ./gradlew --no-daemon build &&
                              echo "Publish to Maven Local" && ./gradlew publishToMavenLocal'
     - name: Upload Coverage Report
       if: contains(matrix.java, '21')
@@ -86,7 +86,7 @@ jobs:
         java:
           - 21
           - 23
-    name: Build and Test
+    name: Windows JDK ${{ matrix.java }}
     runs-on: windows-latest
 
     steps:
@@ -98,4 +98,4 @@ jobs:
         distribution: temurin
     - name: Build and Run Tests
       run: |
-        ./gradlew build
+        ./gradlew --no-daemon build
