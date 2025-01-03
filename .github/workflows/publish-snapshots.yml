@@ -1,0 +1,37 @@
+name: Publish snapshots to Maven
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'main'
+      - '2.*'
+
+jobs:
+  build-and-publish-snapshots:
+    strategy:
+      fail-fast: false
+    if: github.repository == 'opensearch-project/opensearch-remote-metadata-sdk'
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: write
+
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4.0.2
+        with:
+          role-to-assume: ${{ secrets.PUBLISH_SNAPSHOTS_ROLE }}
+          aws-region: us-east-1
+      - name: publish snapshots to maven
+        run: |
+          export SONATYPE_USERNAME=$(aws secretsmanager get-secret-value --secret-id maven-snapshots-username --query SecretString --output text)
+          export SONATYPE_PASSWORD=$(aws secretsmanager get-secret-value --secret-id maven-snapshots-password --query SecretString --output text)
+          echo "::add-mask::$SONATYPE_USERNAME"
+          echo "::add-mask::$SONATYPE_PASSWORD"
+          ./gradlew publishMavenJavaPublicationToSnapshotsRepository
