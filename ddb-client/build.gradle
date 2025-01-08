@@ -12,3 +12,18 @@ dependencies {
     implementation(platform("software.amazon.awssdk:bom:${aws_sdk_version}"))
     implementation "software.amazon.awssdk:dynamodb"
 }
+
+shadowJar {
+    dependsOn(':opensearch-remote-metadata-sdk-core:shadowJar', 
+              ':opensearch-remote-metadata-sdk-remote-client:shadowJar',
+              ':opensearch-remote-metadata-sdk-aos-client:shadowJar')
+    from(project(':opensearch-remote-metadata-sdk-core').shadowJar.outputs.files) {
+        into 'META-INF/lib'
+    }
+    from(project(':opensearch-remote-metadata-sdk-remote-client').shadowJar.outputs.files) {
+        into 'META-INF/lib'
+    }
+    from(project(':opensearch-remote-metadata-sdk-aos-client').shadowJar.outputs.files) {
+        into 'META-INF/lib'
+    }
+}
