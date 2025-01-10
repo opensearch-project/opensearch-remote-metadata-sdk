@@ -46,6 +46,7 @@ jobs:
       matrix:
         java:
           - 11
+          - 17
           - 21
           - 23
     name: Linux JDK ${{ matrix.java }}
@@ -86,6 +87,7 @@ jobs:
       matrix:
         java:
           - 11
+          - 17
           - 21
           - 23
     name: Windows JDK ${{ matrix.java }}
