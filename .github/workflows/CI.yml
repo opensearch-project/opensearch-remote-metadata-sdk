@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
-          java-version: 21
+          java-version: 17
           distribution: temurin
       - name: Spotless Check
         run: ./gradlew spotlessCheck
@@ -33,7 +33,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
-          java-version: 21
+          java-version: 11
           distribution: temurin
       - name: Javadoc CheckStyle
         run: ./gradlew checkstyleMain
@@ -45,6 +45,7 @@ jobs:
     strategy:
       matrix:
         java:
+          - 11
           - 21
           - 23
     name: Linux JDK ${{ matrix.java }}
@@ -84,6 +85,7 @@ jobs:
     strategy:
       matrix:
         java:
+          - 11
           - 21
           - 23
     name: Windows JDK ${{ matrix.java }}
