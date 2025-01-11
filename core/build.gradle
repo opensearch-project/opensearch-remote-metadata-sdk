@@ -16,5 +16,3 @@ java {
 dependencies {
     testFixturesImplementation "org.opensearch:opensearch:${opensearch_version}"
 }
-
-

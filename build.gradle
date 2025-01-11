@@ -141,7 +141,7 @@ subprojects {
 
     shadowJar {
         archiveClassifier.set(null)
-        from sourceSets.main.output
+        mergeServiceFiles()
     }
 
     checkstyle {
