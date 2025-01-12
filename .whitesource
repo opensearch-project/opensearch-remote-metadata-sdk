@@ -39,7 +39,14 @@
     "addLabels": ["skip-changelog"],
     "workflowRules": {
       "enabled": true
-    }
+    },
+    "packageRules": [
+      {
+        "matchPackageNames": ["software.amazon.awssdk:bom"],
+        "automerge": false,
+        "enabled": false
+      }
+    ]
   },
    "imageSettings":{
        "imageTracing":{
