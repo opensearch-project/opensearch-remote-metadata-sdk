@@ -9,3 +9,7 @@ dependencies {
 
     implementation "org.opensearch.client:opensearch-java:${opensearch_java_version}"
 }
+
+shadowJar {
+    dependsOn(':opensearch-remote-metadata-sdk-core:shadowJar')
+}
