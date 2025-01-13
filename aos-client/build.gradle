@@ -32,8 +32,3 @@ dependencies {
     implementation("software.amazon.awssdk:url-connection-client")
     implementation("software.amazon.awssdk:utils")
 }
-
-shadowJar {
-    dependsOn(':opensearch-remote-metadata-sdk-core:shadowJar', 
-              ':opensearch-remote-metadata-sdk-remote-client:shadowJar')
-}
