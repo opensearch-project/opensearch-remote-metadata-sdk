@@ -4,13 +4,13 @@
  */
 
 dependencies {
-    implementation project(':opensearch-remote-metadata-sdk-core')
+    compileOnly project(':opensearch-remote-metadata-sdk-core')
     testImplementation testFixtures(project(':opensearch-remote-metadata-sdk-core'))
-    implementation project(':opensearch-remote-metadata-sdk-remote-client')
-    implementation project(':opensearch-remote-metadata-sdk-aos-client')
+    compileOnly project(':opensearch-remote-metadata-sdk-remote-client')
+    compileOnly project(':opensearch-remote-metadata-sdk-aos-client')
 
-    implementation(platform("software.amazon.awssdk:bom:${aws_sdk_version}"))
-    implementation "software.amazon.awssdk:dynamodb"
+    compileOnly(platform("software.amazon.awssdk:bom:${aws_sdk_version}"))
+    compileOnly "software.amazon.awssdk:dynamodb"
 }
 
 shadowJar {

@@ -4,10 +4,10 @@
  */
 
 dependencies {
-    implementation project(':opensearch-remote-metadata-sdk-core')
+    compileOnly project(':opensearch-remote-metadata-sdk-core')
     testImplementation testFixtures(project(':opensearch-remote-metadata-sdk-core'))
 
-    implementation "org.opensearch.client:opensearch-java:${opensearch_java_version}"
+    compileOnly "org.opensearch.client:opensearch-java:${opensearch_java_version}"
 }
 
 shadowJar {

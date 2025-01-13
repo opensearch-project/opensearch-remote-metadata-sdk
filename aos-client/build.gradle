@@ -4,33 +4,33 @@
  */
 
 dependencies {
-    implementation project(':opensearch-remote-metadata-sdk-core')
+    compileOnly project(':opensearch-remote-metadata-sdk-core')
     testImplementation testFixtures(project(':opensearch-remote-metadata-sdk-core'))
-    implementation project(':opensearch-remote-metadata-sdk-remote-client')
+    compileOnly project(':opensearch-remote-metadata-sdk-remote-client')
 
-    implementation "org.opensearch.client:opensearch-java:${opensearch_java_version}"
+    compileOnly "org.opensearch.client:opensearch-java:${opensearch_java_version}"
 
-    implementation(platform("software.amazon.awssdk:bom:${aws_sdk_version}"))
-    implementation("software.amazon.awssdk:apache-client")
-    implementation("software.amazon.awssdk:sdk-core")
-    implementation("software.amazon.awssdk:aws-core")
-    implementation("software.amazon.awssdk:aws-json-protocol")
-    implementation("software.amazon.awssdk:auth")
-    implementation("software.amazon.awssdk:checksums")
-    implementation("software.amazon.awssdk:checksums-spi")
-    implementation("software.amazon.awssdk:endpoints-spi")
-    implementation("software.amazon.awssdk:http-auth-aws")
-    implementation("software.amazon.awssdk:http-auth-spi")
-    implementation("software.amazon.awssdk:http-client-spi")
-    implementation("software.amazon.awssdk:identity-spi")
-    implementation("software.amazon.awssdk:json-utils")
-    implementation("software.amazon.awssdk:metrics-spi")
-    implementation("software.amazon.awssdk:profiles")
-    implementation("software.amazon.awssdk:protocol-core")
-    implementation("software.amazon.awssdk:regions")
-    implementation("software.amazon.awssdk:third-party-jackson-core")
-    implementation("software.amazon.awssdk:url-connection-client")
-    implementation("software.amazon.awssdk:utils")
+    compileOnly(platform("software.amazon.awssdk:bom:${aws_sdk_version}"))
+    compileOnly("software.amazon.awssdk:apache-client")
+    compileOnly("software.amazon.awssdk:sdk-core")
+    compileOnly("software.amazon.awssdk:aws-core")
+    compileOnly("software.amazon.awssdk:aws-json-protocol")
+    compileOnly("software.amazon.awssdk:auth")
+    compileOnly("software.amazon.awssdk:checksums")
+    compileOnly("software.amazon.awssdk:checksums-spi")
+    compileOnly("software.amazon.awssdk:endpoints-spi")
+    compileOnly("software.amazon.awssdk:http-auth-aws")
+    compileOnly("software.amazon.awssdk:http-auth-spi")
+    compileOnly("software.amazon.awssdk:http-client-spi")
+    compileOnly("software.amazon.awssdk:identity-spi")
+    compileOnly("software.amazon.awssdk:json-utils")
+    compileOnly("software.amazon.awssdk:metrics-spi")
+    compileOnly("software.amazon.awssdk:profiles")
+    compileOnly("software.amazon.awssdk:protocol-core")
+    compileOnly("software.amazon.awssdk:regions")
+    compileOnly("software.amazon.awssdk:third-party-jackson-core")
+    compileOnly("software.amazon.awssdk:url-connection-client")
+    compileOnly("software.amazon.awssdk:utils")
 }
 
 shadowJar {

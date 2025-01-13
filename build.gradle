@@ -87,27 +87,26 @@ subprojects {
 
     dependencies {
         // Common dependencies for all subprojects
-        implementation "org.opensearch:opensearch:${opensearch_version}"
-        implementation "org.apache.logging.log4j:log4j-api:${log4j_version}"
-        implementation "org.apache.logging.log4j:log4j-core:${log4j_version}"
+        compileOnly "org.opensearch:opensearch:${opensearch_version}"
+        compileOnly "org.apache.logging.log4j:log4j-api:${log4j_version}"
+        compileOnly "org.apache.logging.log4j:log4j-core:${log4j_version}"
 
-        implementation("com.fasterxml.jackson.core:jackson-annotations:${versions.jackson}")
-        implementation("com.fasterxml.jackson.core:jackson-databind:${versions.jackson_databind}")
-        implementation "com.fasterxml.jackson.core:jackson-core:${versions.jackson_databind}"
-        implementation "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:${versions.jackson_databind}"
+        compileOnly "com.fasterxml.jackson.core:jackson-annotations:${versions.jackson}"
+        compileOnly "com.fasterxml.jackson.core:jackson-databind:${versions.jackson_databind}"
+        compileOnly "com.fasterxml.jackson.core:jackson-core:${versions.jackson_databind}"
+        compileOnly "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:${versions.jackson_databind}"
 
-        implementation "org.apache.httpcomponents.client5:httpclient5:${versions.httpclient5}"
-        implementation "org.apache.httpcomponents.core5:httpcore5:${versions.httpcore5}"
+        compileOnly "org.apache.httpcomponents.client5:httpclient5:${versions.httpclient5}"
+        compileOnly "org.apache.httpcomponents.core5:httpcore5:${versions.httpcore5}"
 
         testImplementation "org.opensearch.test:framework:${opensearch_version}"
         testImplementation "org.junit.jupiter:junit-jupiter:${junit_version}"
         testImplementation "org.mockito:mockito-core:${mockito_version}"
+        testImplementation "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:${versions.jackson_databind}"
     }
 
     configurations {
         testImplementation.extendsFrom testFixtures
-        implementation.extendsFrom shadowImplementation
-        runtimeOnly.extendsFrom shadowRuntimeOnly
     }
 
     test {
