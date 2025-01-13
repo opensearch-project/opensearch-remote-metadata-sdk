@@ -83,7 +83,6 @@ allprojects {
 
 subprojects {
     apply plugin: 'java-library'
-    apply plugin: 'com.github.johnrengelman.shadow'
 
     dependencies {
         // Common dependencies for all subprojects
@@ -106,8 +105,6 @@ subprojects {
 
     configurations {
         testImplementation.extendsFrom testFixtures
-        implementation.extendsFrom shadowImplementation
-        runtimeOnly.extendsFrom shadowRuntimeOnly
     }
 
     test {
@@ -146,11 +143,6 @@ subprojects {
         withJavadocJar()
     }
 
-    shadowJar {
-        archiveClassifier.set(null)
-        mergeServiceFiles()
-    }
-
     checkstyle {
         toolVersion = "10.21.1"
     }
@@ -162,25 +154,17 @@ subprojects {
 
     publishing {
         publications {
-            shadow(MavenPublication) {
+            mavenJava(MavenPublication) {
                 from components.java
 
-                project.shadow.component(it)
+                // These are for unpublished test classes
+                suppressPomMetadataWarningsFor('testFixturesApiElements')
+                suppressPomMetadataWarningsFor('testFixturesRuntimeElements')
 
                 // Customize artifact ID for core project
                 if (project.name == 'opensearch-remote-metadata-sdk-core') {
                     artifactId = 'opensearch-remote-metadata-sdk'
                 }
-
-                artifacts.clear()
-
-                artifact shadowJar
-                artifact sourcesJar
-                artifact javadocJar
-
-                // These are for unpublished test classes
-                suppressPomMetadataWarningsFor('testFixturesApiElements')
-                suppressPomMetadataWarningsFor('testFixturesRuntimeElements')
 
                 pom {
                     name = project.name == 'opensearch-remote-metadata-sdk-core'
