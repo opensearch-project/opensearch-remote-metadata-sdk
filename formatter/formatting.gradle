@@ -34,7 +34,7 @@ spotless {
 
         trimTrailingWhitespace()
         endWithNewline()
-        indentWithSpaces()
+        leadingTabsToSpaces()
     }
     format("license", {
         licenseHeaderFile("${rootProject.file("formatter/license-header.txt")}", "package ");
