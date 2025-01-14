@@ -21,11 +21,14 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import static org.junit.Assert.assertSame;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -391,5 +394,28 @@ public class SdkClientTests {
         verify(sdkClientImpl, timeout(1000)).executePrivilegedAsync(any(), any());
         assertThrows(ExecutionException.class, () -> future.get(5, TimeUnit.SECONDS));
         assertTrue(future.isCompletedExceptionally());
+    }
+
+    @Test
+    public void testDefaultExecutor() {
+        SdkClient sdkClient = new SdkClient(sdkClientImpl, false);
+        ArgumentCaptor<Executor> executorCaptor = ArgumentCaptor.forClass(Executor.class);
+        when(sdkClientImpl.getDataObjectAsync(any(GetDataObjectRequest.class), executorCaptor.capture(), anyBoolean()))
+            .thenCallRealMethod();
+        sdkClient.getDataObjectAsync(getRequest);
+        verify(sdkClientImpl).getDataObjectAsync(any(GetDataObjectRequest.class), any(Executor.class), anyBoolean());
+        assertSame(ForkJoinPool.commonPool(), executorCaptor.getValue());
+    }
+
+    @Test
+    public void testCustomExecutor() {
+        Executor customExecutor = mock(Executor.class);
+        SdkClient sdkClient = new SdkClient(sdkClientImpl, customExecutor, false);
+        ArgumentCaptor<Executor> executorCaptor = ArgumentCaptor.forClass(Executor.class);
+        when(sdkClientImpl.getDataObjectAsync(any(GetDataObjectRequest.class), executorCaptor.capture(), anyBoolean()))
+            .thenCallRealMethod();
+        sdkClient.getDataObjectAsync(getRequest);
+        verify(sdkClientImpl).getDataObjectAsync(any(GetDataObjectRequest.class), any(Executor.class), anyBoolean());
+        assertSame(customExecutor, executorCaptor.getValue());
     }
 }

@@ -26,15 +26,27 @@ import static org.opensearch.remote.metadata.common.SdkClientUtils.unwrapAndConv
 public class SdkClient {
 
     private final SdkClientDelegate delegate;
+    private final Executor defaultExecutor;
     private final Boolean isMultiTenancyEnabled;
 
     /**
-     * Instantiate this client
+     * Instantiate this client with the {@link ForkJoinPool#commonPool()} as the default executor
      * @param delegate The client implementation to delegate calls to
      * @param multiTenancy whether multiTenancy is enabled
      */
     public SdkClient(SdkClientDelegate delegate, Boolean multiTenancy) {
+        this(delegate, ForkJoinPool.commonPool(), multiTenancy);
+    }
+
+    /**
+     * Instantiate this client with a default Executor
+     * @param delegate The client implementation to delegate calls to
+     * @param defaultExecutor A default executor to use for asynchronous execution unless otherwise specified
+     * @param multiTenancy whether multiTenancy is enabled
+     */
+    public SdkClient(SdkClientDelegate delegate, Executor defaultExecutor, Boolean multiTenancy) {
         this.delegate = delegate;
+        this.defaultExecutor = defaultExecutor;
         this.isMultiTenancyEnabled = multiTenancy;
     }
 
@@ -50,12 +62,12 @@ public class SdkClient {
     }
 
     /**
-     * Create/Put/Index a data object/document into a table/index.
+     * Create/Put/Index a data object/document into a table/index using the default executor.
      * @param request A request encapsulating the data object to store
      * @return A completion stage encapsulating the response or exception
      */
     public CompletionStage<PutDataObjectResponse> putDataObjectAsync(PutDataObjectRequest request) {
-        return putDataObjectAsync(request, ForkJoinPool.commonPool());
+        return putDataObjectAsync(request, defaultExecutor);
     }
 
     /**
@@ -72,7 +84,7 @@ public class SdkClient {
     }
 
     /**
-     * Read/Get a data object/document from a table/index.
+     * Read/Get a data object/document from a table/index using the default executor.
      *
      * @param request  A request identifying the data object to retrieve
      * @param executor the executor to use for asynchronous execution
@@ -90,7 +102,7 @@ public class SdkClient {
      */
     public CompletionStage<GetDataObjectResponse> getDataObjectAsync(GetDataObjectRequest request) {
         validateTenantId(request.tenantId());
-        return getDataObjectAsync(request, ForkJoinPool.commonPool());
+        return getDataObjectAsync(request, defaultExecutor);
     }
 
     /**
@@ -119,13 +131,13 @@ public class SdkClient {
     }
 
     /**
-     * Update a data object/document in a table/index.
+     * Update a data object/document in a table/index using the default executor.
      *
      * @param request A request identifying the data object to update
      * @return A completion stage encapsulating the response or exception
      */
     public CompletionStage<UpdateDataObjectResponse> updateDataObjectAsync(UpdateDataObjectRequest request) {
-        return updateDataObjectAsync(request, ForkJoinPool.commonPool());
+        return updateDataObjectAsync(request, defaultExecutor);
     }
 
     /**
@@ -154,13 +166,13 @@ public class SdkClient {
     }
 
     /**
-     * Delete a data object/document from a table/index.
+     * Delete a data object/document from a table/index using the default executor.
      *
      * @param request A request identifying the data object to delete
      * @return A completion stage encapsulating the response or exception
      */
     public CompletionStage<DeleteDataObjectResponse> deleteDataObjectAsync(DeleteDataObjectRequest request) {
-        return deleteDataObjectAsync(request, ForkJoinPool.commonPool());
+        return deleteDataObjectAsync(request, defaultExecutor);
     }
 
     /**
@@ -189,13 +201,13 @@ public class SdkClient {
     }
 
     /**
-     * Perform a bulk request for multiple data objects/documents in potentially multiple tables/indices.
+     * Perform a bulk request for multiple data objects/documents in potentially multiple tables/indices using the default executor.
      *
      * @param request A request identifying the bulk requests to execute
      * @return A completion stage encapsulating the response or exception
      */
     public CompletionStage<BulkDataObjectResponse> bulkDataObjectAsync(BulkDataObjectRequest request) {
-        return bulkDataObjectAsync(request, ForkJoinPool.commonPool());
+        return bulkDataObjectAsync(request, defaultExecutor);
     }
 
     /**
@@ -225,13 +237,13 @@ public class SdkClient {
     }
 
     /**
-     * Search for data objects/documents in a table/index.
+     * Search for data objects/documents in a table/index using the default executor.
      *
      * @param request A request identifying the data objects to search for
      * @return A completion stage encapsulating the response or exception
      */
     public CompletionStage<SearchDataObjectResponse> searchDataObjectAsync(SearchDataObjectRequest request) {
-        return searchDataObjectAsync(request, ForkJoinPool.commonPool());
+        return searchDataObjectAsync(request, defaultExecutor);
     }
 
     /**
