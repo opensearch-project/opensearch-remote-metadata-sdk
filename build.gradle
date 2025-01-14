@@ -13,7 +13,7 @@ buildscript {
         build_version_qualifier = System.getProperty("build.version_qualifier", "")
 
         version_tokens = opensearch_version.tokenize('-')
-        opensearch_build = version_tokens[0]
+        opensearch_build = version_tokens[0] + '.0'
         if (build_version_qualifier) {
             opensearch_build += "-${build_version_qualifier}"
         }
