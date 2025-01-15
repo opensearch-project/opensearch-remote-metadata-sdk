@@ -165,26 +165,25 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         return doPrivileged(() -> {
             GetRequest getRequest = createGetRequest(request);
             client.get(getRequest, ActionListener.wrap(getResponse -> {
-                try {
-                    GetDataObjectResponse response;
-                    if (getResponse != null && getResponse.isExists()) {
-                        response = GetDataObjectResponse.builder()
+                if (getResponse == null) {
+                    future.complete(GetDataObjectResponse.builder().id(request.id()).parser(null).build());
+                } else {
+                    try {
+                        GetDataObjectResponse response = GetDataObjectResponse.builder()
                             .id(getResponse.getId())
                             .parser(createParser(getResponse))
                             .source(getResponse.getSource())
                             .build();
-                    } else {
-                        response = GetDataObjectResponse.builder().id(request.id()).parser(null).build();
+                        future.complete(response);
+                    } catch (IOException e) {
+                        future.completeExceptionally(
+                            new OpenSearchStatusException(
+                                "Failed to create parser for data object retrieved from index " + request.index(),
+                                RestStatus.INTERNAL_SERVER_ERROR,
+                                e
+                            )
+                        );
                     }
-                    future.complete(response);
-                } catch (IOException e) {
-                    future.completeExceptionally(
-                        new OpenSearchStatusException(
-                            "Failed to create parser for data object retrieved from index " + request.index(),
-                            RestStatus.INTERNAL_SERVER_ERROR,
-                            e
-                        )
-                    );
                 }
             },
                 e -> future.completeExceptionally(
@@ -197,6 +196,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
             ));
             return future;
         });
+
     }
 
     private GetRequest createGetRequest(GetDataObjectRequest request) {

@@ -259,7 +259,6 @@ public class LocalClusterIndicesClientTests {
         assertEquals(TEST_INDEX, requestCaptor.getValue().index());
         assertEquals(TEST_ID, response.id());
         assertTrue(response.source().isEmpty());
-        assertNull(response.parser());
     }
 
     @Test
