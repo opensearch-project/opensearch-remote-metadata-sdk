@@ -25,18 +25,14 @@ import org.opensearch.action.search.SearchPhaseName;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.ShardSearchFailure;
-import org.opensearch.action.support.PlainActionFuture;
 import org.opensearch.action.support.replication.ReplicationResponse.ShardInfo;
 import org.opensearch.action.update.UpdateRequest;
 import org.opensearch.action.update.UpdateResponse;
 import org.opensearch.client.Client;
-import org.opensearch.common.action.ActionFuture;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.concurrent.OpenSearchExecutors;
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.bytes.BytesArray;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.core.rest.RestStatus;
@@ -62,10 +58,6 @@ import org.opensearch.remote.metadata.client.UpdateDataObjectResponse;
 import org.opensearch.remote.metadata.common.TestDataObject;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.internal.InternalSearchResponse;
-import org.opensearch.threadpool.ScalingExecutorBuilder;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -74,7 +66,6 @@ import java.util.EnumSet;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import org.mockito.ArgumentCaptor;
@@ -89,32 +80,16 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 public class LocalClusterIndicesClientTests {
-
-    // Copied constants from MachineLearningPlugin.java
-    private static final String ML_THREAD_POOL_PREFIX = "thread_pool.ml_commons.";
-    private static final String GENERAL_THREAD_POOL = "opensearch_ml_general";
 
     private static final String TEST_ID = "123";
     private static final String TEST_INDEX = "test_index";
     private static final String TEST_TENANT_ID = "xyz";
     private static final String TENANT_ID_FIELD = "tenant_id";
-
-    private static TestThreadPool testThreadPool = new TestThreadPool(
-        LocalClusterIndicesClientTests.class.getName(),
-        new ScalingExecutorBuilder(
-            GENERAL_THREAD_POOL,
-            1,
-            Math.max(1, OpenSearchExecutors.allocatedProcessors(Settings.EMPTY) - 1),
-            TimeValue.timeValueMinutes(1),
-            ML_THREAD_POOL_PREFIX + GENERAL_THREAD_POOL
-        )
-    );
 
     @Mock
     private Client mockedClient;
@@ -139,11 +114,6 @@ public class LocalClusterIndicesClientTests {
         testDataObject = new TestDataObject("foo");
     }
 
-    @AfterAll
-    public static void cleanup() {
-        ThreadPool.terminate(testThreadPool, 500, TimeUnit.MILLISECONDS);
-    }
-
     @Test
     public void testPutDataObject() throws IOException {
         PutDataObjectRequest putRequest = PutDataObjectRequest.builder()
@@ -155,17 +125,16 @@ public class LocalClusterIndicesClientTests {
             .build();
 
         IndexResponse indexResponse = new IndexResponse(new ShardId(TEST_INDEX, "_na_", 0), TEST_ID, 1, 0, 2, true);
-        @SuppressWarnings("unchecked")
-        ActionFuture<IndexResponse> future = mock(ActionFuture.class);
-        when(mockedClient.index(any(IndexRequest.class))).thenReturn(future);
-        when(future.actionGet()).thenReturn(indexResponse);
+        doAnswer(invocation -> {
+            ActionListener<IndexResponse> listener = invocation.getArgument(1);
+            listener.onResponse(indexResponse);
+            return null;
+        }).when(mockedClient).index(any(IndexRequest.class), any());
 
-        PutDataObjectResponse response = sdkClient.putDataObjectAsync(putRequest, testThreadPool.executor(GENERAL_THREAD_POOL))
-            .toCompletableFuture()
-            .join();
+        PutDataObjectResponse response = sdkClient.putDataObjectAsync(putRequest).toCompletableFuture().join();
 
         ArgumentCaptor<IndexRequest> requestCaptor = ArgumentCaptor.forClass(IndexRequest.class);
-        verify(mockedClient, times(1)).index(requestCaptor.capture());
+        verify(mockedClient, times(1)).index(requestCaptor.capture(), any());
         assertEquals(TEST_INDEX, requestCaptor.getValue().index());
         assertEquals(TEST_ID, requestCaptor.getValue().id());
         assertEquals(OpType.CREATE, requestCaptor.getValue().opType());
@@ -185,17 +154,18 @@ public class LocalClusterIndicesClientTests {
             .dataObject(testDataObject)
             .build();
 
-        when(mockedClient.index(any(IndexRequest.class))).thenThrow(new UnsupportedOperationException("test"));
+        doAnswer(invocation -> {
+            ActionListener<IndexResponse> listener = invocation.getArgument(1);
+            listener.onFailure(new UnsupportedOperationException("test"));
+            return null;
+        }).when(mockedClient).index(any(IndexRequest.class), any());
 
-        CompletableFuture<PutDataObjectResponse> future = sdkClient.putDataObjectAsync(
-            putRequest,
-            testThreadPool.executor(GENERAL_THREAD_POOL)
-        ).toCompletableFuture();
+        CompletableFuture<PutDataObjectResponse> future = sdkClient.putDataObjectAsync(putRequest).toCompletableFuture();
 
         CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
         Throwable cause = ce.getCause();
-        assertEquals(UnsupportedOperationException.class, cause.getClass());
-        assertEquals("test", cause.getMessage());
+        assertEquals(OpenSearchStatusException.class, cause.getClass());
+        assertEquals("Failed to put data object in index test_index", cause.getMessage());
     }
 
     @Test
@@ -212,10 +182,7 @@ public class LocalClusterIndicesClientTests {
             .dataObject(badDataObject)
             .build();
 
-        CompletableFuture<PutDataObjectResponse> future = sdkClient.putDataObjectAsync(
-            putRequest,
-            testThreadPool.executor(GENERAL_THREAD_POOL)
-        ).toCompletableFuture();
+        CompletableFuture<PutDataObjectResponse> future = sdkClient.putDataObjectAsync(putRequest).toCompletableFuture();
 
         CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
         Throwable cause = ce.getCause();
@@ -229,17 +196,17 @@ public class LocalClusterIndicesClientTests {
 
         String json = testDataObject.toJson();
         GetResponse getResponse = new GetResponse(new GetResult(TEST_INDEX, TEST_ID, -2, 0, 1, true, new BytesArray(json), null, null));
-        @SuppressWarnings("unchecked")
-        ActionFuture<GetResponse> future = mock(ActionFuture.class);
-        when(mockedClient.get(any(GetRequest.class))).thenReturn(future);
-        when(future.actionGet()).thenReturn(getResponse);
 
-        GetDataObjectResponse response = sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(GENERAL_THREAD_POOL))
-            .toCompletableFuture()
-            .join();
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(1);
+            listener.onResponse(getResponse);
+            return null;
+        }).when(mockedClient).get(any(GetRequest.class), any());
+
+        GetDataObjectResponse response = sdkClient.getDataObjectAsync(getRequest).toCompletableFuture().join();
 
         ArgumentCaptor<GetRequest> requestCaptor = ArgumentCaptor.forClass(GetRequest.class);
-        verify(mockedClient, times(1)).get(requestCaptor.capture());
+        verify(mockedClient, times(1)).get(requestCaptor.capture(), any());
         assertEquals(TEST_INDEX, requestCaptor.getValue().index());
         assertEquals(TEST_ID, response.id());
         assertEquals("foo", response.source().get("data"));
@@ -258,17 +225,16 @@ public class LocalClusterIndicesClientTests {
     public void testGetDataObject_NullResponse() throws IOException {
         GetDataObjectRequest getRequest = GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build();
 
-        @SuppressWarnings("unchecked")
-        ActionFuture<GetResponse> future = mock(ActionFuture.class);
-        when(mockedClient.get(any(GetRequest.class))).thenReturn(future);
-        when(future.actionGet()).thenReturn(null);
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(1);
+            listener.onResponse(null);
+            return null;
+        }).when(mockedClient).get(any(GetRequest.class), any());
 
-        GetDataObjectResponse response = sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(GENERAL_THREAD_POOL))
-            .toCompletableFuture()
-            .join();
+        GetDataObjectResponse response = sdkClient.getDataObjectAsync(getRequest).toCompletableFuture().join();
 
         ArgumentCaptor<GetRequest> requestCaptor = ArgumentCaptor.forClass(GetRequest.class);
-        verify(mockedClient, times(1)).get(requestCaptor.capture());
+        verify(mockedClient, times(1)).get(requestCaptor.capture(), any());
         assertEquals(TEST_INDEX, requestCaptor.getValue().index());
         assertEquals(TEST_ID, response.id());
         assertNull(response.parser());
@@ -280,39 +246,38 @@ public class LocalClusterIndicesClientTests {
         GetDataObjectRequest getRequest = GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build();
         GetResponse getResponse = new GetResponse(new GetResult(TEST_INDEX, TEST_ID, -2, 0, 1, false, null, null, null));
 
-        @SuppressWarnings("unchecked")
-        ActionFuture<GetResponse> future = mock(ActionFuture.class);
-        when(mockedClient.get(any(GetRequest.class))).thenReturn(future);
-        when(future.actionGet()).thenReturn(getResponse);
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(1);
+            listener.onResponse(getResponse);
+            return null;
+        }).when(mockedClient).get(any(GetRequest.class), any());
 
-        GetDataObjectResponse response = sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(GENERAL_THREAD_POOL))
-            .toCompletableFuture()
-            .join();
+        GetDataObjectResponse response = sdkClient.getDataObjectAsync(getRequest).toCompletableFuture().join();
 
         ArgumentCaptor<GetRequest> requestCaptor = ArgumentCaptor.forClass(GetRequest.class);
-        verify(mockedClient, times(1)).get(requestCaptor.capture());
+        verify(mockedClient, times(1)).get(requestCaptor.capture(), any());
         assertEquals(TEST_INDEX, requestCaptor.getValue().index());
         assertEquals(TEST_ID, response.id());
         assertTrue(response.source().isEmpty());
-        assertFalse(GetResponse.fromXContent(response.parser()).isExists());
+        assertNull(response.parser());
     }
 
     @Test
     public void testGetDataObject_Exception() throws IOException {
         GetDataObjectRequest getRequest = GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build();
 
-        ArgumentCaptor<GetRequest> getRequestCaptor = ArgumentCaptor.forClass(GetRequest.class);
-        when(mockedClient.get(getRequestCaptor.capture())).thenThrow(new UnsupportedOperationException("test"));
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(1);
+            listener.onFailure(new UnsupportedOperationException("test"));
+            return null;
+        }).when(mockedClient).get(any(GetRequest.class), any());
 
-        CompletableFuture<GetDataObjectResponse> future = sdkClient.getDataObjectAsync(
-            getRequest,
-            testThreadPool.executor(GENERAL_THREAD_POOL)
-        ).toCompletableFuture();
+        CompletableFuture<GetDataObjectResponse> future = sdkClient.getDataObjectAsync(getRequest).toCompletableFuture();
 
         CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
         Throwable cause = ce.getCause();
-        assertEquals(UnsupportedOperationException.class, cause.getClass());
-        assertEquals("test", cause.getMessage());
+        assertEquals(OpenSearchStatusException.class, cause.getClass());
+        assertEquals("Failed to get data object from index test_index", cause.getMessage());
     }
 
     @Test
@@ -334,18 +299,16 @@ public class LocalClusterIndicesClientTests {
             2,
             Result.UPDATED
         );
+        doAnswer(invocation -> {
+            ActionListener<UpdateResponse> listener = invocation.getArgument(1);
+            listener.onResponse(updateResponse);
+            return null;
+        }).when(mockedClient).update(any(UpdateRequest.class), any());
 
-        @SuppressWarnings("unchecked")
-        ActionFuture<UpdateResponse> future = mock(ActionFuture.class);
-        when(mockedClient.update(any(UpdateRequest.class))).thenReturn(future);
-        when(future.actionGet()).thenReturn(updateResponse);
-
-        UpdateDataObjectResponse response = sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(GENERAL_THREAD_POOL))
-            .toCompletableFuture()
-            .join();
+        UpdateDataObjectResponse response = sdkClient.updateDataObjectAsync(updateRequest).toCompletableFuture().join();
 
         ArgumentCaptor<UpdateRequest> requestCaptor = ArgumentCaptor.forClass(UpdateRequest.class);
-        verify(mockedClient, times(1)).update(requestCaptor.capture());
+        verify(mockedClient, times(1)).update(requestCaptor.capture(), any());
         assertEquals(TEST_INDEX, requestCaptor.getValue().index());
         assertEquals(3, requestCaptor.getValue().retryOnConflict());
         assertEquals(TEST_ID, response.id());
@@ -377,17 +340,21 @@ public class LocalClusterIndicesClientTests {
             Result.UPDATED
         );
 
-        @SuppressWarnings("unchecked")
-        ActionFuture<UpdateResponse> future = mock(ActionFuture.class);
-        when(mockedClient.update(any(UpdateRequest.class))).thenReturn(future);
-        when(future.actionGet()).thenReturn(updateResponse);
+        doAnswer(invocation -> {
+            ActionListener<UpdateResponse> listener = invocation.getArgument(1);
+            listener.onResponse(updateResponse);
+            return null;
+        }).when(mockedClient).update(any(UpdateRequest.class), any());
 
-        sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(GENERAL_THREAD_POOL)).toCompletableFuture().join();
+        UpdateDataObjectResponse response = sdkClient.updateDataObjectAsync(updateRequest).toCompletableFuture().join();
 
         ArgumentCaptor<UpdateRequest> requestCaptor = ArgumentCaptor.forClass(UpdateRequest.class);
-        verify(mockedClient, times(1)).update(requestCaptor.capture());
+        verify(mockedClient, times(1)).update(requestCaptor.capture(), any());
         assertEquals(TEST_INDEX, requestCaptor.getValue().index());
         assertEquals(TEST_ID, requestCaptor.getValue().id());
+        UpdateResponse updateActionResponse = UpdateResponse.fromXContent(response.parser());
+        assertEquals(TEST_ID, updateActionResponse.getId());
+        assertEquals(DocWriteResponse.Result.UPDATED, updateActionResponse.getResult());
         assertEquals("bar", requestCaptor.getValue().doc().sourceAsMap().get("foo"));
     }
 
@@ -409,18 +376,16 @@ public class LocalClusterIndicesClientTests {
             2,
             Result.CREATED
         );
+        doAnswer(invocation -> {
+            ActionListener<UpdateResponse> listener = invocation.getArgument(1);
+            listener.onResponse(updateResponse);
+            return null;
+        }).when(mockedClient).update(any(UpdateRequest.class), any());
 
-        @SuppressWarnings("unchecked")
-        ActionFuture<UpdateResponse> future = mock(ActionFuture.class);
-        when(mockedClient.update(any(UpdateRequest.class))).thenReturn(future);
-        when(future.actionGet()).thenReturn(updateResponse);
-
-        UpdateDataObjectResponse response = sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(GENERAL_THREAD_POOL))
-            .toCompletableFuture()
-            .join();
+        UpdateDataObjectResponse response = sdkClient.updateDataObjectAsync(updateRequest).toCompletableFuture().join();
 
         ArgumentCaptor<UpdateRequest> requestCaptor = ArgumentCaptor.forClass(UpdateRequest.class);
-        verify(mockedClient, times(1)).update(requestCaptor.capture());
+        verify(mockedClient, times(1)).update(requestCaptor.capture(), any());
         assertEquals(TEST_INDEX, requestCaptor.getValue().index());
         assertEquals(TEST_ID, response.id());
 
@@ -441,17 +406,16 @@ public class LocalClusterIndicesClientTests {
             .dataObject(testDataObject)
             .build();
 
-        @SuppressWarnings("unchecked")
-        ActionFuture<UpdateResponse> future = mock(ActionFuture.class);
-        when(mockedClient.update(any(UpdateRequest.class))).thenReturn(future);
-        when(future.actionGet()).thenReturn(null);
+        doAnswer(invocation -> {
+            ActionListener<UpdateResponse> listener = invocation.getArgument(1);
+            listener.onResponse(null);
+            return null;
+        }).when(mockedClient).update(any(UpdateRequest.class), any());
 
-        UpdateDataObjectResponse response = sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(GENERAL_THREAD_POOL))
-            .toCompletableFuture()
-            .join();
+        UpdateDataObjectResponse response = sdkClient.updateDataObjectAsync(updateRequest).toCompletableFuture().join();
 
         ArgumentCaptor<UpdateRequest> requestCaptor = ArgumentCaptor.forClass(UpdateRequest.class);
-        verify(mockedClient, times(1)).update(requestCaptor.capture());
+        verify(mockedClient, times(1)).update(requestCaptor.capture(), any());
         assertEquals(TEST_INDEX, requestCaptor.getValue().index());
         assertEquals(TEST_ID, response.id());
         assertNull(response.parser());
@@ -466,18 +430,18 @@ public class LocalClusterIndicesClientTests {
             .dataObject(testDataObject)
             .build();
 
-        ArgumentCaptor<UpdateRequest> updateRequestCaptor = ArgumentCaptor.forClass(UpdateRequest.class);
-        when(mockedClient.update(updateRequestCaptor.capture())).thenThrow(new UnsupportedOperationException("test"));
+        doAnswer(invocation -> {
+            ActionListener<UpdateResponse> listener = invocation.getArgument(1);
+            listener.onFailure(new UnsupportedOperationException("test"));
+            return null;
+        }).when(mockedClient).update(any(UpdateRequest.class), any());
 
-        CompletableFuture<UpdateDataObjectResponse> future = sdkClient.updateDataObjectAsync(
-            updateRequest,
-            testThreadPool.executor(GENERAL_THREAD_POOL)
-        ).toCompletableFuture();
+        CompletableFuture<UpdateDataObjectResponse> future = sdkClient.updateDataObjectAsync(updateRequest).toCompletableFuture();
 
         CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
         Throwable cause = ce.getCause();
-        assertEquals(UnsupportedOperationException.class, cause.getClass());
-        assertEquals("test", cause.getMessage());
+        assertEquals(OpenSearchStatusException.class, cause.getClass());
+        assertEquals("Failed to update data object in index test_index", cause.getMessage());
     }
 
     @Test
@@ -491,18 +455,13 @@ public class LocalClusterIndicesClientTests {
             .ifPrimaryTerm(2)
             .build();
 
-        ArgumentCaptor<UpdateRequest> updateRequestCaptor = ArgumentCaptor.forClass(UpdateRequest.class);
-        VersionConflictEngineException conflictException = new VersionConflictEngineException(
-            new ShardId(TEST_INDEX, "_na_", 0),
-            TEST_ID,
-            "test"
-        );
-        when(mockedClient.update(updateRequestCaptor.capture())).thenThrow(conflictException);
+        doAnswer(invocation -> {
+            ActionListener<UpdateResponse> listener = invocation.getArgument(1);
+            listener.onFailure(new VersionConflictEngineException(new ShardId(TEST_INDEX, "_na_", 0), TEST_ID, "test"));
+            return null;
+        }).when(mockedClient).update(any(UpdateRequest.class), any());
 
-        CompletableFuture<UpdateDataObjectResponse> future = sdkClient.updateDataObjectAsync(
-            updateRequest,
-            testThreadPool.executor(GENERAL_THREAD_POOL)
-        ).toCompletableFuture();
+        CompletableFuture<UpdateDataObjectResponse> future = sdkClient.updateDataObjectAsync(updateRequest).toCompletableFuture();
 
         CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
         Throwable cause = ce.getCause();
@@ -519,16 +478,17 @@ public class LocalClusterIndicesClientTests {
             .build();
 
         DeleteResponse deleteResponse = new DeleteResponse(new ShardId(TEST_INDEX, "_na_", 0), TEST_ID, 1, 0, 2, true);
-        PlainActionFuture<DeleteResponse> future = PlainActionFuture.newFuture();
-        future.onResponse(deleteResponse);
-        when(mockedClient.delete(any(DeleteRequest.class))).thenReturn(future);
 
-        DeleteDataObjectResponse response = sdkClient.deleteDataObjectAsync(deleteRequest, testThreadPool.executor(GENERAL_THREAD_POOL))
-            .toCompletableFuture()
-            .join();
+        doAnswer(invocation -> {
+            ActionListener<DeleteResponse> listener = invocation.getArgument(1);
+            listener.onResponse(deleteResponse);
+            return null;
+        }).when(mockedClient).delete(any(DeleteRequest.class), any());
+
+        DeleteDataObjectResponse response = sdkClient.deleteDataObjectAsync(deleteRequest).toCompletableFuture().join();
 
         ArgumentCaptor<DeleteRequest> requestCaptor = ArgumentCaptor.forClass(DeleteRequest.class);
-        verify(mockedClient, times(1)).delete(requestCaptor.capture());
+        verify(mockedClient, times(1)).delete(requestCaptor.capture(), any());
         assertEquals(TEST_INDEX, requestCaptor.getValue().index());
         assertEquals(TEST_ID, response.id());
 
@@ -545,18 +505,18 @@ public class LocalClusterIndicesClientTests {
             .tenantId(TEST_TENANT_ID)
             .build();
 
-        ArgumentCaptor<DeleteRequest> deleteRequestCaptor = ArgumentCaptor.forClass(DeleteRequest.class);
-        when(mockedClient.delete(deleteRequestCaptor.capture())).thenThrow(new UnsupportedOperationException("test"));
+        doAnswer(invocation -> {
+            ActionListener<DeleteResponse> listener = invocation.getArgument(1);
+            listener.onFailure(new UnsupportedOperationException("test"));
+            return null;
+        }).when(mockedClient).delete(any(DeleteRequest.class), any());
 
-        CompletableFuture<DeleteDataObjectResponse> future = sdkClient.deleteDataObjectAsync(
-            deleteRequest,
-            testThreadPool.executor(GENERAL_THREAD_POOL)
-        ).toCompletableFuture();
+        CompletableFuture<DeleteDataObjectResponse> future = sdkClient.deleteDataObjectAsync(deleteRequest).toCompletableFuture();
 
         CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
         Throwable cause = ce.getCause();
-        assertEquals(UnsupportedOperationException.class, cause.getClass());
-        assertEquals("test", cause.getMessage());
+        assertEquals(OpenSearchStatusException.class, cause.getClass());
+        assertEquals("Failed to delete data object from index test_index", cause.getMessage());
     }
 
     @Test
@@ -600,17 +560,16 @@ public class LocalClusterIndicesClientTests {
             100L
         );
 
-        @SuppressWarnings("unchecked")
-        ActionFuture<BulkResponse> future = mock(ActionFuture.class);
-        when(mockedClient.bulk(any(BulkRequest.class))).thenReturn(future);
-        when(future.actionGet()).thenReturn(bulkResponse);
+        doAnswer(invocation -> {
+            ActionListener<BulkResponse> listener = invocation.getArgument(1);
+            listener.onResponse(bulkResponse);
+            return null;
+        }).when(mockedClient).bulk(any(BulkRequest.class), any());
 
-        BulkDataObjectResponse response = sdkClient.bulkDataObjectAsync(bulkRequest, testThreadPool.executor(GENERAL_THREAD_POOL))
-            .toCompletableFuture()
-            .join();
+        BulkDataObjectResponse response = sdkClient.bulkDataObjectAsync(bulkRequest).toCompletableFuture().join();
 
         ArgumentCaptor<BulkRequest> requestCaptor = ArgumentCaptor.forClass(BulkRequest.class);
-        verify(mockedClient, times(1)).bulk(requestCaptor.capture());
+        verify(mockedClient, times(1)).bulk(requestCaptor.capture(), any());
         assertEquals(3, requestCaptor.getValue().numberOfActions());
 
         assertEquals(3, response.getResponses().length);
@@ -662,14 +621,13 @@ public class LocalClusterIndicesClientTests {
             100L
         );
 
-        @SuppressWarnings("unchecked")
-        ActionFuture<BulkResponse> future = mock(ActionFuture.class);
-        when(mockedClient.bulk(any(BulkRequest.class))).thenReturn(future);
-        when(future.actionGet()).thenReturn(bulkResponse);
+        doAnswer(invocation -> {
+            ActionListener<BulkResponse> listener = invocation.getArgument(1);
+            listener.onResponse(bulkResponse);
+            return null;
+        }).when(mockedClient).bulk(any(BulkRequest.class), any());
 
-        BulkDataObjectResponse response = sdkClient.bulkDataObjectAsync(bulkRequest, testThreadPool.executor(GENERAL_THREAD_POOL))
-            .toCompletableFuture()
-            .join();
+        BulkDataObjectResponse response = sdkClient.bulkDataObjectAsync(bulkRequest).toCompletableFuture().join();
 
         assertEquals(3, response.getResponses().length);
         assertFalse(response.getResponses()[0].isFailed());
@@ -691,20 +649,19 @@ public class LocalClusterIndicesClientTests {
 
         BulkDataObjectRequest bulkRequest = BulkDataObjectRequest.builder().build().add(putRequest);
 
-        when(mockedClient.bulk(any(BulkRequest.class))).thenThrow(
-            new OpenSearchStatusException("Failed to parse data object in a bulk response", RestStatus.INTERNAL_SERVER_ERROR)
-        );
+        doAnswer(invocation -> {
+            ActionListener<BulkResponse> listener = invocation.getArgument(1);
+            listener.onFailure(new OpenSearchStatusException("test", RestStatus.INTERNAL_SERVER_ERROR));
+            return null;
+        }).when(mockedClient).bulk(any(BulkRequest.class), any());
 
-        CompletableFuture<BulkDataObjectResponse> future = sdkClient.bulkDataObjectAsync(
-            bulkRequest,
-            testThreadPool.executor(GENERAL_THREAD_POOL)
-        ).toCompletableFuture();
+        CompletableFuture<BulkDataObjectResponse> future = sdkClient.bulkDataObjectAsync(bulkRequest).toCompletableFuture();
 
         CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
         Throwable cause = ce.getCause();
         assertEquals(OpenSearchStatusException.class, cause.getClass());
         assertEquals(RestStatus.INTERNAL_SERVER_ERROR, ((OpenSearchStatusException) cause).status());
-        assertEquals("Failed to parse data object in a bulk response", cause.getMessage());
+        assertEquals("Failed to execute bulk request", cause.getMessage());
     }
 
     @Test
@@ -730,10 +687,12 @@ public class LocalClusterIndicesClientTests {
             SearchResponse.Clusters.EMPTY,
             null
         );
-        @SuppressWarnings("unchecked")
-        ActionFuture<SearchResponse> future = mock(ActionFuture.class);
-        when(mockedClient.search(any(SearchRequest.class))).thenReturn(future);
-        when(future.actionGet()).thenReturn(searchResponse);
+
+        doAnswer(invocation -> {
+            ActionListener<SearchResponse> listener = invocation.getArgument(1);
+            listener.onResponse(searchResponse);
+            return null;
+        }).when(mockedClient).search(any(SearchRequest.class), any());
 
         LocalClusterIndicesClient innerClient = new LocalClusterIndicesClient(
             mockedClient,
@@ -741,13 +700,10 @@ public class LocalClusterIndicesClientTests {
             Map.of(TENANT_ID_FIELD_KEY, TENANT_ID_FIELD)
         );
         SdkClient sdkClientNoTenant = new SdkClient(innerClient, false);
-        SearchDataObjectResponse response = sdkClientNoTenant.searchDataObjectAsync(
-            searchRequest,
-            testThreadPool.executor(GENERAL_THREAD_POOL)
-        ).toCompletableFuture().join();
+        SearchDataObjectResponse response = sdkClientNoTenant.searchDataObjectAsync(searchRequest).toCompletableFuture().join();
 
         ArgumentCaptor<SearchRequest> requestCaptor = ArgumentCaptor.forClass(SearchRequest.class);
-        verify(mockedClient, times(1)).search(requestCaptor.capture());
+        verify(mockedClient, times(1)).search(requestCaptor.capture(), any());
         assertEquals(1, requestCaptor.getValue().indices().length);
         assertEquals(TEST_INDEX, requestCaptor.getValue().indices()[0]);
         assertEquals("{}", requestCaptor.getValue().source().toString());
@@ -783,17 +739,17 @@ public class LocalClusterIndicesClientTests {
             SearchResponse.Clusters.EMPTY,
             null
         );
-        @SuppressWarnings("unchecked")
-        ActionFuture<SearchResponse> future = mock(ActionFuture.class);
-        when(mockedClient.search(any(SearchRequest.class))).thenReturn(future);
-        when(future.actionGet()).thenReturn(searchResponse);
 
-        SearchDataObjectResponse response = sdkClient.searchDataObjectAsync(searchRequest, testThreadPool.executor(GENERAL_THREAD_POOL))
-            .toCompletableFuture()
-            .join();
+        doAnswer(invocation -> {
+            ActionListener<SearchResponse> listener = invocation.getArgument(1);
+            listener.onResponse(searchResponse);
+            return null;
+        }).when(mockedClient).search(any(SearchRequest.class), any());
+
+        SearchDataObjectResponse response = sdkClient.searchDataObjectAsync(searchRequest).toCompletableFuture().join();
 
         ArgumentCaptor<SearchRequest> requestCaptor = ArgumentCaptor.forClass(SearchRequest.class);
-        verify(mockedClient, times(1)).search(requestCaptor.capture());
+        verify(mockedClient, times(1)).search(requestCaptor.capture(), any());
         assertEquals(1, requestCaptor.getValue().indices().length);
         assertEquals(TEST_INDEX, requestCaptor.getValue().indices()[0]);
         assertTrue(requestCaptor.getValue().source().toString().contains("{\"term\":{\"tenant_id\":{\"value\":\"xyz\""));
@@ -815,19 +771,18 @@ public class LocalClusterIndicesClientTests {
             .searchSourceBuilder(searchSourceBuilder)
             .build();
 
-        PlainActionFuture<SearchResponse> exceptionalFuture = PlainActionFuture.newFuture();
-        exceptionalFuture.onFailure(new UnsupportedOperationException("test"));
-        when(mockedClient.search(any(SearchRequest.class))).thenReturn(exceptionalFuture);
+        doAnswer(invocation -> {
+            ActionListener<SearchResponse> listener = invocation.getArgument(1);
+            listener.onFailure(new UnsupportedOperationException("test"));
+            return null;
+        }).when(mockedClient).search(any(SearchRequest.class), any());
 
-        CompletableFuture<SearchDataObjectResponse> future = sdkClient.searchDataObjectAsync(
-            searchRequest,
-            testThreadPool.executor(GENERAL_THREAD_POOL)
-        ).toCompletableFuture();
+        CompletableFuture<SearchDataObjectResponse> future = sdkClient.searchDataObjectAsync(searchRequest).toCompletableFuture();
 
         CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
         Throwable cause = ce.getCause();
-        assertEquals(UnsupportedOperationException.class, cause.getClass());
-        assertEquals("test", cause.getMessage());
+        assertEquals(OpenSearchStatusException.class, cause.getClass());
+        assertEquals("Failed to search indices [test_index]", cause.getMessage());
     }
 
     @Test
@@ -847,18 +802,17 @@ public class LocalClusterIndicesClientTests {
             .searchSourceBuilder(searchSourceBuilder)
             .build();
 
-        PlainActionFuture<SearchResponse> exceptionalFuture = PlainActionFuture.newFuture();
-        exceptionalFuture.onFailure(new UnsupportedOperationException("test"));
-        when(mockedClient.search(any(SearchRequest.class))).thenReturn(exceptionalFuture);
+        doAnswer(invocation -> {
+            ActionListener<SearchResponse> listener = invocation.getArgument(1);
+            listener.onFailure(new UnsupportedOperationException("test"));
+            return null;
+        }).when(mockedClient).search(any(SearchRequest.class), any());
 
-        CompletableFuture<SearchDataObjectResponse> future = sdkClientNoTenant.searchDataObjectAsync(
-            searchRequest,
-            testThreadPool.executor(GENERAL_THREAD_POOL)
-        ).toCompletableFuture();
+        CompletableFuture<SearchDataObjectResponse> future = sdkClientNoTenant.searchDataObjectAsync(searchRequest).toCompletableFuture();
 
         CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
         Throwable cause = ce.getCause();
-        assertEquals(UnsupportedOperationException.class, cause.getClass());
-        assertEquals("test", cause.getMessage());
+        assertEquals(OpenSearchStatusException.class, cause.getClass());
+        assertEquals("Failed to search indices [test_index]", cause.getMessage());
     }
 }

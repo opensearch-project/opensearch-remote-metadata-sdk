@@ -16,16 +16,13 @@ import org.opensearch.action.bulk.BulkItemResponse;
 import org.opensearch.action.bulk.BulkRequest;
 import org.opensearch.action.bulk.BulkResponse;
 import org.opensearch.action.delete.DeleteRequest;
-import org.opensearch.action.delete.DeleteResponse;
 import org.opensearch.action.get.GetRequest;
-import org.opensearch.action.get.GetResponse;
 import org.opensearch.action.index.IndexRequest;
-import org.opensearch.action.index.IndexResponse;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.update.UpdateRequest;
-import org.opensearch.action.update.UpdateResponse;
 import org.opensearch.client.Client;
 import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.Strings;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.DeprecationHandler;
@@ -65,6 +62,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 
 import static org.opensearch.action.support.WriteRequest.RefreshPolicy.IMMEDIATE;
+import static org.opensearch.common.util.concurrent.ThreadContextAccess.doPrivileged;
 import static org.opensearch.common.xcontent.json.JsonXContent.jsonXContent;
 import static org.opensearch.core.xcontent.ToXContent.EMPTY_PARAMS;
 
@@ -101,20 +99,48 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        return executePrivilegedAsync(() -> {
+        CompletableFuture<PutDataObjectResponse> future = new CompletableFuture<>();
+        return doPrivileged(() -> {
             try {
                 log.info("Indexing data object in {}", request.index());
                 IndexRequest indexRequest = createIndexRequest(request).setRefreshPolicy(IMMEDIATE);
-                IndexResponse indexResponse = client.index(indexRequest).actionGet();
-                log.info("Creation status for id {}: {}", indexResponse.getId(), indexResponse.getResult());
-                return PutDataObjectResponse.builder().id(indexResponse.getId()).parser(createParser(indexResponse)).build();
+                client.index(indexRequest, ActionListener.wrap(indexResponse -> {
+                    log.info("Creation status for id {}: {}", indexResponse.getId(), indexResponse.getResult());
+                    try {
+                        PutDataObjectResponse response = PutDataObjectResponse.builder()
+                            .id(indexResponse.getId())
+                            .parser(createParser(indexResponse))
+                            .build();
+                        future.complete(response);
+                    } catch (Exception e) {
+                        future.completeExceptionally(
+                            new OpenSearchStatusException(
+                                "Failed to create response for index " + request.index(),
+                                RestStatus.INTERNAL_SERVER_ERROR,
+                                e
+                            )
+                        );
+                    }
+                },
+                    e -> future.completeExceptionally(
+                        new OpenSearchStatusException(
+                            "Failed to put data object in index " + request.index(),
+                            RestStatus.INTERNAL_SERVER_ERROR,
+                            e
+                        )
+                    )
+                ));
             } catch (IOException e) {
-                throw new OpenSearchStatusException(
-                    "Failed to parse data object to put in index " + request.index(),
-                    RestStatus.BAD_REQUEST
+                future.completeExceptionally(
+                    new OpenSearchStatusException(
+                        "Failed to parse data object to put in index " + request.index(),
+                        RestStatus.BAD_REQUEST,
+                        e
+                    )
                 );
             }
-        }, executor);
+            return future;
+        });
     }
 
     private IndexRequest createIndexRequest(PutDataObjectRequest putDataObjectRequest) throws IOException {
@@ -135,27 +161,46 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        return executePrivilegedAsync(() -> {
-            try {
-                GetResponse getResponse = client.get(
-                    new GetRequest(request.index(), request.id()).fetchSourceContext(request.fetchSourceContext())
-                ).actionGet();
-                if (getResponse == null) {
-                    return GetDataObjectResponse.builder().id(request.id()).parser(null).build();
+        CompletableFuture<GetDataObjectResponse> future = new CompletableFuture<>();
+        return doPrivileged(() -> {
+            GetRequest getRequest = createGetRequest(request);
+            client.get(getRequest, ActionListener.wrap(getResponse -> {
+                try {
+                    GetDataObjectResponse response;
+                    if (getResponse != null && getResponse.isExists()) {
+                        response = GetDataObjectResponse.builder()
+                            .id(getResponse.getId())
+                            .parser(createParser(getResponse))
+                            .source(getResponse.getSource())
+                            .build();
+                    } else {
+                        response = GetDataObjectResponse.builder().id(request.id()).parser(null).build();
+                    }
+                    future.complete(response);
+                } catch (IOException e) {
+                    future.completeExceptionally(
+                        new OpenSearchStatusException(
+                            "Failed to create parser for data object retrieved from index " + request.index(),
+                            RestStatus.INTERNAL_SERVER_ERROR,
+                            e
+                        )
+                    );
                 }
-                return GetDataObjectResponse.builder()
-                    .id(getResponse.getId())
-                    .parser(createParser(getResponse))
-                    .source(getResponse.getSource())
-                    .build();
-            } catch (IOException e) {
-                // Rethrow unchecked exception on XContent parser creation error
-                throw new OpenSearchStatusException(
-                    "Failed to create parser for data object retrieved from index " + request.index(),
-                    RestStatus.INTERNAL_SERVER_ERROR
-                );
-            }
-        }, executor);
+            },
+                e -> future.completeExceptionally(
+                    new OpenSearchStatusException(
+                        "Failed to get data object from index " + request.index(),
+                        RestStatus.INTERNAL_SERVER_ERROR,
+                        e
+                    )
+                )
+            ));
+            return future;
+        });
+    }
+
+    private GetRequest createGetRequest(GetDataObjectRequest request) {
+        return new GetRequest(request.index(), request.id()).fetchSourceContext(request.fetchSourceContext());
     }
 
     @Override
@@ -164,30 +209,64 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        return executePrivilegedAsync(() -> {
+        CompletableFuture<UpdateDataObjectResponse> future = new CompletableFuture<>();
+        return doPrivileged(() -> {
             try {
                 log.info("Updating {} from {}", request.id(), request.index());
                 UpdateRequest updateRequest = createUpdateRequest(request);
-                UpdateResponse updateResponse = client.update(updateRequest).actionGet();
-                if (updateResponse == null) {
-                    log.info("Null UpdateResponse");
-                    return UpdateDataObjectResponse.builder().id(request.id()).parser(null).build();
-                }
-                log.info("Update status for id {}: {}", updateResponse.getId(), updateResponse.getResult());
-                return UpdateDataObjectResponse.builder().id(updateResponse.getId()).parser(createParser(updateResponse)).build();
-            } catch (VersionConflictEngineException vcee) {
-                log.error("Document version conflict updating {} in {}: {}", request.id(), request.index(), vcee.getMessage(), vcee);
-                throw new OpenSearchStatusException(
-                    "Document version conflict updating " + request.id() + " in index " + request.index(),
-                    RestStatus.CONFLICT
-                );
+                client.update(updateRequest, ActionListener.wrap(updateResponse -> {
+                    if (updateResponse == null) {
+                        log.info("Null UpdateResponse");
+                        future.complete(UpdateDataObjectResponse.builder().id(request.id()).parser(null).build());
+                    } else {
+                        log.info("Update status for id {}: {}", updateResponse.getId(), updateResponse.getResult());
+                        try {
+                            UpdateDataObjectResponse response = UpdateDataObjectResponse.builder()
+                                .id(updateResponse.getId())
+                                .parser(createParser(updateResponse))
+                                .build();
+                            future.complete(response);
+                        } catch (IOException e) {
+                            future.completeExceptionally(
+                                new OpenSearchStatusException(
+                                    "Failed to create parser for updated data object in index " + request.index(),
+                                    RestStatus.INTERNAL_SERVER_ERROR,
+                                    e
+                                )
+                            );
+                        }
+                    }
+                }, e -> {
+                    if (e instanceof VersionConflictEngineException) {
+                        log.error("Document version conflict updating {} in {}: {}", request.id(), request.index(), e.getMessage(), e);
+                        future.completeExceptionally(
+                            new OpenSearchStatusException(
+                                "Document version conflict updating " + request.id() + " in index " + request.index(),
+                                RestStatus.CONFLICT,
+                                e
+                            )
+                        );
+                    } else {
+                        future.completeExceptionally(
+                            new OpenSearchStatusException(
+                                "Failed to update data object in index " + request.index(),
+                                RestStatus.INTERNAL_SERVER_ERROR,
+                                e
+                            )
+                        );
+                    }
+                }));
             } catch (IOException e) {
-                throw new OpenSearchStatusException(
-                    "Failed to parse data object to update in index " + request.index(),
-                    RestStatus.BAD_REQUEST
+                future.completeExceptionally(
+                    new OpenSearchStatusException(
+                        "Failed to parse data object to update in index " + request.index(),
+                        RestStatus.BAD_REQUEST,
+                        e
+                    )
                 );
             }
-        }, executor);
+            return future;
+        });
     }
 
     private UpdateRequest createUpdateRequest(UpdateDataObjectRequest updateDataObjectRequest) throws IOException {
@@ -214,20 +293,38 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        return executePrivilegedAsync(() -> {
-            try {
-                log.info("Deleting {} from {}", request.id(), request.index());
-                DeleteRequest deleteRequest = createDeleteRequest(request).setRefreshPolicy(IMMEDIATE);
-                DeleteResponse deleteResponse = client.delete(deleteRequest).actionGet();
+        CompletableFuture<DeleteDataObjectResponse> future = new CompletableFuture<>();
+        return doPrivileged(() -> {
+            log.info("Deleting {} from {}", request.id(), request.index());
+            DeleteRequest deleteRequest = createDeleteRequest(request).setRefreshPolicy(IMMEDIATE);
+            client.delete(deleteRequest, ActionListener.wrap(deleteResponse -> {
                 log.info("Deletion status for id {}: {}", deleteResponse.getId(), deleteResponse.getResult());
-                return DeleteDataObjectResponse.builder().id(deleteResponse.getId()).parser(createParser(deleteResponse)).build();
-            } catch (IOException e) {
-                throw new OpenSearchStatusException(
-                    "Failed to parse data object to deletion response in index " + request.index(),
-                    RestStatus.INTERNAL_SERVER_ERROR
-                );
-            }
-        }, executor);
+                try {
+                    DeleteDataObjectResponse response = DeleteDataObjectResponse.builder()
+                        .id(deleteResponse.getId())
+                        .parser(createParser(deleteResponse))
+                        .build();
+                    future.complete(response);
+                } catch (IOException e) {
+                    future.completeExceptionally(
+                        new OpenSearchStatusException(
+                            "Failed to parse deletion response for data object in index " + request.index(),
+                            RestStatus.INTERNAL_SERVER_ERROR,
+                            e
+                        )
+                    );
+                }
+            },
+                e -> future.completeExceptionally(
+                    new OpenSearchStatusException(
+                        "Failed to delete data object from index " + request.index(),
+                        RestStatus.INTERNAL_SERVER_ERROR,
+                        e
+                    )
+                )
+            ));
+            return future;
+        });
     }
 
     private DeleteRequest createDeleteRequest(DeleteDataObjectRequest deleteDataObjectRequest) {
@@ -240,7 +337,8 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        return executePrivilegedAsync(() -> {
+        CompletableFuture<BulkDataObjectResponse> future = new CompletableFuture<>();
+        return doPrivileged(() -> {
             try {
                 log.info("Performing {} bulk actions on indices {}", request.requests().size(), request.getIndices());
                 BulkRequest bulkRequest = new BulkRequest();
@@ -254,14 +352,29 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
                         bulkRequest.add(createDeleteRequest((DeleteDataObjectRequest) dataObjectRequest));
                     }
                 }
-
-                BulkResponse bulkResponse = client.bulk(bulkRequest.setRefreshPolicy(IMMEDIATE)).actionGet();
-                return bulkResponseToDataObjectResponse(bulkResponse);
+                client.bulk(bulkRequest.setRefreshPolicy(IMMEDIATE), ActionListener.wrap(bulkResponse -> {
+                    try {
+                        BulkDataObjectResponse response = bulkResponseToDataObjectResponse(bulkResponse);
+                        future.complete(response);
+                    } catch (IOException e) {
+                        future.completeExceptionally(
+                            new OpenSearchStatusException(
+                                "Failed to parse data object in a bulk response",
+                                RestStatus.INTERNAL_SERVER_ERROR,
+                                e
+                            )
+                        );
+                    }
+                },
+                    e -> future.completeExceptionally(
+                        new OpenSearchStatusException("Failed to execute bulk request", RestStatus.INTERNAL_SERVER_ERROR, e)
+                    )
+                ));
             } catch (IOException e) {
-                // Rethrow unchecked exception on XContent parsing error
-                throw new OpenSearchStatusException("Failed to parse data object in a bulk response", RestStatus.INTERNAL_SERVER_ERROR);
+                future.completeExceptionally(new OpenSearchStatusException("Failed to create bulk request", RestStatus.BAD_REQUEST, e));
             }
-        }, executor);
+            return future;
+        });
     }
 
     private BulkDataObjectResponse bulkResponseToDataObjectResponse(BulkResponse bulkResponse) throws IOException {
@@ -313,12 +426,15 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
+        CompletableFuture<SearchDataObjectResponse> future = new CompletableFuture<>();
+
         SearchSourceBuilder searchSource = request.searchSourceBuilder();
         if (Boolean.TRUE.equals(isMultiTenancyEnabled)) {
             if (request.tenantId() == null) {
-                return CompletableFuture.failedFuture(
+                future.completeExceptionally(
                     new OpenSearchStatusException("Tenant ID is required when multitenancy is enabled.", RestStatus.BAD_REQUEST)
                 );
+                return future;
             }
             QueryBuilder existingQuery = searchSource.query();
             TermQueryBuilder tenantIdTermQuery = QueryBuilders.termQuery(this.tenantIdField, request.tenantId());
@@ -334,19 +450,32 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
             log.debug("Adding tenant id to search query", Arrays.toString(request.indices()));
         }
         log.info("Searching {}", Arrays.toString(request.indices()));
-        return executePrivilegedAsync(() -> client.search(new SearchRequest(request.indices(), searchSource)), executor).thenCompose(
-            searchResponseFuture -> CompletableFuture.supplyAsync(searchResponseFuture::actionGet, executor)
-        ).thenApply(searchResponse -> {
-            log.info("Search returned {} hits", searchResponse.getHits().getTotalHits());
-            try {
-                return SearchDataObjectResponse.builder().parser(createParser(searchResponse)).build();
-            } catch (IOException e) {
-                // Rethrow unchecked exception on XContent parsing error
-                throw new OpenSearchStatusException(
-                    "Failed to search indices " + Arrays.toString(request.indices()),
-                    RestStatus.INTERNAL_SERVER_ERROR
-                );
-            }
+        return doPrivileged(() -> {
+            SearchRequest searchRequest = new SearchRequest(request.indices(), searchSource);
+            client.search(searchRequest, ActionListener.wrap(searchResponse -> {
+                log.info("Search returned {} hits", searchResponse.getHits().getTotalHits());
+                try {
+                    SearchDataObjectResponse response = SearchDataObjectResponse.builder().parser(createParser(searchResponse)).build();
+                    future.complete(response);
+                } catch (IOException e) {
+                    future.completeExceptionally(
+                        new OpenSearchStatusException(
+                            "Failed to parse search response for indices " + Arrays.toString(request.indices()),
+                            RestStatus.INTERNAL_SERVER_ERROR,
+                            e
+                        )
+                    );
+                }
+            },
+                e -> future.completeExceptionally(
+                    new OpenSearchStatusException(
+                        "Failed to search indices " + Arrays.toString(request.indices()),
+                        RestStatus.INTERNAL_SERVER_ERROR,
+                        e
+                    )
+                )
+            ));
+            return future;
         });
     }
 
