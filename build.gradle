@@ -22,10 +22,8 @@ buildscript {
         }
 
         opensearch_java_version = '2.19.0'
-        log4j_version = '2.24.3'
         aws_sdk_version = '2.29.50'
-        junit_version = '5.11.4'
-        mockito_version = '5.15.2'
+        junit_version = '5.11.4' // version catalog is 4.x
     }
 
     repositories {
@@ -87,8 +85,8 @@ subprojects {
     dependencies {
         // Common dependencies for all subprojects
         implementation "org.opensearch:opensearch:${opensearch_version}"
-        implementation "org.apache.logging.log4j:log4j-api:${log4j_version}"
-        implementation "org.apache.logging.log4j:log4j-core:${log4j_version}"
+        implementation "org.apache.logging.log4j:log4j-api:${versions.log4j}"
+        implementation "org.apache.logging.log4j:log4j-core:${versions.log4j}"
 
         implementation("com.fasterxml.jackson.core:jackson-annotations:${versions.jackson}")
         implementation("com.fasterxml.jackson.core:jackson-databind:${versions.jackson_databind}")
@@ -100,7 +98,7 @@ subprojects {
 
         testImplementation "org.opensearch.test:framework:${opensearch_version}"
         testImplementation "org.junit.jupiter:junit-jupiter:${junit_version}"
-        testImplementation "org.mockito:mockito-core:${mockito_version}"
+        testImplementation "org.mockito:mockito-core:${versions.mockito}"
     }
 
     configurations {
