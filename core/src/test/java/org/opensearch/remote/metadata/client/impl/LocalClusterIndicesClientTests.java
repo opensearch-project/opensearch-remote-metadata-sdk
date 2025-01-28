@@ -712,7 +712,7 @@ public class LocalClusterIndicesClientTests {
         assertEquals(0, searchActionResponse.getSkippedShards());
         assertEquals(1, searchActionResponse.getSuccessfulShards());
         assertEquals(1, searchActionResponse.getTotalShards());
-        assertEquals(0, searchActionResponse.getHits().getTotalHits().value);
+        assertEquals(0, searchActionResponse.getHits().getTotalHits().value());
     }
 
     @Test
@@ -758,7 +758,7 @@ public class LocalClusterIndicesClientTests {
         assertEquals(0, searchActionResponse.getSkippedShards());
         assertEquals(1, searchActionResponse.getSuccessfulShards());
         assertEquals(1, searchActionResponse.getTotalShards());
-        assertEquals(0, searchActionResponse.getHits().getTotalHits().value);
+        assertEquals(0, searchActionResponse.getHits().getTotalHits().value());
     }
 
     @Test
