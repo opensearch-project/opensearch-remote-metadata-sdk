@@ -13,8 +13,9 @@ import org.opensearch.common.action.ActionFuture;
 import org.opensearch.common.util.concurrent.FutureUtils;
 import org.opensearch.common.util.concurrent.UncategorizedExecutionException;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.regex.Matcher;
@@ -30,12 +31,22 @@ public class SdkClientUtils {
     /**
      * Unwraps the cause of a {@link CompletionException}. If the cause is an {@link Exception}, rethrows the exception.
      * Otherwise wraps it in an {@link OpenSearchException}. Properly re-interrupts the thread on {@link InterruptedException}.
-     * @param throwable a throwable, expected to be a {@link CompletionException} or {@link CancellationException}.
+     * @param throwable a throwable.
+     * @param exceptionTypesToUnwrap optional list of exception types to unwrap. Defaults to {@link CompletionException}.
      * @return the cause of the completion exception or the throwable, directly if an {@link Exception} or wrapped in an OpenSearchException otherwise.
      */
-    public static Exception unwrapAndConvertToException(Throwable throwable) {
-        // Unwrap completion exception or pass through other exceptions
-        Throwable cause = throwable instanceof CompletionException ? throwable.getCause() : throwable;
+    @SafeVarargs
+    public static Exception unwrapAndConvertToException(Throwable throwable, Class<? extends Throwable>... exceptionTypesToUnwrap) {
+        // Unwrap specified exception types or pass through other exceptions
+        List<Class<? extends Throwable>> unwrapTypes = (exceptionTypesToUnwrap.length > 0)
+            ? Arrays.asList(exceptionTypesToUnwrap)
+            : List.of(CompletionException.class);
+
+        Throwable cause = throwable;
+        while (cause != null && unwrapTypes.contains(cause.getClass()) && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+
         // Double-unwrap checked exceptions wrapped in ExecutionException
         cause = getRethrownExecutionExceptionRootCause(cause);
         if (cause instanceof InterruptedException) {
