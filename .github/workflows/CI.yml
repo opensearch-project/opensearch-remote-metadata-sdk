@@ -7,8 +7,6 @@ on:
   pull_request:
     branches:
       - "*"
-env:
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
 jobs:
   Get-CI-Image-Tag:
@@ -71,13 +69,32 @@ jobs:
         su `id -un 1000` -c 'whoami && java -version &&
                              echo "build and run tests" && ./gradlew build &&
                              echo "Publish to Maven Local" && ./gradlew publishToMavenLocal'
-    - name: Upload Coverage Report
+    - name: Upload Coverage Report Artifacts
       if: contains(matrix.java, '21')
-      uses: codecov/codecov-action@v5
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      uses: actions/upload-artifact@v4
       with:
-        file: ./build/reports/jacoco/test/jacocoTestReport.xml
+        name: coverage-report-linux-jdk${{ matrix.java }}
+        path: '**/build/reports/jacoco/test/jacocoTestReport.xml'
+
+  linux-codecov-upload:
+    needs: build-linux
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download Coverage Report Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report-linux-jdk21
+          path: ./coverage-reports
+      - name: Find Coverage Reports
+        id: find-jacoco-reports
+        run: |
+          REPORTS=$(find ./coverage-reports -name "jacocoTestReport.xml" | tr '\n' ',' | sed 's/,$//')
+          echo "report_files=$REPORTS" >> $GITHUB_OUTPUT
+      - name: Upload Coverage Report
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ${{ steps.find-jacoco-reports.outputs.report_files }}
 
   build-windows:
     needs: [spotless, javadoc]
