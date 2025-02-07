@@ -8,10 +8,10 @@
  */
 package org.opensearch.remote.metadata.client.impl;
 
-import org.opensearch.client.Client;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.remote.metadata.client.SdkClient;
 import org.opensearch.remote.metadata.common.TestClassLoader;
+import org.opensearch.transport.client.Client;
 import org.junit.AfterClass;
 import org.junit.jupiter.api.Test;
 

@@ -10,11 +10,11 @@ package org.opensearch.remote.metadata.client.impl;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.opensearch.client.Client;
 import org.opensearch.core.common.Strings;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.remote.metadata.client.SdkClient;
 import org.opensearch.remote.metadata.client.SdkClientDelegate;
+import org.opensearch.transport.client.Client;
 
 import java.util.Iterator;
 import java.util.Map;
