@@ -9,17 +9,35 @@
 package org.opensearch.remote.metadata.common;
 
 import org.opensearch.OpenSearchException;
+import org.opensearch.OpenSearchStatusException;
+import org.opensearch.action.bulk.BulkResponse;
+import org.opensearch.action.delete.DeleteResponse;
+import org.opensearch.action.get.GetResponse;
+import org.opensearch.action.index.IndexResponse;
+import org.opensearch.action.search.SearchResponse;
+import org.opensearch.action.update.UpdateResponse;
 import org.opensearch.common.action.ActionFuture;
 import org.opensearch.common.util.concurrent.FutureUtils;
 import org.opensearch.common.util.concurrent.UncategorizedExecutionException;
+import org.opensearch.core.action.ActionListener;
+import org.opensearch.remote.metadata.client.BulkDataObjectResponse;
+import org.opensearch.remote.metadata.client.DeleteDataObjectResponse;
+import org.opensearch.remote.metadata.client.GetDataObjectResponse;
+import org.opensearch.remote.metadata.client.PutDataObjectResponse;
+import org.opensearch.remote.metadata.client.SearchDataObjectResponse;
+import org.opensearch.remote.metadata.client.UpdateDataObjectResponse;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
+import java.util.function.BiConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import static org.opensearch.core.rest.RestStatus.INTERNAL_SERVER_ERROR;
 
 /**
  * Utility methods for client implementations
@@ -27,6 +45,141 @@ import java.util.regex.Pattern;
 public class SdkClientUtils {
 
     private SdkClientUtils() {}
+
+    /**
+     * Wraps the completion of a PUT operation from the SdkClient into a format compatible with an ActionListener.
+     *
+     * @param listener The ActionListener that will receive the parsed IndexResponse or any errors
+     * @return A BiConsumer that can be used directly with CompletionStage's whenComplete method
+     */
+    public static BiConsumer<PutDataObjectResponse, Throwable> wrapPutCompletion(ActionListener<IndexResponse> listener) {
+        return (r, throwable) -> {
+            if (throwable == null) {
+                try {
+                    IndexResponse indexResponse = IndexResponse.fromXContent(r.parser());
+                    listener.onResponse(indexResponse);
+                } catch (IOException e) {
+                    handleParseFailure(listener, "put");
+                }
+            } else {
+                handleThrowable(listener, throwable);
+            }
+        };
+    }
+
+    /**
+     * Wraps the completion of a GET operation from the SdkClient into a format compatible with an ActionListener.
+     *
+     * @param listener The ActionListener that will receive the parsed GetResponse or any errors
+     * @return A BiConsumer that can be used directly with CompletionStage's whenComplete method
+     */
+    public static BiConsumer<GetDataObjectResponse, Throwable> wrapGetCompletion(ActionListener<GetResponse> listener) {
+        return (r, throwable) -> {
+            if (throwable == null) {
+                try {
+                    GetResponse getResponse = GetResponse.fromXContent(r.parser());
+                    listener.onResponse(getResponse);
+                } catch (IOException e) {
+                    handleParseFailure(listener, "get");
+                }
+            } else {
+                handleThrowable(listener, throwable);
+            }
+        };
+    }
+
+    /**
+     * Wraps the completion of an UPDATE operation from the SdkClient into a format compatible with an ActionListener.
+     *
+     * @param listener The ActionListener that will receive the parsed UpdateResponse or any errors
+     * @return A BiConsumer that can be used directly with CompletionStage's whenComplete method
+     */
+    public static BiConsumer<UpdateDataObjectResponse, Throwable> wrapUpdateCompletion(ActionListener<UpdateResponse> listener) {
+        return (r, throwable) -> {
+            if (throwable == null) {
+                try {
+                    UpdateResponse updateResponse = UpdateResponse.fromXContent(r.parser());
+                    listener.onResponse(updateResponse);
+                } catch (IOException e) {
+                    handleParseFailure(listener, "update");
+                }
+            } else {
+                handleThrowable(listener, throwable);
+            }
+        };
+    }
+
+    /**
+     * Wraps the completion of a DELETE operation from the SdkClient into a format compatible with an ActionListener.
+     *
+     * @param listener The ActionListener that will receive the parsed DeleteResponse or any errors
+     * @return A BiConsumer that can be used directly with CompletionStage's whenComplete method
+     */
+    public static BiConsumer<DeleteDataObjectResponse, Throwable> wrapDeleteCompletion(ActionListener<DeleteResponse> listener) {
+        return (r, throwable) -> {
+            if (throwable == null) {
+                try {
+                    DeleteResponse deleteResponse = DeleteResponse.fromXContent(r.parser());
+                    listener.onResponse(deleteResponse);
+                } catch (IOException e) {
+                    handleParseFailure(listener, "delete");
+                }
+            } else {
+                handleThrowable(listener, throwable);
+            }
+        };
+    }
+
+    /**
+     * Wraps the completion of a BULK operation from the SdkClient into a format compatible with an ActionListener.
+     *
+     * @param listener The ActionListener that will receive the parsed BulkResponse or any errors
+     * @return A BiConsumer that can be used directly with CompletionStage's whenComplete method
+     */
+    public static BiConsumer<BulkDataObjectResponse, Throwable> wrapBulkCompletion(ActionListener<BulkResponse> listener) {
+        return (r, throwable) -> {
+            if (throwable == null) {
+                try {
+                    BulkResponse bulkResponse = BulkResponse.fromXContent(r.parser());
+                    listener.onResponse(bulkResponse);
+                } catch (IOException e) {
+                    handleParseFailure(listener, "bulk");
+                }
+            } else {
+                handleThrowable(listener, throwable);
+            }
+        };
+    }
+
+    /**
+     * Wraps the completion of a SEARCH operation from the SdkClient into a format compatible with an ActionListener.
+     *
+     * @param listener The ActionListener that will receive the parsed SearchResponse or any errors
+     * @return A BiConsumer that can be used directly with CompletionStage's whenComplete method
+     */
+    public static BiConsumer<SearchDataObjectResponse, Throwable> wrapSearchCompletion(ActionListener<SearchResponse> listener) {
+        return (r, throwable) -> {
+            if (throwable == null) {
+                try {
+                    SearchResponse searchResponse = SearchResponse.fromXContent(r.parser());
+                    listener.onResponse(searchResponse);
+                } catch (IOException e) {
+                    handleParseFailure(listener, "search");
+                }
+            } else {
+                handleThrowable(listener, throwable);
+            }
+        };
+    }
+
+    private static void handleParseFailure(ActionListener<?> listener, String operation) {
+        listener.onFailure(new OpenSearchStatusException("Failed to parse " + operation + " response", INTERNAL_SERVER_ERROR));
+    }
+
+    private static void handleThrowable(ActionListener<?> listener, Throwable throwable) {
+        Exception exception = unwrapAndConvertToException(throwable, CompletionException.class, OpenSearchStatusException.class);
+        listener.onFailure(exception);
+    }
 
     /**
      * Unwraps the cause of a {@link CompletionException}. If the cause is an {@link Exception}, rethrows the exception.
