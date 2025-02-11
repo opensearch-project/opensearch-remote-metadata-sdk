@@ -107,6 +107,19 @@ public class SdkClientUtilsTests {
     }
 
     @Test
+    void testWrapPutCompletion_NullParser() {
+        @SuppressWarnings("unchecked")
+        ActionListener<IndexResponse> listener = mock(ActionListener.class);
+        PutDataObjectResponse response = mock(PutDataObjectResponse.class);
+        when(response.parser()).thenReturn(null);
+        CompletableFuture<PutDataObjectResponse> future = CompletableFuture.completedFuture(response);
+
+        future.whenComplete(SdkClientUtils.wrapPutCompletion(listener));
+
+        verify(listener).onResponse(null);
+    }
+
+    @Test
     void testWrapPutCompletion_ParseFailure() throws IOException {
         @SuppressWarnings("unchecked")
         ActionListener<IndexResponse> listener = mock(ActionListener.class);
@@ -154,6 +167,19 @@ public class SdkClientUtilsTests {
         future.whenComplete(SdkClientUtils.wrapGetCompletion(listener));
 
         verify(listener).onFailure(testException);
+    }
+
+    @Test
+    void testWrapGetCompletion_NullParser() {
+        @SuppressWarnings("unchecked")
+        ActionListener<GetResponse> listener = mock(ActionListener.class);
+        GetDataObjectResponse response = mock(GetDataObjectResponse.class);
+        when(response.parser()).thenReturn(null);
+        CompletableFuture<GetDataObjectResponse> future = CompletableFuture.completedFuture(response);
+
+        future.whenComplete(SdkClientUtils.wrapGetCompletion(listener));
+
+        verify(listener).onResponse(null);
     }
 
     @Test
@@ -206,6 +232,19 @@ public class SdkClientUtilsTests {
     }
 
     @Test
+    void testWrapUpdateCompletion_NullParser() {
+        @SuppressWarnings("unchecked")
+        ActionListener<UpdateResponse> listener = mock(ActionListener.class);
+        UpdateDataObjectResponse response = mock(UpdateDataObjectResponse.class);
+        when(response.parser()).thenReturn(null);
+        CompletableFuture<UpdateDataObjectResponse> future = CompletableFuture.completedFuture(response);
+
+        future.whenComplete(SdkClientUtils.wrapUpdateCompletion(listener));
+
+        verify(listener).onResponse(null);
+    }
+
+    @Test
     void testWrapUpdateCompletion_ParseFailure() throws IOException {
         @SuppressWarnings("unchecked")
         ActionListener<UpdateResponse> listener = mock(ActionListener.class);
@@ -252,6 +291,19 @@ public class SdkClientUtilsTests {
     }
 
     @Test
+    void testWrapDeleteCompletion_NullParser() {
+        @SuppressWarnings("unchecked")
+        ActionListener<DeleteResponse> listener = mock(ActionListener.class);
+        DeleteDataObjectResponse response = mock(DeleteDataObjectResponse.class);
+        when(response.parser()).thenReturn(null);
+        CompletableFuture<DeleteDataObjectResponse> future = CompletableFuture.completedFuture(response);
+
+        future.whenComplete(SdkClientUtils.wrapDeleteCompletion(listener));
+
+        verify(listener).onResponse(null);
+    }
+
+    @Test
     void testWrapDeleteCompletion_ParseFailure() throws IOException {
         @SuppressWarnings("unchecked")
         ActionListener<DeleteResponse> listener = mock(ActionListener.class);
@@ -295,6 +347,19 @@ public class SdkClientUtilsTests {
         future.whenComplete(SdkClientUtils.wrapBulkCompletion(listener));
 
         verify(listener).onFailure(testException);
+    }
+
+    @Test
+    void testWrapBulkCompletion_NullParser() {
+        @SuppressWarnings("unchecked")
+        ActionListener<BulkResponse> listener = mock(ActionListener.class);
+        BulkDataObjectResponse response = mock(BulkDataObjectResponse.class);
+        when(response.parser()).thenReturn(null);
+        CompletableFuture<BulkDataObjectResponse> future = CompletableFuture.completedFuture(response);
+
+        future.whenComplete(SdkClientUtils.wrapBulkCompletion(listener));
+
+        verify(listener).onResponse(null);
     }
 
     @Test
@@ -354,6 +419,19 @@ public class SdkClientUtilsTests {
         future.whenComplete(SdkClientUtils.wrapSearchCompletion(listener));
 
         verify(listener).onFailure(testException);
+    }
+
+    @Test
+    void testWrapSearchCompletion_NullParser() {
+        @SuppressWarnings("unchecked")
+        ActionListener<SearchResponse> listener = mock(ActionListener.class);
+        SearchDataObjectResponse response = mock(SearchDataObjectResponse.class);
+        when(response.parser()).thenReturn(null);
+        CompletableFuture<SearchDataObjectResponse> future = CompletableFuture.completedFuture(response);
+
+        future.whenComplete(SdkClientUtils.wrapSearchCompletion(listener));
+
+        verify(listener).onResponse(null);
     }
 
     @Test

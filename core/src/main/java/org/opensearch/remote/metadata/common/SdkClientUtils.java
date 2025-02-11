@@ -56,7 +56,7 @@ public class SdkClientUtils {
         return (r, throwable) -> {
             if (throwable == null) {
                 try {
-                    IndexResponse indexResponse = IndexResponse.fromXContent(r.parser());
+                    IndexResponse indexResponse = r.parser() == null ? null : IndexResponse.fromXContent(r.parser());
                     listener.onResponse(indexResponse);
                 } catch (IOException e) {
                     handleParseFailure(listener, "put");
@@ -77,7 +77,7 @@ public class SdkClientUtils {
         return (r, throwable) -> {
             if (throwable == null) {
                 try {
-                    GetResponse getResponse = GetResponse.fromXContent(r.parser());
+                    GetResponse getResponse = r.parser() == null ? null : GetResponse.fromXContent(r.parser());
                     listener.onResponse(getResponse);
                 } catch (IOException e) {
                     handleParseFailure(listener, "get");
@@ -98,7 +98,7 @@ public class SdkClientUtils {
         return (r, throwable) -> {
             if (throwable == null) {
                 try {
-                    UpdateResponse updateResponse = UpdateResponse.fromXContent(r.parser());
+                    UpdateResponse updateResponse = r.parser() == null ? null : UpdateResponse.fromXContent(r.parser());
                     listener.onResponse(updateResponse);
                 } catch (IOException e) {
                     handleParseFailure(listener, "update");
@@ -119,7 +119,7 @@ public class SdkClientUtils {
         return (r, throwable) -> {
             if (throwable == null) {
                 try {
-                    DeleteResponse deleteResponse = DeleteResponse.fromXContent(r.parser());
+                    DeleteResponse deleteResponse = r.parser() == null ? null : DeleteResponse.fromXContent(r.parser());
                     listener.onResponse(deleteResponse);
                 } catch (IOException e) {
                     handleParseFailure(listener, "delete");
@@ -140,7 +140,7 @@ public class SdkClientUtils {
         return (r, throwable) -> {
             if (throwable == null) {
                 try {
-                    BulkResponse bulkResponse = BulkResponse.fromXContent(r.parser());
+                    BulkResponse bulkResponse = r.parser() == null ? null : BulkResponse.fromXContent(r.parser());
                     listener.onResponse(bulkResponse);
                 } catch (IOException e) {
                     handleParseFailure(listener, "bulk");
@@ -161,7 +161,7 @@ public class SdkClientUtils {
         return (r, throwable) -> {
             if (throwable == null) {
                 try {
-                    SearchResponse searchResponse = SearchResponse.fromXContent(r.parser());
+                    SearchResponse searchResponse = r.parser() == null ? null : SearchResponse.fromXContent(r.parser());
                     listener.onResponse(searchResponse);
                 } catch (IOException e) {
                     handleParseFailure(listener, "search");
