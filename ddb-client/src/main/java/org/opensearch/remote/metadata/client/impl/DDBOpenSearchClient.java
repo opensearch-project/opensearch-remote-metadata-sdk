@@ -18,17 +18,14 @@ import software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
-import software.amazon.awssdk.services.dynamodb.model.DeleteItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
-import software.amazon.awssdk.services.dynamodb.model.PutItemRequest.Builder;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
-import software.amazon.awssdk.services.dynamodb.model.UpdateItemResponse;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -80,6 +77,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
@@ -113,7 +111,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
     // TENANT_ID hash key requires non-null value
     private static final String DEFAULT_TENANT = "DEFAULT_TENANT";
 
-    private DynamoDbClient dynamoDbClient;
+    private DynamoDbAsyncClient dynamoDbAsyncClient;
     private AOSOpenSearchClient aosOpenSearchClient;
 
     @Override
@@ -126,7 +124,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         super.initialize(metadataSettings);
         validateAwsParams(remoteMetadataType, remoteMetadataEndpoint, region, serviceName);
 
-        this.dynamoDbClient = createDynamoDbClient(region);
+        this.dynamoDbAsyncClient = createDynamoDbAsyncClient(region);
         this.aosOpenSearchClient = new AOSOpenSearchClient();
         this.aosOpenSearchClient.initialize(metadataSettings);
     }
@@ -139,13 +137,13 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
     /**
      * Package private constructor for testing
      *
-     * @param dynamoDbClient AWS DDB client to perform CRUD operations on a DDB table.
+     * @param dynamoDbAsyncClient AWS DDB async client to perform CRUD operations on a DDB table.
      * @param aosOpenSearchClient Remote opensearch client to perform search operations. Documents written to DDB
      *                                  needs to be synced offline with remote opensearch.
      * @param tenantIdField the field name for the tenant id
      */
-    DDBOpenSearchClient(DynamoDbClient dynamoDbClient, AOSOpenSearchClient aosOpenSearchClient, String tenantIdField) {
-        this.dynamoDbClient = dynamoDbClient;
+    DDBOpenSearchClient(DynamoDbAsyncClient dynamoDbAsyncClient, AOSOpenSearchClient aosOpenSearchClient, String tenantIdField) {
+        this.dynamoDbAsyncClient = dynamoDbAsyncClient;
         this.aosOpenSearchClient = aosOpenSearchClient;
         this.tenantIdField = tenantIdField;
     }
@@ -167,9 +165,9 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
         final String tableName = request.index();
         final GetItemRequest getItemRequest = buildGetItemRequest(tenantId, id, request.index());
-        return executePrivilegedAsync(() -> {
+
+        return doPrivileged(() -> dynamoDbAsyncClient.getItem(getItemRequest).thenCompose(getItemResponse -> {
             try {
-                GetItemResponse getItemResponse = dynamoDbClient.getItem(getItemRequest);
                 Long sequenceNumber = initOrIncrementSeqNo(getItemResponse);
                 String source = Strings.toString(MediaTypeRegistry.JSON, request.dataObject());
                 JsonNode jsonNode = OBJECT_MAPPER.readTree(source);
@@ -182,29 +180,35 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 item.put(RANGE_KEY, AttributeValue.builder().s(id).build());
                 item.put(SOURCE, AttributeValue.builder().m(sourceMap).build());
                 item.put(SEQ_NO_KEY, AttributeValue.builder().n(sequenceNumber.toString()).build());
-                Builder builder = PutItemRequest.builder().tableName(tableName).item(item);
+                PutItemRequest.Builder builder = PutItemRequest.builder().tableName(tableName).item(item);
+
                 if (!request.overwriteIfExists()
                     && getItemResponse != null
                     && getItemResponse.item() != null
                     && !getItemResponse.item().isEmpty()) {
                     throw new OpenSearchStatusException("Existing data object for ID: " + request.id(), RestStatus.CONFLICT);
                 }
+
                 final PutItemRequest putItemRequest = builder.build();
 
-                dynamoDbClient.putItem(putItemRequest);
-                String simulatedIndexResponse = simulateOpenSearchResponse(
-                    request.index(),
-                    id,
-                    source,
-                    sequenceNumber,
-                    Map.of("result", "created")
-                );
-                return PutDataObjectResponse.builder().id(id).parser(createParser(simulatedIndexResponse)).build();
+                return dynamoDbAsyncClient.putItem(putItemRequest).thenApply(putItemResponse -> {
+                    String simulatedIndexResponse = simulateOpenSearchResponse(
+                        request.index(),
+                        id,
+                        source,
+                        sequenceNumber,
+                        Map.of("result", "created")
+                    );
+                    try {
+                        return PutDataObjectResponse.builder().id(id).parser(createParser(simulatedIndexResponse)).build();
+                    } catch (IOException e) {
+                        throw new OpenSearchStatusException("Failed to create parser for response", RestStatus.INTERNAL_SERVER_ERROR, e);
+                    }
+                });
             } catch (IOException e) {
-                // Rethrow unchecked exception on XContent parsing error
-                throw new OpenSearchStatusException("Failed to parse data object  " + request.id(), RestStatus.BAD_REQUEST);
+                throw new OpenSearchStatusException("Failed to parse data object " + request.id(), RestStatus.BAD_REQUEST, e);
             }
-        }, executor);
+        }));
     }
 
     /**
@@ -219,9 +223,8 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         Boolean isMultiTenancyEnabled
     ) {
         final GetItemRequest getItemRequest = buildGetItemRequest(request.tenantId(), request.id(), request.index());
-        return executePrivilegedAsync(() -> {
+        return doPrivileged(() -> dynamoDbAsyncClient.getItem(getItemRequest)).thenApply(getItemResponse -> {
             try {
-                final GetItemResponse getItemResponse = dynamoDbClient.getItem(getItemRequest);
                 ObjectNode sourceObject;
                 boolean found;
                 String sequenceNumberString = null;
@@ -264,7 +267,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 // Rethrow unchecked exception on XContent parsing error
                 throw new OpenSearchStatusException("Failed to parse response", RestStatus.INTERNAL_SERVER_ERROR);
             }
-        }, executor);
+        });
     }
 
     /**
@@ -279,20 +282,25 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         Boolean isMultiTenancyEnabled
     ) {
         final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
-        return executePrivilegedAsync(() -> {
+        return doPrivileged(() -> {
             try {
                 String source = Strings.toString(MediaTypeRegistry.JSON, request.dataObject());
                 JsonNode jsonNode = OBJECT_MAPPER.readTree(source);
 
-                Long sequenceNumber = updateItemWithRetryOnConflict(tenantId, jsonNode, request);
-                String simulatedUpdateResponse = simulateOpenSearchResponse(
-                    request.index(),
-                    request.id(),
-                    source,
-                    sequenceNumber,
-                    Map.of("result", "updated")
-                );
-                return UpdateDataObjectResponse.builder().id(request.id()).parser(createParser(simulatedUpdateResponse)).build();
+                return updateItemWithRetryOnConflict(tenantId, jsonNode, request).thenApply(sequenceNumber -> {
+                    try {
+                        String simulatedUpdateResponse = simulateOpenSearchResponse(
+                            request.index(),
+                            request.id(),
+                            source,
+                            sequenceNumber,
+                            Map.of("result", "updated")
+                        );
+                        return UpdateDataObjectResponse.builder().id(request.id()).parser(createParser(simulatedUpdateResponse)).build();
+                    } catch (IOException e) {
+                        throw new OpenSearchStatusException("Parsing error creating update response", RestStatus.INTERNAL_SERVER_ERROR, e);
+                    }
+                });
             } catch (IOException e) {
                 log.error("Error updating {} in {}: {}", request.id(), request.index(), e.getMessage(), e);
                 // Rethrow unchecked exception on update IOException
@@ -301,10 +309,10 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                     RestStatus.BAD_REQUEST
                 );
             }
-        }, executor);
+        });
     }
 
-    private Long updateItemWithRetryOnConflict(String tenantId, JsonNode jsonNode, UpdateDataObjectRequest request) {
+    private CompletionStage<Long> updateItemWithRetryOnConflict(String tenantId, JsonNode jsonNode, UpdateDataObjectRequest request) {
         Map<String, AttributeValue> updateItem = DDBJsonTransformer.convertJsonObjectToDDBAttributeMap(jsonNode);
         updateItem.remove(this.tenantIdField);
         updateItem.remove(RANGE_KEY);
@@ -316,14 +324,22 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         expressionAttributeNames.put("#source", SOURCE);
         Map<String, AttributeValue> expressionAttributeValues = new HashMap<>();
         expressionAttributeValues.put(":incr", AttributeValue.builder().n("1").build());
-        int retriesRemaining = request.retryOnConflict();
-        do {
-            try {
+
+        return retryUpdate(request, updateKey, updateItem, expressionAttributeNames, expressionAttributeValues, request.retryOnConflict());
+    }
+
+    private CompletionStage<Long> retryUpdate(
+        UpdateDataObjectRequest request,
+        Map<String, AttributeValue> updateKey,
+        Map<String, AttributeValue> updateItem,
+        Map<String, String> expressionAttributeNames,
+        Map<String, AttributeValue> expressionAttributeValues,
+        int retriesRemaining
+    ) {
+        return dynamoDbAsyncClient.getItem(GetItemRequest.builder().tableName(request.index()).key(updateKey).build())
+            .thenCompose(currentItem -> {
                 // Fetch current item and extract data object
-                Map<String, AttributeValue> currentItem = dynamoDbClient.getItem(
-                    GetItemRequest.builder().tableName(request.index()).key(updateKey).build()
-                ).item();
-                Map<String, AttributeValue> dataObject = new HashMap<>(currentItem.get(SOURCE).m());
+                Map<String, AttributeValue> dataObject = new HashMap<>(currentItem.item().get(SOURCE).m());
                 // Update existing with changes
                 dataObject.putAll(updateItem);
                 expressionAttributeValues.put(":source", AttributeValue.builder().m(dataObject).build());
@@ -331,7 +347,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 if (request.ifSeqNo() != null) {
                     expressionAttributeValues.put(":currentSeqNo", AttributeValue.builder().n(Long.toString(request.ifSeqNo())).build());
                 } else {
-                    expressionAttributeValues.put(":currentSeqNo", currentItem.get(SEQ_NO_KEY));
+                    expressionAttributeValues.put(":currentSeqNo", currentItem.item().get(SEQ_NO_KEY));
                 }
                 UpdateItemRequest.Builder updateItemRequestBuilder = UpdateItemRequest.builder().tableName(request.index()).key(updateKey);
                 updateItemRequestBuilder.updateExpression("SET #seqNo = #seqNo + :incr, #source = :source ");
@@ -339,22 +355,34 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 updateItemRequestBuilder.expressionAttributeNames(expressionAttributeNames)
                     .expressionAttributeValues(expressionAttributeValues);
                 UpdateItemRequest updateItemRequest = updateItemRequestBuilder.build();
-                UpdateItemResponse updateItemResponse = dynamoDbClient.updateItem(updateItemRequest);
-                if (updateItemResponse != null
-                    && updateItemResponse.attributes() != null
-                    && updateItemResponse.attributes().containsKey(SEQ_NO_KEY)) {
-                    return Long.parseLong(updateItemResponse.attributes().get(SEQ_NO_KEY).n());
-                }
-            } catch (ConditionalCheckFailedException ccfe) {
-                if (retriesRemaining < 1) {
-                    // Throw exception if retries exhausted
-                    String message = "Document version conflict updating " + request.id() + " in index " + request.index();
-                    log.error(message + ": {}", ccfe.getMessage(), ccfe);
-                    throw new OpenSearchStatusException(message, RestStatus.CONFLICT);
-                }
-            }
-        } while (retriesRemaining-- > 0);
-        return null; // Should never get here
+
+                return dynamoDbAsyncClient.updateItem(updateItemRequest).thenApply(updateItemResponse -> {
+                    if (updateItemResponse != null
+                        && updateItemResponse.attributes() != null
+                        && updateItemResponse.attributes().containsKey(SEQ_NO_KEY)) {
+                        return Long.parseLong(updateItemResponse.attributes().get(SEQ_NO_KEY).n());
+                    }
+                    return null;
+                }).exceptionally(e -> {
+                    if (e.getCause() instanceof ConditionalCheckFailedException) {
+                        if (retriesRemaining > 0) {
+                            return retryUpdate(
+                                request,
+                                updateKey,
+                                updateItem,
+                                expressionAttributeNames,
+                                expressionAttributeValues,
+                                retriesRemaining - 1
+                            ).toCompletableFuture().join();
+                        } else {
+                            String message = "Document version conflict updating " + request.id() + " in index " + request.index();
+                            log.error(message + ": {}", e.getMessage(), e);
+                            throw new OpenSearchStatusException(message, RestStatus.CONFLICT);
+                        }
+                    }
+                    throw new CompletionException(e);
+                });
+            });
     }
 
     /**
@@ -378,9 +406,8 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 )
             )
             .build();
-        return executePrivilegedAsync(() -> {
+        return doPrivileged(() -> dynamoDbAsyncClient.deleteItem(deleteItemRequest).thenApply(deleteItemResponse -> {
             try {
-                DeleteItemResponse deleteItemResponse = dynamoDbClient.deleteItem(deleteItemRequest);
                 Long sequenceNumber = null;
                 if (deleteItemResponse.attributes() != null && deleteItemResponse.attributes().containsKey(SEQ_NO_KEY)) {
                     sequenceNumber = Long.parseLong(deleteItemResponse.attributes().get(SEQ_NO_KEY).n()) + 1;
@@ -397,7 +424,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 // Rethrow unchecked exception on XContent parsing error
                 throw new OpenSearchStatusException("Failed to parse response", RestStatus.INTERNAL_SERVER_ERROR);
             }
-        }, executor);
+        }));
     }
 
     @Override
@@ -406,96 +433,103 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        return executePrivilegedAsync(() -> {
+        return doPrivileged(() -> {
             log.info("Performing {} bulk actions on table {}", request.requests().size(), request.getIndices());
-
-            List<DataObjectResponse> responses = new ArrayList<>();
-
-            // TODO: Ideally if we only have put and delete requests we can use DynamoDB BatchWriteRequest.
             long startNanos = System.nanoTime();
-            for (DataObjectRequest dataObjectRequest : request.requests()) {
-                try {
-                    if (dataObjectRequest instanceof PutDataObjectRequest) {
-                        responses.add(
-                            putDataObjectAsync((PutDataObjectRequest) dataObjectRequest, executor, isMultiTenancyEnabled)
-                                .toCompletableFuture()
-                                .join()
-                        );
-                    } else if (dataObjectRequest instanceof UpdateDataObjectRequest) {
-                        responses.add(
-                            updateDataObjectAsync((UpdateDataObjectRequest) dataObjectRequest, executor, isMultiTenancyEnabled)
-                                .toCompletableFuture()
-                                .join()
-                        );
-                    } else if (dataObjectRequest instanceof DeleteDataObjectRequest) {
-                        responses.add(
-                            deleteDataObjectAsync((DeleteDataObjectRequest) dataObjectRequest, executor, isMultiTenancyEnabled)
-                                .toCompletableFuture()
-                                .join()
-                        );
-                    }
-                } catch (CompletionException e) {
-                    Exception cause = SdkClientUtils.unwrapAndConvertToException(e);
-                    RestStatus status = ExceptionsHelper.status(cause);
-                    if (dataObjectRequest instanceof PutDataObjectRequest) {
-                        responses.add(
-                            new PutDataObjectResponse.Builder().index(dataObjectRequest.index())
-                                .id(dataObjectRequest.id())
-                                .failed(true)
-                                .cause(cause)
-                                .status(status)
-                                .build()
-                        );
-                    } else if (dataObjectRequest instanceof UpdateDataObjectRequest) {
-                        responses.add(
-                            new UpdateDataObjectResponse.Builder().index(dataObjectRequest.index())
-                                .id(dataObjectRequest.id())
-                                .failed(true)
-                                .cause(cause)
-                                .status(status)
-                                .build()
-                        );
-                    } else if (dataObjectRequest instanceof DeleteDataObjectRequest) {
-                        responses.add(
-                            new DeleteDataObjectResponse.Builder().index(dataObjectRequest.index())
-                                .id(dataObjectRequest.id())
-                                .failed(true)
-                                .cause(cause)
-                                .status(status)
-                                .build()
-                        );
-                    }
-                    log.error("Error in bulk operation for id {}: {}", dataObjectRequest.id(), e.getCause().getMessage(), e.getCause());
+            return processBulkRequestsAsync(request.requests(), 0, new ArrayList<>(), executor, isMultiTenancyEnabled).thenCompose(
+                responses -> {
+                    long endNanos = System.nanoTime();
+                    long tookMillis = TimeUnit.NANOSECONDS.toMillis(endNanos - startNanos);
+                    log.info("Bulk action complete for {} items, took {} ms", responses.size(), tookMillis);
+                    return buildBulkDataObjectResponse(responses, tookMillis);
                 }
-            }
-            long endNanos = System.nanoTime();
-            long tookMillis = TimeUnit.NANOSECONDS.toMillis(endNanos - startNanos);
-
-            log.info("Bulk action complete for {} items, took {} ms", responses.size(), tookMillis);
-            return buildBulkDataObjectResponse(responses, tookMillis);
-        }, executor);
+            );
+        });
     }
 
-    private BulkDataObjectResponse buildBulkDataObjectResponse(List<DataObjectResponse> responses, long tookMillis) {
+    private CompletionStage<List<DataObjectResponse>> processBulkRequestsAsync(
+        List<DataObjectRequest> requests,
+        int index,
+        List<DataObjectResponse> responses,
+        Executor executor,
+        Boolean isMultiTenancyEnabled
+    ) {
+        if (index >= requests.size()) {
+            return CompletableFuture.completedFuture(responses);
+        }
+
+        DataObjectRequest dataObjectRequest = requests.get(index);
+        CompletionStage<? extends DataObjectResponse> futureResponse;
+
+        if (dataObjectRequest instanceof PutDataObjectRequest) {
+            futureResponse = putDataObjectAsync((PutDataObjectRequest) dataObjectRequest, executor, isMultiTenancyEnabled);
+        } else if (dataObjectRequest instanceof UpdateDataObjectRequest) {
+            futureResponse = updateDataObjectAsync((UpdateDataObjectRequest) dataObjectRequest, executor, isMultiTenancyEnabled);
+        } else if (dataObjectRequest instanceof DeleteDataObjectRequest) {
+            futureResponse = deleteDataObjectAsync((DeleteDataObjectRequest) dataObjectRequest, executor, isMultiTenancyEnabled);
+        } else {
+            futureResponse = CompletableFuture.failedFuture(
+                new IllegalArgumentException("Unsupported request type: " + dataObjectRequest.getClass().getSimpleName())
+            );
+        }
+
+        return futureResponse.handle((response, throwable) -> {
+            if (throwable != null) {
+                Exception cause = SdkClientUtils.unwrapAndConvertToException(throwable);
+                RestStatus status = ExceptionsHelper.status(cause);
+                if (dataObjectRequest instanceof PutDataObjectRequest) {
+                    return new PutDataObjectResponse.Builder().index(dataObjectRequest.index())
+                        .id(dataObjectRequest.id())
+                        .failed(true)
+                        .cause(cause)
+                        .status(status)
+                        .build();
+                } else if (dataObjectRequest instanceof UpdateDataObjectRequest) {
+                    return new UpdateDataObjectResponse.Builder().index(dataObjectRequest.index())
+                        .id(dataObjectRequest.id())
+                        .failed(true)
+                        .cause(cause)
+                        .status(status)
+                        .build();
+                } else if (dataObjectRequest instanceof DeleteDataObjectRequest) {
+                    return new DeleteDataObjectResponse.Builder().index(dataObjectRequest.index())
+                        .id(dataObjectRequest.id())
+                        .failed(true)
+                        .cause(cause)
+                        .status(status)
+                        .build();
+                }
+                log.error("Error in bulk operation for id {}: {}", dataObjectRequest.id(), throwable.getMessage(), throwable);
+            }
+            return response;
+        }).thenCompose(response -> {
+            responses.add(response);
+            return processBulkRequestsAsync(requests, index + 1, responses, executor, isMultiTenancyEnabled);
+        });
+    }
+
+    private CompletionStage<BulkDataObjectResponse> buildBulkDataObjectResponse(List<DataObjectResponse> responses, long tookMillis) {
         // Reconstruct BulkResponse to leverage its parser and hasFailed methods
         BulkItemResponse[] responseArray = new BulkItemResponse[responses.size()];
-        try {
+        try (XContentBuilder builder = XContentFactory.jsonBuilder()) {
             for (int id = 0; id < responses.size(); id++) {
                 responseArray[id] = buildBulkItemResponse(responses, id);
             }
             BulkResponse br = new BulkResponse(responseArray, tookMillis);
-            try (XContentBuilder builder = XContentFactory.jsonBuilder()) {
-                br.toXContent(builder, ToXContent.EMPTY_PARAMS);
-                return new BulkDataObjectResponse(
+            br.toXContent(builder, ToXContent.EMPTY_PARAMS);
+            return CompletableFuture.completedFuture(
+                new BulkDataObjectResponse(
                     responses.toArray(new DataObjectResponse[0]),
                     tookMillis,
                     br.hasFailures(),
                     createParser(builder.toString())
-                );
-            }
+                )
+            );
         } catch (IOException e) {
             // Rethrow unchecked exception on XContent parsing error
-            throw new OpenSearchStatusException("Failed to parse bulk response", RestStatus.INTERNAL_SERVER_ERROR);
+            return CompletableFuture.failedFuture(
+                new OpenSearchStatusException("Failed to parse bulk response", RestStatus.INTERNAL_SERVER_ERROR)
+            );
         }
     }
 
@@ -624,12 +658,12 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         }
     }
 
-    private static DynamoDbClient createDynamoDbClient(String region) {
+    private static DynamoDbAsyncClient createDynamoDbAsyncClient(String region) {
         if (region == null) {
             throw new IllegalStateException("REGION environment variable needs to be set!");
         }
         return doPrivileged(
-            () -> DynamoDbClient.builder().region(Region.of(region)).credentialsProvider(createCredentialsProvider()).build()
+            () -> DynamoDbAsyncClient.builder().region(Region.of(region)).credentialsProvider(createCredentialsProvider()).build()
         );
     }
 
@@ -643,8 +677,8 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
 
     @Override
     public void close() throws Exception {
-        if (dynamoDbClient != null) {
-            dynamoDbClient.close();
+        if (dynamoDbAsyncClient != null) {
+            dynamoDbAsyncClient.close();
         }
         if (aosOpenSearchClient != null) {
             aosOpenSearchClient.close();
