@@ -17,7 +17,7 @@ import software.amazon.awssdk.http.SdkHttpClient;
 import software.amazon.awssdk.http.apache.ApacheHttpClient;
 import software.amazon.awssdk.regions.Region;
 
-import org.opensearch.client.opensearch.OpenSearchClient;
+import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.transport.aws.AwsSdk2Transport;
 import org.opensearch.client.transport.aws.AwsSdk2TransportOptions;
 import org.opensearch.core.common.Strings;
@@ -43,8 +43,8 @@ public class AOSOpenSearchClient extends RemoteClusterIndicesClient {
     @Override
     public void initialize(Map<String, String> metadataSettings) {
         super.initialize(metadataSettings);
-        this.openSearchClient = createOpenSearchClient();
-        this.mapper = openSearchClient._transport().jsonpMapper();
+        this.openSearchAsyncClient = createOpenSearchAsyncClient();
+        this.mapper = openSearchAsyncClient._transport().jsonpMapper();
     }
 
     /**
@@ -64,15 +64,15 @@ public class AOSOpenSearchClient extends RemoteClusterIndicesClient {
     }
 
     @Override
-    protected OpenSearchClient createOpenSearchClient() {
+    protected OpenSearchAsyncClient createOpenSearchAsyncClient() {
         validateAwsParams();
-        return createAwsOpenSearchServiceClient();
+        return createAwsOpenSearchServiceAsyncClient();
     }
 
-    private OpenSearchClient createAwsOpenSearchServiceClient() {
+    private OpenSearchAsyncClient createAwsOpenSearchServiceAsyncClient() {
         // https://github.com/opensearch-project/opensearch-java/blob/main/guides/auth.md
         final SdkHttpClient httpClient = ApacheHttpClient.builder().build();
-        return new OpenSearchClient(
+        return new OpenSearchAsyncClient(
             doPrivileged(
                 () -> new AwsSdk2Transport(
                     httpClient,
@@ -95,8 +95,8 @@ public class AOSOpenSearchClient extends RemoteClusterIndicesClient {
 
     @Override
     public void close() throws Exception {
-        if (openSearchClient != null && openSearchClient._transport() != null) {
-            openSearchClient._transport().close();
+        if (openSearchAsyncClient != null && openSearchAsyncClient._transport() != null) {
+            openSearchAsyncClient._transport().close();
         }
     }
 }
