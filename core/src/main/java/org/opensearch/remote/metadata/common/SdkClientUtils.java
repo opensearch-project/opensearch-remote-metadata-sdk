@@ -50,9 +50,14 @@ public class SdkClientUtils {
      * Wraps the completion of a PUT operation from the SdkClient into a format compatible with an ActionListener.
      *
      * @param listener The ActionListener that will receive the parsed IndexResponse or any errors
+     * @param exceptionTypesToUnwrap optional list of exception types to unwrap. Defaults to {@link OpenSearchStatusException} and {@link CompletionException}.
      * @return A BiConsumer that can be used directly with CompletionStage's whenComplete method
      */
-    public static BiConsumer<PutDataObjectResponse, Throwable> wrapPutCompletion(ActionListener<IndexResponse> listener) {
+    @SafeVarargs
+    public static BiConsumer<PutDataObjectResponse, Throwable> wrapPutCompletion(
+        ActionListener<IndexResponse> listener,
+        Class<? extends Throwable>... exceptionTypesToUnwrap
+    ) {
         return (r, throwable) -> {
             if (throwable == null) {
                 try {
@@ -62,7 +67,7 @@ public class SdkClientUtils {
                     handleParseFailure(listener, "put");
                 }
             } else {
-                handleThrowable(listener, throwable);
+                handleThrowable(listener, throwable, exceptionTypesToUnwrap);
             }
         };
     }
@@ -73,7 +78,11 @@ public class SdkClientUtils {
      * @param listener The ActionListener that will receive the parsed GetResponse or any errors
      * @return A BiConsumer that can be used directly with CompletionStage's whenComplete method
      */
-    public static BiConsumer<GetDataObjectResponse, Throwable> wrapGetCompletion(ActionListener<GetResponse> listener) {
+    @SafeVarargs
+    public static BiConsumer<GetDataObjectResponse, Throwable> wrapGetCompletion(
+        ActionListener<GetResponse> listener,
+        Class<? extends Throwable>... exceptionTypesToUnwrap
+    ) {
         return (r, throwable) -> {
             if (throwable == null) {
                 try {
@@ -83,7 +92,7 @@ public class SdkClientUtils {
                     handleParseFailure(listener, "get");
                 }
             } else {
-                handleThrowable(listener, throwable);
+                handleThrowable(listener, throwable, exceptionTypesToUnwrap);
             }
         };
     }
@@ -94,7 +103,11 @@ public class SdkClientUtils {
      * @param listener The ActionListener that will receive the parsed UpdateResponse or any errors
      * @return A BiConsumer that can be used directly with CompletionStage's whenComplete method
      */
-    public static BiConsumer<UpdateDataObjectResponse, Throwable> wrapUpdateCompletion(ActionListener<UpdateResponse> listener) {
+    @SafeVarargs
+    public static BiConsumer<UpdateDataObjectResponse, Throwable> wrapUpdateCompletion(
+        ActionListener<UpdateResponse> listener,
+        Class<? extends Throwable>... exceptionTypesToUnwrap
+    ) {
         return (r, throwable) -> {
             if (throwable == null) {
                 try {
@@ -104,7 +117,7 @@ public class SdkClientUtils {
                     handleParseFailure(listener, "update");
                 }
             } else {
-                handleThrowable(listener, throwable);
+                handleThrowable(listener, throwable, exceptionTypesToUnwrap);
             }
         };
     }
@@ -115,7 +128,11 @@ public class SdkClientUtils {
      * @param listener The ActionListener that will receive the parsed DeleteResponse or any errors
      * @return A BiConsumer that can be used directly with CompletionStage's whenComplete method
      */
-    public static BiConsumer<DeleteDataObjectResponse, Throwable> wrapDeleteCompletion(ActionListener<DeleteResponse> listener) {
+    @SafeVarargs
+    public static BiConsumer<DeleteDataObjectResponse, Throwable> wrapDeleteCompletion(
+        ActionListener<DeleteResponse> listener,
+        Class<? extends Throwable>... exceptionTypesToUnwrap
+    ) {
         return (r, throwable) -> {
             if (throwable == null) {
                 try {
@@ -125,7 +142,7 @@ public class SdkClientUtils {
                     handleParseFailure(listener, "delete");
                 }
             } else {
-                handleThrowable(listener, throwable);
+                handleThrowable(listener, throwable, exceptionTypesToUnwrap);
             }
         };
     }
@@ -136,7 +153,11 @@ public class SdkClientUtils {
      * @param listener The ActionListener that will receive the parsed BulkResponse or any errors
      * @return A BiConsumer that can be used directly with CompletionStage's whenComplete method
      */
-    public static BiConsumer<BulkDataObjectResponse, Throwable> wrapBulkCompletion(ActionListener<BulkResponse> listener) {
+    @SafeVarargs
+    public static BiConsumer<BulkDataObjectResponse, Throwable> wrapBulkCompletion(
+        ActionListener<BulkResponse> listener,
+        Class<? extends Throwable>... exceptionTypesToUnwrap
+    ) {
         return (r, throwable) -> {
             if (throwable == null) {
                 try {
@@ -146,7 +167,7 @@ public class SdkClientUtils {
                     handleParseFailure(listener, "bulk");
                 }
             } else {
-                handleThrowable(listener, throwable);
+                handleThrowable(listener, throwable, exceptionTypesToUnwrap);
             }
         };
     }
@@ -157,7 +178,11 @@ public class SdkClientUtils {
      * @param listener The ActionListener that will receive the parsed SearchResponse or any errors
      * @return A BiConsumer that can be used directly with CompletionStage's whenComplete method
      */
-    public static BiConsumer<SearchDataObjectResponse, Throwable> wrapSearchCompletion(ActionListener<SearchResponse> listener) {
+    @SafeVarargs
+    public static BiConsumer<SearchDataObjectResponse, Throwable> wrapSearchCompletion(
+        ActionListener<SearchResponse> listener,
+        Class<? extends Throwable>... exceptionTypesToUnwrap
+    ) {
         return (r, throwable) -> {
             if (throwable == null) {
                 try {
@@ -167,7 +192,7 @@ public class SdkClientUtils {
                     handleParseFailure(listener, "search");
                 }
             } else {
-                handleThrowable(listener, throwable);
+                handleThrowable(listener, throwable, exceptionTypesToUnwrap);
             }
         };
     }
@@ -176,8 +201,15 @@ public class SdkClientUtils {
         listener.onFailure(new OpenSearchStatusException("Failed to parse " + operation + " response", INTERNAL_SERVER_ERROR));
     }
 
-    private static void handleThrowable(ActionListener<?> listener, Throwable throwable) {
-        Exception exception = unwrapAndConvertToException(throwable, CompletionException.class, OpenSearchStatusException.class);
+    @SafeVarargs
+    private static void handleThrowable(
+        ActionListener<?> listener,
+        Throwable throwable,
+        Class<? extends Throwable>... exceptionTypesToUnwrap
+    ) {
+        Exception exception = exceptionTypesToUnwrap.length > 0
+            ? unwrapAndConvertToException(throwable, exceptionTypesToUnwrap)
+            : unwrapAndConvertToException(throwable, OpenSearchStatusException.class, CompletionException.class);
         listener.onFailure(exception);
     }
 
