@@ -1,7 +1,7 @@
 package org.opensearch.remote.metadata.client.impl;
 
 import org.opensearch.OpenSearchException;
-import org.opensearch.client.opensearch.OpenSearchClient;
+import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.transport.aws.AwsSdk2Transport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,7 +33,7 @@ class AOSOpenSearchClientTests {
     private AOSOpenSearchClient aosOpenSearchClient;
 
     @Mock
-    private OpenSearchClient mockOpenSearchClient;
+    private OpenSearchAsyncClient mockOpenSearchAsyncClient;
 
     @BeforeEach
     void setUp() {
@@ -78,18 +78,18 @@ class AOSOpenSearchClientTests {
 
         aosOpenSearchClient.initialize(metadataSettings);
 
-        OpenSearchClient client = aosOpenSearchClient.createOpenSearchClient();
+        OpenSearchAsyncClient client = aosOpenSearchClient.createOpenSearchAsyncClient();
         assertNotNull(client);
         assertTrue(client._transport() instanceof AwsSdk2Transport);
     }
 
     @Test
     void testClose() throws Exception {
-        aosOpenSearchClient.openSearchClient = mockOpenSearchClient;
-        when(mockOpenSearchClient._transport()).thenReturn(mock(AwsSdk2Transport.class));
+        aosOpenSearchClient.openSearchAsyncClient = mockOpenSearchAsyncClient;
+        when(mockOpenSearchAsyncClient._transport()).thenReturn(mock(AwsSdk2Transport.class));
 
         aosOpenSearchClient.close();
 
-        verify(mockOpenSearchClient._transport(), times(1)).close();
+        verify(mockOpenSearchAsyncClient._transport(), times(1)).close();
     }
 }
