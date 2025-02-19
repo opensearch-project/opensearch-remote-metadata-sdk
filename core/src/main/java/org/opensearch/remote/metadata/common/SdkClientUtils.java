@@ -59,15 +59,15 @@ public class SdkClientUtils {
         Class<? extends Throwable>... exceptionTypesToUnwrap
     ) {
         return (r, throwable) -> {
-            if (throwable != null) {
+            if (throwable == null) {
+                try {
+                    IndexResponse indexResponse = r.parser() == null ? null : IndexResponse.fromXContent(r.parser());
+                    listener.onResponse(indexResponse);
+                } catch (IOException e) {
+                    handleParseFailure(listener, "put");
+                }
+            } else {
                 handleThrowable(listener, throwable, exceptionTypesToUnwrap);
-                return;
-            }
-            try {
-                IndexResponse indexResponse = r.parser() == null ? null : IndexResponse.fromXContent(r.parser());
-                listener.onResponse(indexResponse);
-            } catch (IOException e) {
-                handleParseFailure(listener, "put");
             }
         };
     }
@@ -76,7 +76,6 @@ public class SdkClientUtils {
      * Wraps the completion of a GET operation from the SdkClient into a format compatible with an ActionListener.
      *
      * @param listener The ActionListener that will receive the parsed GetResponse or any errors
-     * @param exceptionTypesToUnwrap optional list of exception types to unwrap. Defaults to {@link OpenSearchStatusException} and {@link CompletionException}.
      * @return A BiConsumer that can be used directly with CompletionStage's whenComplete method
      */
     @SafeVarargs
@@ -85,15 +84,15 @@ public class SdkClientUtils {
         Class<? extends Throwable>... exceptionTypesToUnwrap
     ) {
         return (r, throwable) -> {
-            if (throwable != null) {
+            if (throwable == null) {
+                try {
+                    GetResponse getResponse = r.parser() == null ? null : GetResponse.fromXContent(r.parser());
+                    listener.onResponse(getResponse);
+                } catch (IOException e) {
+                    handleParseFailure(listener, "get");
+                }
+            } else {
                 handleThrowable(listener, throwable, exceptionTypesToUnwrap);
-                return;
-            }
-            try {
-                GetResponse getResponse = r.parser() == null ? null : GetResponse.fromXContent(r.parser());
-                listener.onResponse(getResponse);
-            } catch (IOException e) {
-                handleParseFailure(listener, "get");
             }
         };
     }
@@ -102,7 +101,6 @@ public class SdkClientUtils {
      * Wraps the completion of an UPDATE operation from the SdkClient into a format compatible with an ActionListener.
      *
      * @param listener The ActionListener that will receive the parsed UpdateResponse or any errors
-     * @param exceptionTypesToUnwrap optional list of exception types to unwrap. Defaults to {@link OpenSearchStatusException} and {@link CompletionException}.
      * @return A BiConsumer that can be used directly with CompletionStage's whenComplete method
      */
     @SafeVarargs
@@ -111,15 +109,15 @@ public class SdkClientUtils {
         Class<? extends Throwable>... exceptionTypesToUnwrap
     ) {
         return (r, throwable) -> {
-            if (throwable != null) {
+            if (throwable == null) {
+                try {
+                    UpdateResponse updateResponse = r.parser() == null ? null : UpdateResponse.fromXContent(r.parser());
+                    listener.onResponse(updateResponse);
+                } catch (IOException e) {
+                    handleParseFailure(listener, "update");
+                }
+            } else {
                 handleThrowable(listener, throwable, exceptionTypesToUnwrap);
-                return;
-            }
-            try {
-                UpdateResponse updateResponse = r.parser() == null ? null : UpdateResponse.fromXContent(r.parser());
-                listener.onResponse(updateResponse);
-            } catch (IOException e) {
-                handleParseFailure(listener, "update");
             }
         };
     }
@@ -128,7 +126,6 @@ public class SdkClientUtils {
      * Wraps the completion of a DELETE operation from the SdkClient into a format compatible with an ActionListener.
      *
      * @param listener The ActionListener that will receive the parsed DeleteResponse or any errors
-     * @param exceptionTypesToUnwrap optional list of exception types to unwrap. Defaults to {@link OpenSearchStatusException} and {@link CompletionException}.
      * @return A BiConsumer that can be used directly with CompletionStage's whenComplete method
      */
     @SafeVarargs
@@ -137,15 +134,15 @@ public class SdkClientUtils {
         Class<? extends Throwable>... exceptionTypesToUnwrap
     ) {
         return (r, throwable) -> {
-            if (throwable != null) {
+            if (throwable == null) {
+                try {
+                    DeleteResponse deleteResponse = r.parser() == null ? null : DeleteResponse.fromXContent(r.parser());
+                    listener.onResponse(deleteResponse);
+                } catch (IOException e) {
+                    handleParseFailure(listener, "delete");
+                }
+            } else {
                 handleThrowable(listener, throwable, exceptionTypesToUnwrap);
-                return;
-            }
-            try {
-                DeleteResponse deleteResponse = r.parser() == null ? null : DeleteResponse.fromXContent(r.parser());
-                listener.onResponse(deleteResponse);
-            } catch (IOException e) {
-                handleParseFailure(listener, "delete");
             }
         };
     }
@@ -154,7 +151,6 @@ public class SdkClientUtils {
      * Wraps the completion of a BULK operation from the SdkClient into a format compatible with an ActionListener.
      *
      * @param listener The ActionListener that will receive the parsed BulkResponse or any errors
-     * @param exceptionTypesToUnwrap optional list of exception types to unwrap. Defaults to {@link OpenSearchStatusException} and {@link CompletionException}.
      * @return A BiConsumer that can be used directly with CompletionStage's whenComplete method
      */
     @SafeVarargs
@@ -163,15 +159,15 @@ public class SdkClientUtils {
         Class<? extends Throwable>... exceptionTypesToUnwrap
     ) {
         return (r, throwable) -> {
-            if (throwable != null) {
+            if (throwable == null) {
+                try {
+                    BulkResponse bulkResponse = r.parser() == null ? null : BulkResponse.fromXContent(r.parser());
+                    listener.onResponse(bulkResponse);
+                } catch (IOException e) {
+                    handleParseFailure(listener, "bulk");
+                }
+            } else {
                 handleThrowable(listener, throwable, exceptionTypesToUnwrap);
-                return;
-            }
-            try {
-                BulkResponse bulkResponse = r.parser() == null ? null : BulkResponse.fromXContent(r.parser());
-                listener.onResponse(bulkResponse);
-            } catch (IOException e) {
-                handleParseFailure(listener, "bulk");
             }
         };
     }
@@ -180,7 +176,6 @@ public class SdkClientUtils {
      * Wraps the completion of a SEARCH operation from the SdkClient into a format compatible with an ActionListener.
      *
      * @param listener The ActionListener that will receive the parsed SearchResponse or any errors
-     * @param exceptionTypesToUnwrap optional list of exception types to unwrap. Defaults to {@link OpenSearchStatusException} and {@link CompletionException}.
      * @return A BiConsumer that can be used directly with CompletionStage's whenComplete method
      */
     @SafeVarargs
@@ -189,15 +184,15 @@ public class SdkClientUtils {
         Class<? extends Throwable>... exceptionTypesToUnwrap
     ) {
         return (r, throwable) -> {
-            if (throwable != null) {
+            if (throwable == null) {
+                try {
+                    SearchResponse searchResponse = r.parser() == null ? null : SearchResponse.fromXContent(r.parser());
+                    listener.onResponse(searchResponse);
+                } catch (IOException e) {
+                    handleParseFailure(listener, "search");
+                }
+            } else {
                 handleThrowable(listener, throwable, exceptionTypesToUnwrap);
-                return;
-            }
-            try {
-                SearchResponse searchResponse = r.parser() == null ? null : SearchResponse.fromXContent(r.parser());
-                listener.onResponse(searchResponse);
-            } catch (IOException e) {
-                handleParseFailure(listener, "search");
             }
         };
     }
