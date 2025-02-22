@@ -14,4 +14,5 @@ Inspired from [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 ### Infrastructure
 ### Documentation
 ### Maintenance
+- Bump aws sdk to 2.30.18 from 2.29.50 ([#93](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/93))
 ### Refactoring
