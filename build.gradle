@@ -142,7 +142,7 @@ subprojects {
     }
 
     checkstyle {
-        toolVersion = "10.21.2"
+        toolVersion = "10.21.3"
     }
 
     // checkstyle gives us the warnings we need, suppress overzelous jdk checks
