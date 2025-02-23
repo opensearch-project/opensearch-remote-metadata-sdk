@@ -8,7 +8,7 @@
  */
 package org.opensearch.remote.metadata.client.impl;
 
-import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
@@ -105,7 +105,7 @@ public class DDBOpenSearchClientTests {
     private SdkClient sdkClient;
 
     @Mock
-    private DynamoDbClient dynamoDbClient;
+    private DynamoDbAsyncClient dynamoDbAsyncClient;
     @Mock
     private AOSOpenSearchClient aosOpenSearchClient;
     @Captor
@@ -141,10 +141,13 @@ public class DDBOpenSearchClientTests {
         MockitoAnnotations.openMocks(this);
 
         sdkClient = SdkClientFactory.wrapSdkClientDelegate(
-            new DDBOpenSearchClient(dynamoDbClient, aosOpenSearchClient, TENANT_ID_FIELD),
+            new DDBOpenSearchClient(dynamoDbAsyncClient, aosOpenSearchClient, TENANT_ID_FIELD),
             true
         );
         testDataObject = new TestDataObject("foo");
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(
+            CompletableFuture.completedFuture(GetItemResponse.builder().build())
+        );
     }
 
     @Test
@@ -157,11 +160,13 @@ public class DDBOpenSearchClientTests {
             .tenantId(TENANT_ID)
             .dataObject(testDataObject)
             .build();
-        when(dynamoDbClient.putItem(any(PutItemRequest.class))).thenReturn(PutItemResponse.builder().build());
+        when(dynamoDbAsyncClient.putItem(any(PutItemRequest.class))).thenReturn(
+            CompletableFuture.completedFuture(PutItemResponse.builder().build())
+        );
         PutDataObjectResponse response = sdkClient.putDataObjectAsync(putRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
             .join();
-        verify(dynamoDbClient).putItem(putItemRequestArgumentCaptor.capture());
+        verify(dynamoDbAsyncClient).putItem(putItemRequestArgumentCaptor.capture());
         assertEquals(TEST_ID, response.id());
 
         IndexResponse indexActionResponse = IndexResponse.fromXContent(response.parser());
@@ -185,14 +190,18 @@ public class DDBOpenSearchClientTests {
             .tenantId(TENANT_ID)
             .dataObject(testDataObject)
             .build();
-        when(dynamoDbClient.getItem(any(GetItemRequest.class))).thenReturn(
-            GetItemResponse.builder().item(Map.of(SEQ_NUM, AttributeValue.builder().n("5").build())).build()
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(
+            CompletableFuture.completedFuture(
+                GetItemResponse.builder().item(Map.of(SEQ_NUM, AttributeValue.builder().n("5").build())).build()
+            )
         );
-        when(dynamoDbClient.putItem(any(PutItemRequest.class))).thenReturn(PutItemResponse.builder().build());
+        when(dynamoDbAsyncClient.putItem(any(PutItemRequest.class))).thenReturn(
+            CompletableFuture.completedFuture(PutItemResponse.builder().build())
+        );
         PutDataObjectResponse response = sdkClient.putDataObjectAsync(putRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
             .join();
-        verify(dynamoDbClient).putItem(putItemRequestArgumentCaptor.capture());
+        verify(dynamoDbAsyncClient).putItem(putItemRequestArgumentCaptor.capture());
         PutItemRequest putItemRequest = putItemRequestArgumentCaptor.getValue();
         IndexResponse indexActionResponse = IndexResponse.fromXContent(response.parser());
         assertEquals(6, indexActionResponse.getSeqNo());
@@ -208,10 +217,14 @@ public class DDBOpenSearchClientTests {
             .overwriteIfExists(false)
             .dataObject(testDataObject)
             .build();
-        when(dynamoDbClient.getItem(any(GetItemRequest.class))).thenReturn(
-            GetItemResponse.builder().item(Map.of(SEQ_NUM, AttributeValue.builder().n("5").build())).build()
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(
+            CompletableFuture.completedFuture(
+                GetItemResponse.builder().item(Map.of(SEQ_NUM, AttributeValue.builder().n("5").build())).build()
+            )
         );
-        when(dynamoDbClient.putItem(any(PutItemRequest.class))).thenReturn(PutItemResponse.builder().build());
+        when(dynamoDbAsyncClient.putItem(any(PutItemRequest.class))).thenReturn(
+            CompletableFuture.completedFuture(PutItemResponse.builder().build())
+        );
         CompletableFuture<PutDataObjectResponse> response = sdkClient.putDataObjectAsync(
             putRequest,
             testThreadPool.executor(TEST_THREAD_POOL)
@@ -235,9 +248,11 @@ public class DDBOpenSearchClientTests {
             .tenantId(TENANT_ID)
             .dataObject(complexDataObject)
             .build();
-        when(dynamoDbClient.putItem(any(PutItemRequest.class))).thenReturn(PutItemResponse.builder().build());
+        when(dynamoDbAsyncClient.putItem(any(PutItemRequest.class))).thenReturn(
+            CompletableFuture.completedFuture(PutItemResponse.builder().build())
+        );
         sdkClient.putDataObjectAsync(putRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join();
-        verify(dynamoDbClient).putItem(putItemRequestArgumentCaptor.capture());
+        verify(dynamoDbAsyncClient).putItem(putItemRequestArgumentCaptor.capture());
         PutItemRequest putItemRequest = putItemRequestArgumentCaptor.getValue();
         assertEquals("testString", putItemRequest.item().get(SOURCE).m().get("testString").s());
         assertEquals("123", putItemRequest.item().get(SOURCE).m().get("testNumber").n());
@@ -256,11 +271,13 @@ public class DDBOpenSearchClientTests {
             .tenantId(TENANT_ID)
             .dataObject(testDataObject)
             .build();
-        when(dynamoDbClient.putItem(any(PutItemRequest.class))).thenReturn(PutItemResponse.builder().build());
+        when(dynamoDbAsyncClient.putItem(any(PutItemRequest.class))).thenReturn(
+            CompletableFuture.completedFuture(PutItemResponse.builder().build())
+        );
         PutDataObjectResponse response = sdkClient.putDataObjectAsync(putRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
             .join();
-        verify(dynamoDbClient).putItem(putItemRequestArgumentCaptor.capture());
+        verify(dynamoDbAsyncClient).putItem(putItemRequestArgumentCaptor.capture());
 
         PutItemRequest putItemRequest = putItemRequestArgumentCaptor.getValue();
         assertNotNull(putItemRequest.item().get(RANGE_KEY).s());
@@ -275,7 +292,9 @@ public class DDBOpenSearchClientTests {
             .tenantId(TENANT_ID)
             .dataObject(testDataObject)
             .build();
-        when(dynamoDbClient.putItem(any(PutItemRequest.class))).thenThrow(new RuntimeException("Test exception"));
+        when(dynamoDbAsyncClient.putItem(any(PutItemRequest.class))).thenReturn(
+            CompletableFuture.failedFuture(new RuntimeException("Test exception"))
+        );
         CompletableFuture<PutDataObjectResponse> future = sdkClient.putDataObjectAsync(
             putRequest,
             testThreadPool.executor(TEST_THREAD_POOL)
@@ -299,11 +318,11 @@ public class DDBOpenSearchClientTests {
                 )
             )
             .build();
-        when(dynamoDbClient.getItem(any(GetItemRequest.class))).thenReturn(getItemResponse);
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
         GetDataObjectResponse response = sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
             .join();
-        verify(dynamoDbClient).getItem(getItemRequestArgumentCaptor.capture());
+        verify(dynamoDbAsyncClient).getItem(getItemRequestArgumentCaptor.capture());
         GetItemRequest getItemRequest = getItemRequestArgumentCaptor.getValue();
         assertEquals(TEST_INDEX, getItemRequest.tableName());
         assertEquals(TENANT_ID, getItemRequest.key().get(HASH_KEY).s());
@@ -334,11 +353,11 @@ public class DDBOpenSearchClientTests {
                 )
             )
             .build();
-        when(dynamoDbClient.getItem(any(GetItemRequest.class))).thenReturn(getItemResponse);
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
         GetDataObjectResponse response = sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
             .join();
-        verify(dynamoDbClient).getItem(getItemRequestArgumentCaptor.capture());
+        verify(dynamoDbAsyncClient).getItem(getItemRequestArgumentCaptor.capture());
 
         GetResponse getResponse = GetResponse.fromXContent(response.parser());
         XContentParser parser = JsonXContent.jsonXContent.createParser(
@@ -359,7 +378,7 @@ public class DDBOpenSearchClientTests {
     public void testGetDataObject_NoExistingDoc() throws IOException {
         GetDataObjectRequest getRequest = GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TENANT_ID).build();
         GetItemResponse getItemResponse = GetItemResponse.builder().build();
-        when(dynamoDbClient.getItem(any(GetItemRequest.class))).thenReturn(getItemResponse);
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
         GetDataObjectResponse response = sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
             .join();
@@ -372,9 +391,9 @@ public class DDBOpenSearchClientTests {
     public void testGetDataObject_UseDefaultTenantIdIfNull() {
         GetDataObjectRequest getRequest = GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).build();
         GetItemResponse getItemResponse = GetItemResponse.builder().build();
-        when(dynamoDbClient.getItem(any(GetItemRequest.class))).thenReturn(getItemResponse);
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
         sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join();
-        verify(dynamoDbClient).getItem(getItemRequestArgumentCaptor.capture());
+        verify(dynamoDbAsyncClient).getItem(getItemRequestArgumentCaptor.capture());
         GetItemRequest getItemRequest = getItemRequestArgumentCaptor.getValue();
         assertEquals("DEFAULT_TENANT", getItemRequest.key().get(HASH_KEY).s());
     }
@@ -382,7 +401,9 @@ public class DDBOpenSearchClientTests {
     @Test
     public void testGetDataObject_DDBException_ThrowsOSException() {
         GetDataObjectRequest getRequest = GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TENANT_ID).build();
-        when(dynamoDbClient.getItem(any(GetItemRequest.class))).thenThrow(new RuntimeException("Test exception"));
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(
+            CompletableFuture.failedFuture(new RuntimeException("Test exception"))
+        );
         CompletableFuture<GetDataObjectResponse> future = sdkClient.getDataObjectAsync(
             getRequest,
             testThreadPool.executor(TEST_THREAD_POOL)
@@ -394,8 +415,10 @@ public class DDBOpenSearchClientTests {
     @Test
     public void testDeleteDataObject_HappyCase() throws IOException {
         DeleteDataObjectRequest deleteRequest = DeleteDataObjectRequest.builder().id(TEST_ID).index(TEST_INDEX).tenantId(TENANT_ID).build();
-        when(dynamoDbClient.deleteItem(deleteItemRequestArgumentCaptor.capture())).thenReturn(
-            DeleteItemResponse.builder().attributes(Map.of(SEQ_NUM, AttributeValue.builder().n("5").build())).build()
+        when(dynamoDbAsyncClient.deleteItem(deleteItemRequestArgumentCaptor.capture())).thenReturn(
+            CompletableFuture.completedFuture(
+                DeleteItemResponse.builder().attributes(Map.of(SEQ_NUM, AttributeValue.builder().n("5").build())).build()
+            )
         );
         DeleteDataObjectResponse deleteResponse = sdkClient.deleteDataObjectAsync(deleteRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
@@ -413,7 +436,6 @@ public class DDBOpenSearchClientTests {
         assertEquals(0, deleteActionResponse.getShardInfo().getFailed());
         assertEquals(0, deleteActionResponse.getShardInfo().getSuccessful());
         assertEquals(0, deleteActionResponse.getShardInfo().getTotal());
-
     }
 
     @Test
@@ -436,8 +458,10 @@ public class DDBOpenSearchClientTests {
                 )
             )
             .build();
-        when(dynamoDbClient.getItem(any(GetItemRequest.class))).thenReturn(getItemResponse);
-        when(dynamoDbClient.updateItem(updateItemRequestArgumentCaptor.capture())).thenReturn(UpdateItemResponse.builder().build());
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
+        when(dynamoDbAsyncClient.updateItem(updateItemRequestArgumentCaptor.capture())).thenReturn(
+            CompletableFuture.completedFuture(UpdateItemResponse.builder().build())
+        );
         UpdateDataObjectResponse updateResponse = sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
             .join();
@@ -472,9 +496,11 @@ public class DDBOpenSearchClientTests {
                 )
             )
             .build();
-        when(dynamoDbClient.getItem(any(GetItemRequest.class))).thenReturn(getItemResponse);
-        when(dynamoDbClient.updateItem(updateItemRequestArgumentCaptor.capture())).thenReturn(
-            UpdateItemResponse.builder().attributes(Map.of(SEQ_NUM, AttributeValue.builder().n("5").build())).build()
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
+        when(dynamoDbAsyncClient.updateItem(updateItemRequestArgumentCaptor.capture())).thenReturn(
+            CompletableFuture.completedFuture(
+                UpdateItemResponse.builder().attributes(Map.of(SEQ_NUM, AttributeValue.builder().n("5").build())).build()
+            )
         );
         UpdateDataObjectResponse updateResponse = sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
@@ -513,8 +539,10 @@ public class DDBOpenSearchClientTests {
                 )
             )
             .build();
-        when(dynamoDbClient.getItem(any(GetItemRequest.class))).thenReturn(getItemResponse);
-        when(dynamoDbClient.updateItem(updateItemRequestArgumentCaptor.capture())).thenReturn(UpdateItemResponse.builder().build());
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
+        when(dynamoDbAsyncClient.updateItem(updateItemRequestArgumentCaptor.capture())).thenReturn(
+            CompletableFuture.completedFuture(UpdateItemResponse.builder().build())
+        );
         sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join();
         UpdateItemRequest updateItemRequest = updateItemRequestArgumentCaptor.getValue();
         assertEquals(TENANT_ID, updateItemRequest.key().get(HASH_KEY).s());
@@ -528,7 +556,9 @@ public class DDBOpenSearchClientTests {
             .tenantId(TENANT_ID)
             .dataObject(testDataObject)
             .build();
-        when(dynamoDbClient.getItem(any(GetItemRequest.class))).thenThrow(new RuntimeException("Test exception"));
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(
+            CompletableFuture.failedFuture(new RuntimeException("Test exception"))
+        );
         CompletableFuture<UpdateDataObjectResponse> future = sdkClient.updateDataObjectAsync(
             updateRequest,
             testThreadPool.executor(TEST_THREAD_POOL)
@@ -557,9 +587,11 @@ public class DDBOpenSearchClientTests {
                 )
             )
             .build();
-        when(dynamoDbClient.getItem(any(GetItemRequest.class))).thenReturn(getItemResponse);
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
         ConditionalCheckFailedException conflictException = ConditionalCheckFailedException.builder().build();
-        when(dynamoDbClient.updateItem(updateItemRequestArgumentCaptor.capture())).thenThrow(conflictException);
+        when(dynamoDbAsyncClient.updateItem(updateItemRequestArgumentCaptor.capture())).thenReturn(
+            CompletableFuture.failedFuture(conflictException)
+        );
 
         CompletableFuture<UpdateDataObjectResponse> future = sdkClient.updateDataObjectAsync(
             updateRequest,
@@ -589,12 +621,14 @@ public class DDBOpenSearchClientTests {
                 )
             )
             .build();
-        when(dynamoDbClient.getItem(any(GetItemRequest.class))).thenReturn(getItemResponse);
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
         ConditionalCheckFailedException conflictException = ConditionalCheckFailedException.builder().build();
         // throw conflict exception on first time, return on second time, throw on third time (never get here)
-        when(dynamoDbClient.updateItem(updateItemRequestArgumentCaptor.capture())).thenThrow(conflictException)
-            .thenReturn(UpdateItemResponse.builder().build())
-            .thenThrow(conflictException);
+        when(dynamoDbAsyncClient.updateItem(updateItemRequestArgumentCaptor.capture())).thenReturn(
+            CompletableFuture.failedFuture(conflictException)
+        )
+            .thenReturn(CompletableFuture.completedFuture(UpdateItemResponse.builder().build()))
+            .thenReturn(CompletableFuture.failedFuture(conflictException));
         UpdateDataObjectResponse updateResponse = sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
             .join();
@@ -624,12 +658,14 @@ public class DDBOpenSearchClientTests {
                 )
             )
             .build();
-        when(dynamoDbClient.getItem(any(GetItemRequest.class))).thenReturn(getItemResponse);
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
         ConditionalCheckFailedException conflictException = ConditionalCheckFailedException.builder().build();
         // throw conflict exception on first two times, return on third time (that never executes)
-        when(dynamoDbClient.updateItem(updateItemRequestArgumentCaptor.capture())).thenThrow(conflictException)
-            .thenThrow(conflictException)
-            .thenReturn(UpdateItemResponse.builder().build());
+        when(dynamoDbAsyncClient.updateItem(updateItemRequestArgumentCaptor.capture())).thenReturn(
+            CompletableFuture.failedFuture(conflictException)
+        )
+            .thenReturn(CompletableFuture.failedFuture(conflictException))
+            .thenReturn(CompletableFuture.completedFuture(UpdateItemResponse.builder().build()));
 
         CompletableFuture<UpdateDataObjectResponse> future = sdkClient.updateDataObjectAsync(
             updateRequest,
@@ -662,7 +698,9 @@ public class DDBOpenSearchClientTests {
             .add(updateRequest)
             .add(deleteRequest);
 
-        when(dynamoDbClient.putItem(any(PutItemRequest.class))).thenReturn(PutItemResponse.builder().build());
+        when(dynamoDbAsyncClient.putItem(any(PutItemRequest.class))).thenReturn(
+            CompletableFuture.completedFuture(PutItemResponse.builder().build())
+        );
         GetItemResponse getItemResponse = GetItemResponse.builder()
             .item(
                 Map.ofEntries(
@@ -671,9 +709,13 @@ public class DDBOpenSearchClientTests {
                 )
             )
             .build();
-        when(dynamoDbClient.getItem(any(GetItemRequest.class))).thenReturn(getItemResponse);
-        when(dynamoDbClient.updateItem(any(UpdateItemRequest.class))).thenReturn(UpdateItemResponse.builder().build());
-        when(dynamoDbClient.deleteItem(any(DeleteItemRequest.class))).thenReturn(DeleteItemResponse.builder().build());
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
+        when(dynamoDbAsyncClient.updateItem(any(UpdateItemRequest.class))).thenReturn(
+            CompletableFuture.completedFuture(UpdateItemResponse.builder().build())
+        );
+        when(dynamoDbAsyncClient.deleteItem(any(DeleteItemRequest.class))).thenReturn(
+            CompletableFuture.completedFuture(DeleteItemResponse.builder().build())
+        );
 
         BulkDataObjectResponse response = sdkClient.bulkDataObjectAsync(bulkRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
@@ -711,7 +753,9 @@ public class DDBOpenSearchClientTests {
             .add(updateRequest)
             .add(deleteRequest);
 
-        when(dynamoDbClient.putItem(any(PutItemRequest.class))).thenReturn(PutItemResponse.builder().build());
+        when(dynamoDbAsyncClient.putItem(any(PutItemRequest.class))).thenReturn(
+            CompletableFuture.completedFuture(PutItemResponse.builder().build())
+        );
         GetItemResponse getItemResponse = GetItemResponse.builder()
             .item(
                 Map.ofEntries(
@@ -720,10 +764,12 @@ public class DDBOpenSearchClientTests {
                 )
             )
             .build();
-        when(dynamoDbClient.getItem(any(GetItemRequest.class))).thenReturn(getItemResponse);
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
         Exception cause = new OpenSearchStatusException("Update failed with conflict", RestStatus.CONFLICT);
-        when(dynamoDbClient.updateItem(any(UpdateItemRequest.class))).thenThrow(cause);
-        when(dynamoDbClient.deleteItem(any(DeleteItemRequest.class))).thenReturn(DeleteItemResponse.builder().build());
+        when(dynamoDbAsyncClient.updateItem(any(UpdateItemRequest.class))).thenReturn(CompletableFuture.failedFuture(cause));
+        when(dynamoDbAsyncClient.deleteItem(any(DeleteItemRequest.class))).thenReturn(
+            CompletableFuture.completedFuture(DeleteItemResponse.builder().build())
+        );
 
         BulkDataObjectResponse response = sdkClient.bulkDataObjectAsync(bulkRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
