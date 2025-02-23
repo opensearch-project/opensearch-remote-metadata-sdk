@@ -24,6 +24,7 @@ buildscript {
         opensearch_java_version = '2.21.0'
         aws_sdk_version = '2.30.18'
         junit_version = '5.12.0' // version catalog is 4.x
+        junit_platform_version = '1.12.0' // version catalog brings in earlier
     }
 
     repositories {
@@ -96,9 +97,13 @@ subprojects {
         implementation "org.apache.httpcomponents.client5:httpclient5:${versions.httpclient5}"
         implementation "org.apache.httpcomponents.core5:httpcore5:${versions.httpcore5}"
 
-        testImplementation "org.opensearch.test:framework:${opensearch_version}"
-        testImplementation "org.junit.jupiter:junit-jupiter:${junit_version}"
-        testImplementation "org.mockito:mockito-core:${versions.mockito}"
+        // prevent conflicts with upstream JUnit 4
+        testImplementation("org.opensearch.test:framework:${opensearch_version}") {
+            exclude group: "org.junit.platform"
+        }
+        testImplementation("org.junit.jupiter:junit-jupiter:${junit_version}")
+        testImplementation("org.junit.platform:junit-platform-launcher:${junit_platform_version}")
+        testImplementation("org.mockito:mockito-core:${versions.mockito}")
     }
 
     configurations {
