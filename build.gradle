@@ -40,14 +40,6 @@ buildscript {
     }
 }
 
-plugins {
-    id 'checkstyle'
-}
-
-checkstyle {
-    toolVersion = "latest.release"
-}
-
 allprojects {
     apply plugin: 'java'
     apply plugin: 'idea'
@@ -55,6 +47,7 @@ allprojects {
     apply plugin: 'eclipse'
     apply plugin: 'jacoco'
     apply plugin: 'com.diffplug.spotless'
+    apply plugin: 'checkstyle'
 
     repositories {
         mavenLocal()
@@ -78,6 +71,11 @@ allprojects {
         withJavadocJar()
     }
     project.getExtensions().getExtraProperties().set("versions", VersionProperties.getVersions())
+
+    checkstyle {
+        toolVersion = "latest.release"
+    }
+
 }
 
 subprojects {
