@@ -7,14 +7,6 @@ plugins {
     id 'java-test-fixtures'
 }
 
-java {
-    registerFeature('testFixtures') {
-        usingSourceSet(sourceSets.testFixtures)  
-    }
-}
-
 dependencies {
     testFixturesImplementation "org.opensearch:opensearch:${opensearch_version}"
 }
-
-
