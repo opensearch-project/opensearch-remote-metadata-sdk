@@ -20,7 +20,7 @@ import org.opensearch.action.search.SearchPhaseExecutionException;
 import org.opensearch.action.search.ShardSearchFailure;
 import org.opensearch.client.json.JsonData;
 import org.opensearch.client.json.jackson.JacksonJsonpMapper;
-import org.opensearch.client.opensearch.OpenSearchClient;
+import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.opensearch._types.ErrorCause;
 import org.opensearch.client.opensearch._types.ErrorResponse;
 import org.opensearch.client.opensearch._types.OpType;
@@ -90,6 +90,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import org.mockito.ArgumentCaptor;
@@ -129,7 +131,7 @@ public class RemoteClusterIndicesClientTests {
     );
 
     @Mock
-    private OpenSearchClient mockedOpenSearchClient;
+    private OpenSearchAsyncClient mockedOpenSearchAsyncClient;
     private SdkClient sdkClient;
 
     @Mock
@@ -141,14 +143,17 @@ public class RemoteClusterIndicesClientTests {
     public void setup() {
         MockitoAnnotations.openMocks(this);
 
-        when(mockedOpenSearchClient._transport()).thenReturn(transport);
+        when(mockedOpenSearchAsyncClient._transport()).thenReturn(transport);
         when(transport.jsonpMapper()).thenReturn(
             new JacksonJsonpMapper(
                 new ObjectMapper().setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
                     .setSerializationInclusion(JsonInclude.Include.NON_NULL)
             )
         );
-        sdkClient = SdkClientFactory.wrapSdkClientDelegate(new RemoteClusterIndicesClient(mockedOpenSearchClient, TENANT_ID_FIELD), true);
+        sdkClient = SdkClientFactory.wrapSdkClientDelegate(
+            new RemoteClusterIndicesClient(mockedOpenSearchAsyncClient, TENANT_ID_FIELD),
+            true
+        );
         testDataObject = new TestDataObject("foo");
     }
 
@@ -175,7 +180,7 @@ public class RemoteClusterIndicesClientTests {
             .build();
 
         ArgumentCaptor<IndexRequest<?>> indexRequestCaptor = ArgumentCaptor.forClass(IndexRequest.class);
-        when(mockedOpenSearchClient.index(indexRequestCaptor.capture())).thenReturn(indexResponse);
+        when(mockedOpenSearchAsyncClient.index(indexRequestCaptor.capture())).thenReturn(CompletableFuture.completedFuture(indexResponse));
 
         PutDataObjectResponse response = sdkClient.putDataObjectAsync(putRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
@@ -214,7 +219,7 @@ public class RemoteClusterIndicesClientTests {
             .build();
 
         ArgumentCaptor<IndexRequest<?>> indexRequestCaptor = ArgumentCaptor.forClass(IndexRequest.class);
-        when(mockedOpenSearchClient.index(indexRequestCaptor.capture())).thenReturn(indexResponse);
+        when(mockedOpenSearchAsyncClient.index(indexRequestCaptor.capture())).thenReturn(CompletableFuture.completedFuture(indexResponse));
 
         PutDataObjectResponse response = sdkClient.putDataObjectAsync(putRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
@@ -244,7 +249,9 @@ public class RemoteClusterIndicesClientTests {
             .build();
 
         ArgumentCaptor<IndexRequest<?>> indexRequestCaptor = ArgumentCaptor.forClass(IndexRequest.class);
-        when(mockedOpenSearchClient.index(indexRequestCaptor.capture())).thenThrow(new IOException("test"));
+        when(mockedOpenSearchAsyncClient.index(indexRequestCaptor.capture())).thenReturn(
+            CompletableFuture.failedFuture(new IOException("test"))
+        );
 
         CompletableFuture<PutDataObjectResponse> future = sdkClient.putDataObjectAsync(
             putRequest,
@@ -268,7 +275,9 @@ public class RemoteClusterIndicesClientTests {
 
         ArgumentCaptor<GetRequest> getRequestCaptor = ArgumentCaptor.forClass(GetRequest.class);
         ArgumentCaptor<Class<Map>> mapClassCaptor = ArgumentCaptor.forClass(Class.class);
-        when(mockedOpenSearchClient.get(getRequestCaptor.capture(), mapClassCaptor.capture())).thenReturn((GetResponse<Map>) getResponse);
+        when(mockedOpenSearchAsyncClient.get(getRequestCaptor.capture(), mapClassCaptor.capture())).thenReturn(
+            CompletableFuture.completedFuture((GetResponse<Map>) getResponse)
+        );
 
         GetDataObjectResponse response = sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
@@ -297,7 +306,9 @@ public class RemoteClusterIndicesClientTests {
 
         ArgumentCaptor<GetRequest> getRequestCaptor = ArgumentCaptor.forClass(GetRequest.class);
         ArgumentCaptor<Class<Map>> mapClassCaptor = ArgumentCaptor.forClass(Class.class);
-        when(mockedOpenSearchClient.get(getRequestCaptor.capture(), mapClassCaptor.capture())).thenReturn((GetResponse<Map>) getResponse);
+        when(mockedOpenSearchAsyncClient.get(getRequestCaptor.capture(), mapClassCaptor.capture())).thenReturn(
+            CompletableFuture.completedFuture((GetResponse<Map>) getResponse)
+        );
 
         GetDataObjectResponse response = sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
@@ -316,7 +327,9 @@ public class RemoteClusterIndicesClientTests {
 
         ArgumentCaptor<GetRequest> getRequestCaptor = ArgumentCaptor.forClass(GetRequest.class);
         ArgumentCaptor<Class<Map>> mapClassCaptor = ArgumentCaptor.forClass(Class.class);
-        when(mockedOpenSearchClient.get(getRequestCaptor.capture(), mapClassCaptor.capture())).thenThrow(new IOException("test"));
+        when(mockedOpenSearchAsyncClient.get(getRequestCaptor.capture(), mapClassCaptor.capture())).thenReturn(
+            CompletableFuture.failedFuture(new IOException("test"))
+        );
 
         CompletableFuture<GetDataObjectResponse> future = sdkClient.getDataObjectAsync(
             getRequest,
@@ -347,7 +360,9 @@ public class RemoteClusterIndicesClientTests {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<UpdateRequest<Map<String, Object>, ?>> updateRequestCaptor = ArgumentCaptor.forClass(UpdateRequest.class);
-        when(mockedOpenSearchClient.update(updateRequestCaptor.capture(), any())).thenReturn(updateResponse);
+        when(mockedOpenSearchAsyncClient.update(updateRequestCaptor.capture(), any())).thenReturn(
+            CompletableFuture.completedFuture(updateResponse)
+        );
 
         UpdateDataObjectResponse response = sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
@@ -388,7 +403,9 @@ public class RemoteClusterIndicesClientTests {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<UpdateRequest<Map<String, Object>, ?>> updateRequestCaptor = ArgumentCaptor.forClass(UpdateRequest.class);
-        when(mockedOpenSearchClient.update(updateRequestCaptor.capture(), any())).thenReturn(updateResponse);
+        when(mockedOpenSearchAsyncClient.update(updateRequestCaptor.capture(), any())).thenReturn(
+            CompletableFuture.completedFuture(updateResponse)
+        );
 
         sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join();
 
@@ -420,7 +437,9 @@ public class RemoteClusterIndicesClientTests {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<UpdateRequest<Map<String, Object>, ?>> updateRequestCaptor = ArgumentCaptor.forClass(UpdateRequest.class);
-        when(mockedOpenSearchClient.update(updateRequestCaptor.capture(), any())).thenReturn(updateResponse);
+        when(mockedOpenSearchAsyncClient.update(updateRequestCaptor.capture(), any())).thenReturn(
+            CompletableFuture.completedFuture(updateResponse)
+        );
 
         UpdateDataObjectResponse response = sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
@@ -449,7 +468,9 @@ public class RemoteClusterIndicesClientTests {
             .build();
 
         ArgumentCaptor<UpdateRequest<?, ?>> updateRequestCaptor = ArgumentCaptor.forClass(UpdateRequest.class);
-        when(mockedOpenSearchClient.update(updateRequestCaptor.capture(), any())).thenThrow(new IOException("test"));
+        when(mockedOpenSearchAsyncClient.update(updateRequestCaptor.capture(), any())).thenReturn(
+            CompletableFuture.failedFuture(new IOException("test"))
+        );
 
         CompletableFuture<UpdateDataObjectResponse> future = sdkClient.updateDataObjectAsync(
             updateRequest,
@@ -477,7 +498,9 @@ public class RemoteClusterIndicesClientTests {
                 .error(new ErrorCause.Builder().type("test").reason("test").build())
                 .build()
         );
-        when(mockedOpenSearchClient.update(updateRequestCaptor.capture(), any())).thenThrow(conflictException);
+        when(mockedOpenSearchAsyncClient.update(updateRequestCaptor.capture(), any())).thenReturn(
+            CompletableFuture.failedFuture(conflictException)
+        );
 
         CompletableFuture<UpdateDataObjectResponse> future = sdkClient.updateDataObjectAsync(
             updateRequest,
@@ -508,7 +531,9 @@ public class RemoteClusterIndicesClientTests {
             .build();
 
         ArgumentCaptor<DeleteRequest> deleteRequestCaptor = ArgumentCaptor.forClass(DeleteRequest.class);
-        when(mockedOpenSearchClient.delete(deleteRequestCaptor.capture())).thenReturn(deleteResponse);
+        when(mockedOpenSearchAsyncClient.delete(deleteRequestCaptor.capture())).thenReturn(
+            CompletableFuture.completedFuture(deleteResponse)
+        );
 
         DeleteDataObjectResponse response = sdkClient.deleteDataObjectAsync(deleteRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
@@ -545,7 +570,9 @@ public class RemoteClusterIndicesClientTests {
             .build();
 
         ArgumentCaptor<DeleteRequest> deleteRequestCaptor = ArgumentCaptor.forClass(DeleteRequest.class);
-        when(mockedOpenSearchClient.delete(deleteRequestCaptor.capture())).thenReturn(deleteResponse);
+        when(mockedOpenSearchAsyncClient.delete(deleteRequestCaptor.capture())).thenReturn(
+            CompletableFuture.completedFuture(deleteResponse)
+        );
 
         DeleteDataObjectResponse response = sdkClient.deleteDataObjectAsync(deleteRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
@@ -570,7 +597,9 @@ public class RemoteClusterIndicesClientTests {
             .build();
 
         ArgumentCaptor<DeleteRequest> deleteRequestCaptor = ArgumentCaptor.forClass(DeleteRequest.class);
-        when(mockedOpenSearchClient.delete(deleteRequestCaptor.capture())).thenThrow(new IOException("test"));
+        when(mockedOpenSearchAsyncClient.delete(deleteRequestCaptor.capture())).thenReturn(
+            CompletableFuture.failedFuture(new IOException("test"))
+        );
 
         CompletableFuture<DeleteDataObjectResponse> future = sdkClient.deleteDataObjectAsync(
             deleteRequest,
@@ -629,7 +658,7 @@ public class RemoteClusterIndicesClientTests {
             .build();
 
         ArgumentCaptor<BulkRequest> bulkRequestCaptor = ArgumentCaptor.forClass(BulkRequest.class);
-        when(mockedOpenSearchClient.bulk(bulkRequestCaptor.capture())).thenReturn(bulkResponse);
+        when(mockedOpenSearchAsyncClient.bulk(bulkRequestCaptor.capture())).thenReturn(CompletableFuture.completedFuture(bulkResponse));
 
         BulkDataObjectResponse response = sdkClient.bulkDataObjectAsync(bulkRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
@@ -695,7 +724,7 @@ public class RemoteClusterIndicesClientTests {
             .errors(true)
             .build();
 
-        when(mockedOpenSearchClient.bulk(any(BulkRequest.class))).thenReturn(bulkResponse);
+        when(mockedOpenSearchAsyncClient.bulk(any(BulkRequest.class))).thenReturn(CompletableFuture.completedFuture(bulkResponse));
 
         BulkDataObjectResponse response = sdkClient.bulkDataObjectAsync(bulkRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
@@ -721,11 +750,13 @@ public class RemoteClusterIndicesClientTests {
 
         BulkDataObjectRequest bulkRequest = BulkDataObjectRequest.builder().build().add(putRequest);
 
-        when(mockedOpenSearchClient.bulk(any(BulkRequest.class))).thenThrow(
-            new OpenSearchException(
-                new ErrorResponse.Builder().error(
-                    new ErrorCause.Builder().type("parse_exception").reason("Failed to parse data object in a bulk response").build()
-                ).status(RestStatus.INTERNAL_SERVER_ERROR.getStatus()).build()
+        when(mockedOpenSearchAsyncClient.bulk(any(BulkRequest.class))).thenReturn(
+            CompletableFuture.failedFuture(
+                new OpenSearchException(
+                    new ErrorResponse.Builder().error(
+                        new ErrorCause.Builder().type("parse_exception").reason("Failed to parse data object in a bulk response").build()
+                    ).status(RestStatus.INTERNAL_SERVER_ERROR.getStatus()).build()
+                )
             )
         );
 
@@ -736,6 +767,10 @@ public class RemoteClusterIndicesClientTests {
 
         CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
         Throwable cause = ce.getCause();
+        assertEquals(OpenSearchStatusException.class, cause.getClass());
+        assertEquals(RestStatus.INTERNAL_SERVER_ERROR, ((OpenSearchStatusException) cause).status());
+        ce = (CompletionException) cause.getCause();
+        cause = ce.getCause();
         assertEquals(OpenSearchException.class, cause.getClass());
         assertEquals(RestStatus.INTERNAL_SERVER_ERROR.getStatus(), ((OpenSearchException) cause).status());
         assertTrue(cause.getMessage().contains("Failed to parse data object in a bulk response"));
@@ -758,8 +793,8 @@ public class RemoteClusterIndicesClientTests {
 
         ArgumentCaptor<SearchRequest> getRequestCaptor = ArgumentCaptor.forClass(SearchRequest.class);
         ArgumentCaptor<Class<Map>> mapClassCaptor = ArgumentCaptor.forClass(Class.class);
-        when(mockedOpenSearchClient.search(getRequestCaptor.capture(), mapClassCaptor.capture())).thenReturn(
-            (SearchResponse<Map>) searchResponse
+        when(mockedOpenSearchAsyncClient.search(getRequestCaptor.capture(), mapClassCaptor.capture())).thenReturn(
+            CompletableFuture.completedFuture((SearchResponse<Map>) searchResponse)
         );
 
         SearchDataObjectResponse response = sdkClient.searchDataObjectAsync(searchRequest, testThreadPool.executor(TEST_THREAD_POOL))
@@ -767,7 +802,7 @@ public class RemoteClusterIndicesClientTests {
             .join();
 
         ArgumentCaptor<SearchRequest> requestCaptor = ArgumentCaptor.forClass(SearchRequest.class);
-        verify(mockedOpenSearchClient, times(1)).search(requestCaptor.capture(), any());
+        verify(mockedOpenSearchAsyncClient, times(1)).search(requestCaptor.capture(), any());
         assertEquals(1, requestCaptor.getValue().index().size());
         assertEquals(TEST_INDEX, requestCaptor.getValue().index().get(0));
         Query query = requestCaptor.getValue().query();
@@ -797,7 +832,9 @@ public class RemoteClusterIndicesClientTests {
             .searchSourceBuilder(searchSourceBuilder)
             .build();
 
-        when(mockedOpenSearchClient.search(any(SearchRequest.class), any())).thenThrow(new UnsupportedOperationException("test"));
+        when(mockedOpenSearchAsyncClient.search(any(SearchRequest.class), any())).thenReturn(
+            CompletableFuture.failedFuture(new UnsupportedOperationException("test"))
+        );
         CompletableFuture<SearchDataObjectResponse> future = sdkClient.searchDataObjectAsync(
             searchRequest,
             testThreadPool.executor(TEST_THREAD_POOL)
@@ -805,6 +842,10 @@ public class RemoteClusterIndicesClientTests {
 
         CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
         Throwable cause = ce.getCause();
+        assertEquals(OpenSearchStatusException.class, cause.getClass());
+        assertEquals(RestStatus.INTERNAL_SERVER_ERROR, ((OpenSearchStatusException) cause).status());
+        ce = (CompletionException) cause.getCause();
+        cause = ce.getCause();
         assertEquals(UnsupportedOperationException.class, cause.getClass());
         assertEquals("test", cause.getMessage());
     }
@@ -813,7 +854,7 @@ public class RemoteClusterIndicesClientTests {
     public void testSearchDataObject_NullTenantNoMultitenancy() throws IOException {
         // Tests no status exception if multitenancy not enabled
         SdkClient sdkClientNoTenant = SdkClientFactory.wrapSdkClientDelegate(
-            new RemoteClusterIndicesClient(mockedOpenSearchClient, null),
+            new RemoteClusterIndicesClient(mockedOpenSearchAsyncClient, null),
             false
         );
 
@@ -824,7 +865,9 @@ public class RemoteClusterIndicesClientTests {
             .searchSourceBuilder(searchSourceBuilder)
             .build();
 
-        when(mockedOpenSearchClient.search(any(SearchRequest.class), any())).thenThrow(new UnsupportedOperationException("test"));
+        when(mockedOpenSearchAsyncClient.search(any(SearchRequest.class), any())).thenReturn(
+            CompletableFuture.failedFuture(new UnsupportedOperationException("test"))
+        );
         CompletableFuture<SearchDataObjectResponse> future = sdkClientNoTenant.searchDataObjectAsync(
             searchRequest,
             testThreadPool.executor(TEST_THREAD_POOL)
@@ -832,6 +875,10 @@ public class RemoteClusterIndicesClientTests {
 
         CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
         Throwable cause = ce.getCause();
+        assertEquals(OpenSearchStatusException.class, cause.getClass());
+        assertEquals(RestStatus.INTERNAL_SERVER_ERROR, ((OpenSearchStatusException) cause).status());
+        ce = (CompletionException) cause.getCause();
+        cause = ce.getCause();
         assertEquals(UnsupportedOperationException.class, cause.getClass());
         assertEquals("test", cause.getMessage());
     }
@@ -877,18 +924,21 @@ public class RemoteClusterIndicesClientTests {
         );
         assertEquals(RestStatus.BAD_REQUEST, RestStatus.fromCode(openSearchException.status()));
 
-        when(mockedOpenSearchClient.search(any(SearchRequest.class), any())).thenThrow(openSearchException);
-        CompletableFuture<SearchDataObjectResponse> future = sdkClient.searchDataObjectAsync(
+        when(mockedOpenSearchAsyncClient.search(any(SearchRequest.class), any())).thenReturn(
+            CompletableFuture.failedFuture(openSearchException)
+        );
+
+        CompletionStage<SearchDataObjectResponse> result = sdkClient.searchDataObjectAsync(
             searchRequest,
             testThreadPool.executor(TEST_THREAD_POOL)
-        ).toCompletableFuture();
+        );
+        ExecutionException executionException = assertThrows(ExecutionException.class, () -> result.toCompletableFuture().get());
 
-        CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
-        Throwable cause = ce.getCause();
-        assertTrue(cause instanceof OpenSearchStatusException);
-        assertEquals(RestStatus.BAD_REQUEST, ((OpenSearchStatusException) cause).status());
-        assertEquals("Failed to search indices [test_index]", cause.getMessage());
-        Throwable nestedCause = cause.getCause();
+        Throwable actualCause = executionException.getCause();
+        assertTrue(actualCause instanceof OpenSearchStatusException);
+        assertEquals(RestStatus.BAD_REQUEST, ((OpenSearchStatusException) actualCause).status());
+        assertEquals("Failed to search indices [test_index]", actualCause.getMessage());
+        Throwable nestedCause = actualCause.getCause();
         assertEquals(OpenSearchException.class, nestedCause.getClass());
         assertTrue(nestedCause.getMessage().contains(searchException.getMessage()));
         assertEquals(RestStatus.BAD_REQUEST.getStatus(), ((OpenSearchException) nestedCause).status());
