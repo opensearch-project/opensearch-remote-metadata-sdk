@@ -132,12 +132,12 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
 
     /**
      * Package Private constructor for testing
-     * @param mockedOpenSearchAsyncClient an OpenSearch async client
+     * @param openSearchAsyncClient an OpenSearch async client (or mock for testing)
      * @param tenantIdField the tenant ID field
      */
-    RemoteClusterIndicesClient(OpenSearchAsyncClient mockedOpenSearchAsyncClient, String tenantIdField) {
+    RemoteClusterIndicesClient(OpenSearchAsyncClient openSearchAsyncClient, String tenantIdField) {
         super.initialize(Collections.singletonMap(TENANT_ID_FIELD_KEY, tenantIdField));
-        this.openSearchAsyncClient = mockedOpenSearchAsyncClient;
+        this.openSearchAsyncClient = openSearchAsyncClient;
         this.mapper = openSearchAsyncClient._transport().jsonpMapper();
     }
 
