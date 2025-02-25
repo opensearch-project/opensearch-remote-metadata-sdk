@@ -31,7 +31,7 @@ import org.opensearch.OpenSearchStatusException;
 import org.opensearch.client.json.JsonpMapper;
 import org.opensearch.client.json.JsonpSerializable;
 import org.opensearch.client.json.jackson.JacksonJsonpMapper;
-import org.opensearch.client.opensearch.OpenSearchClient;
+import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.opensearch._types.FieldValue;
 import org.opensearch.client.opensearch._types.OpType;
 import org.opensearch.client.opensearch._types.OpenSearchException;
@@ -41,18 +41,11 @@ import org.opensearch.client.opensearch._types.query_dsl.MatchAllQuery;
 import org.opensearch.client.opensearch._types.query_dsl.Query;
 import org.opensearch.client.opensearch._types.query_dsl.TermQuery;
 import org.opensearch.client.opensearch.core.BulkRequest;
-import org.opensearch.client.opensearch.core.BulkResponse;
 import org.opensearch.client.opensearch.core.DeleteRequest;
-import org.opensearch.client.opensearch.core.DeleteResponse;
 import org.opensearch.client.opensearch.core.GetRequest;
-import org.opensearch.client.opensearch.core.GetResponse;
 import org.opensearch.client.opensearch.core.IndexRequest;
-import org.opensearch.client.opensearch.core.IndexResponse;
 import org.opensearch.client.opensearch.core.SearchRequest;
-import org.opensearch.client.opensearch.core.SearchResponse;
 import org.opensearch.client.opensearch.core.UpdateRequest;
-import org.opensearch.client.opensearch.core.UpdateRequest.Builder;
-import org.opensearch.client.opensearch.core.UpdateResponse;
 import org.opensearch.client.opensearch.core.bulk.BulkOperation;
 import org.opensearch.client.opensearch.core.bulk.BulkResponseItem;
 import org.opensearch.client.transport.httpclient5.ApacheHttpClient5Transport;
@@ -102,6 +95,7 @@ import java.util.concurrent.Executor;
 import jakarta.json.stream.JsonGenerator;
 import jakarta.json.stream.JsonParser;
 
+import static org.opensearch.common.util.concurrent.ThreadContextAccess.doPrivileged;
 import static org.opensearch.common.xcontent.json.JsonXContent.jsonXContent;
 import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_OPENSEARCH;
 import static org.opensearch.remote.metadata.common.CommonValue.TENANT_ID_FIELD_KEY;
@@ -116,7 +110,7 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
     @SuppressWarnings("unchecked")
     protected static final Class<Map<String, Object>> MAP_DOCTYPE = (Class<Map<String, Object>>) (Class<?>) Map.class;
 
-    protected OpenSearchClient openSearchClient;
+    protected OpenSearchAsyncClient openSearchAsyncClient;
     protected JsonpMapper mapper;
 
     @Override
@@ -127,8 +121,8 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
     @Override
     public void initialize(Map<String, String> metadataSettings) {
         super.initialize(metadataSettings);
-        this.openSearchClient = createOpenSearchClient();
-        this.mapper = openSearchClient._transport().jsonpMapper();
+        this.openSearchAsyncClient = createOpenSearchAsyncClient();
+        this.mapper = openSearchAsyncClient._transport().jsonpMapper();
     }
 
     /**
@@ -138,13 +132,13 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
 
     /**
      * Package Private constructor for testing
-     * @param mockedOpenSearchClient an OpenSearch client
+     * @param openSearchAsyncClient an OpenSearch async client (or mock for testing)
      * @param tenantIdField the tenant ID field
      */
-    RemoteClusterIndicesClient(OpenSearchClient mockedOpenSearchClient, String tenantIdField) {
+    RemoteClusterIndicesClient(OpenSearchAsyncClient openSearchAsyncClient, String tenantIdField) {
         super.initialize(Collections.singletonMap(TENANT_ID_FIELD_KEY, tenantIdField));
-        this.openSearchClient = mockedOpenSearchClient;
-        this.mapper = openSearchClient._transport().jsonpMapper();
+        this.openSearchAsyncClient = openSearchAsyncClient;
+        this.mapper = openSearchAsyncClient._transport().jsonpMapper();
     }
 
     @Override
@@ -153,7 +147,7 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        return executePrivilegedAsync(() -> {
+        return doPrivileged(() -> {
             try {
                 IndexRequest.Builder<?> builder = new IndexRequest.Builder<>().index(request.index())
                     .opType(request.overwriteIfExists() ? OpType.Index : OpType.Create)
@@ -164,9 +158,24 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 }
                 IndexRequest<?> indexRequest = builder.build();
                 log.info("Indexing data object in {}", request.index());
-                IndexResponse indexResponse = openSearchClient.index(indexRequest);
-                log.info("Creation status for id {}: {}", indexResponse.id(), indexResponse.result());
-                return PutDataObjectResponse.builder().id(indexResponse.id()).parser(createParser(indexResponse)).build();
+                return openSearchAsyncClient.index(indexRequest).thenApply(indexResponse -> {
+                    log.info("Creation status for id {}: {}", indexResponse.id(), indexResponse.result());
+                    try {
+                        return PutDataObjectResponse.builder().id(indexResponse.id()).parser(createParser(indexResponse)).build();
+                    } catch (IOException e) {
+                        throw new OpenSearchStatusException(
+                            "Failed to create response for index " + request.index(),
+                            RestStatus.INTERNAL_SERVER_ERROR,
+                            e
+                        );
+                    }
+                }).exceptionally(e -> {
+                    throw new OpenSearchStatusException(
+                        "Failed to put data object in index " + request.index(),
+                        RestStatus.INTERNAL_SERVER_ERROR,
+                        e
+                    );
+                });
             } catch (IOException e) {
                 log.error("Error putting data object in {}: {}", request.index(), e.getMessage(), e);
                 // Rethrow unchecked exception on XContent parsing error
@@ -175,7 +184,7 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                     RestStatus.BAD_REQUEST
                 );
             }
-        }, executor);
+        });
     }
 
     @Override
@@ -184,23 +193,44 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        return executePrivilegedAsync(() -> {
+        return doPrivileged(() -> {
             try {
                 GetRequest getRequest = new GetRequest.Builder().index(request.index()).id(request.id()).build();
                 log.info("Getting {} from {}", request.id(), request.index());
-                GetResponse<Map<String, Object>> getResponse = openSearchClient.get(getRequest, MAP_DOCTYPE);
-                log.info("Get found status for id {}: {}", getResponse.id(), getResponse.found());
-                Map<String, Object> source = getResponse.source();
-                return GetDataObjectResponse.builder().id(getResponse.id()).parser(createParser(getResponse)).source(source).build();
+                return openSearchAsyncClient.get(getRequest, MAP_DOCTYPE).thenApply(getResponse -> {
+                    log.info("Get found status for id {}: {}", getResponse.id(), getResponse.found());
+                    Map<String, Object> source = getResponse.source();
+                    try {
+                        return GetDataObjectResponse.builder()
+                            .id(getResponse.id())
+                            .parser(createParser(getResponse))
+                            .source(source)
+                            .build();
+                    } catch (IOException e) {
+                        throw new OpenSearchStatusException(
+                            "Failed to create parser for data object retrieved from index " + request.index(),
+                            RestStatus.INTERNAL_SERVER_ERROR,
+                            e
+                        );
+                    }
+                }).exceptionally(e -> {
+                    log.error("Error getting data object {} from {}: {}", request.id(), request.index(), e.getMessage(), e);
+                    throw new OpenSearchStatusException(
+                        "Failed to get data object from index " + request.index(),
+                        RestStatus.INTERNAL_SERVER_ERROR,
+                        e
+                    );
+                });
             } catch (IOException e) {
                 log.error("Error getting data object {} from {}: {}", request.id(), request.index(), e.getMessage(), e);
                 // Rethrow unchecked exception on XContent parser creation error
                 throw new OpenSearchStatusException(
-                    "Failed to create parser for data object retrieved from index " + request.index(),
-                    RestStatus.INTERNAL_SERVER_ERROR
+                    "Failed to get data object from index " + request.index(),
+                    RestStatus.INTERNAL_SERVER_ERROR,
+                    e
                 );
             }
-        }, executor);
+        });
     }
 
     @Override
@@ -209,7 +239,7 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        return executePrivilegedAsync(() -> {
+        return doPrivileged(() -> {
             try (XContentBuilder builder = XContentFactory.jsonBuilder()) {
                 request.dataObject().toXContent(builder, ToXContent.EMPTY_PARAMS);
                 Map<String, Object> docMap = JsonXContent.jsonXContent.createParser(
@@ -217,7 +247,7 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                     LoggingDeprecationHandler.INSTANCE,
                     builder.toString()
                 ).map();
-                Builder<Map<String, Object>, Map<String, Object>> updateRequestBuilder = new UpdateRequest.Builder<
+                UpdateRequest.Builder<Map<String, Object>, Map<String, Object>> updateRequestBuilder = new UpdateRequest.Builder<
                     Map<String, Object>,
                     Map<String, Object>>().index(request.index()).id(request.id()).doc(docMap);
                 if (request.ifSeqNo() != null) {
@@ -231,26 +261,46 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 }
                 UpdateRequest<Map<String, Object>, ?> updateRequest = updateRequestBuilder.build();
                 log.info("Updating {} in {}", request.id(), request.index());
-                UpdateResponse<Map<String, Object>> updateResponse = openSearchClient.update(updateRequest, MAP_DOCTYPE);
-                log.info("Update status for id {}: {}", updateResponse.id(), updateResponse.result());
-                return UpdateDataObjectResponse.builder().id(updateResponse.id()).parser(createParser(updateResponse)).build();
-            } catch (OpenSearchException ose) {
-                String errorType = ose.status() == RestStatus.CONFLICT.getStatus() ? "Document Version Conflict" : "Failed";
-                log.error("{} updating {} in {}: {}", errorType, request.id(), request.index(), ose.getMessage(), ose);
-                // Rethrow
-                throw new OpenSearchStatusException(
-                    errorType + " updating " + request.id() + " in index " + request.index(),
-                    RestStatus.fromCode(ose.status())
-                );
+                return openSearchAsyncClient.update(updateRequest, MAP_DOCTYPE).thenApply(updateResponse -> {
+                    log.info("Update status for id {}: {}", updateResponse.id(), updateResponse.result());
+                    try {
+                        return UpdateDataObjectResponse.builder().id(updateResponse.id()).parser(createParser(updateResponse)).build();
+                    } catch (IOException e) {
+                        throw new OpenSearchStatusException(
+                            "Failed to create parser for update response for " + request.id() + " in index " + request.index(),
+                            RestStatus.INTERNAL_SERVER_ERROR,
+                            e
+                        );
+                    }
+                }).exceptionally(e -> {
+                    Throwable cause = e.getCause();
+                    if (cause instanceof OpenSearchException) {
+                        OpenSearchException ose = (OpenSearchException) cause;
+                        String errorType = ose.status() == RestStatus.CONFLICT.getStatus() ? "Document Version Conflict" : "Failed";
+                        log.error("{} updating {} in {}: {}", errorType, request.id(), request.index(), ose.getMessage(), ose);
+                        throw new OpenSearchStatusException(
+                            errorType + " updating " + request.id() + " in index " + request.index(),
+                            RestStatus.fromCode(ose.status()),
+                            ose
+                        );
+                    } else {
+                        log.error("Error updating {} in {}: {}", request.id(), request.index(), e.getMessage(), e);
+                        throw new OpenSearchStatusException(
+                            "Error updating data object " + request.id() + " in index " + request.index(),
+                            RestStatus.INTERNAL_SERVER_ERROR,
+                            e
+                        );
+                    }
+                });
             } catch (IOException e) {
-                log.error("Error updating {} in {}: {}", request.id(), request.index(), e.getMessage(), e);
-                // Rethrow unchecked exception on update IOException
+                log.error("Error preparing update for {} in {}: {}", request.id(), request.index(), e.getMessage(), e);
                 throw new OpenSearchStatusException(
-                    "Parsing error updating data object " + request.id() + " in index " + request.index(),
-                    RestStatus.BAD_REQUEST
+                    "Parsing error preparing update for data object " + request.id() + " in index " + request.index(),
+                    RestStatus.BAD_REQUEST,
+                    e
                 );
             }
-        }, executor);
+        });
     }
 
     @Override
@@ -259,22 +309,38 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        return executePrivilegedAsync(() -> {
+        return doPrivileged(() -> {
             try {
                 DeleteRequest deleteRequest = new DeleteRequest.Builder().index(request.index()).id(request.id()).build();
                 log.info("Deleting {} from {}", request.id(), request.index());
-                DeleteResponse deleteResponse = openSearchClient.delete(deleteRequest);
-                log.info("Deletion status for id {}: {}", deleteResponse.id(), deleteResponse.result());
-                return DeleteDataObjectResponse.builder().id(deleteResponse.id()).parser(createParser(deleteResponse)).build();
+                return openSearchAsyncClient.delete(deleteRequest).thenApply(deleteResponse -> {
+                    log.info("Deletion status for id {}: {}", deleteResponse.id(), deleteResponse.result());
+                    try {
+                        return DeleteDataObjectResponse.builder().id(deleteResponse.id()).parser(createParser(deleteResponse)).build();
+                    } catch (IOException e) {
+                        throw new OpenSearchStatusException(
+                            "Failed to create parser for delete response for " + request.id() + " from index " + request.index(),
+                            RestStatus.INTERNAL_SERVER_ERROR,
+                            e
+                        );
+                    }
+                }).exceptionally(e -> {
+                    log.error("Error deleting {} from {}: {}", request.id(), request.index(), e.getMessage(), e);
+                    throw new OpenSearchStatusException(
+                        "Failed to delete data object " + request.id() + " from index " + request.index(),
+                        RestStatus.INTERNAL_SERVER_ERROR,
+                        e
+                    );
+                });
             } catch (IOException e) {
-                log.error("Error deleting {} from {}: {}", request.id(), request.index(), e.getMessage(), e);
-                // Rethrow unchecked exception on deletion IOException
+                log.error("Error initiating delete for {} from {}: {}", request.id(), request.index(), e.getMessage(), e);
                 throw new OpenSearchStatusException(
-                    "IOException occurred while deleting data object " + request.id() + " from index " + request.index(),
-                    RestStatus.INTERNAL_SERVER_ERROR
+                    "Failed to delete data object " + request.id() + " from index " + request.index(),
+                    RestStatus.INTERNAL_SERVER_ERROR,
+                    e
                 );
             }
-        }, executor);
+        });
     }
 
     @Override
@@ -283,7 +349,7 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        return executePrivilegedAsync(() -> {
+        return doPrivileged(() -> {
             try {
                 log.info("Performing {} bulk actions on indices {}", request.requests().size(), request.getIndices());
                 List<BulkOperation> operations = new ArrayList<>();
@@ -291,27 +357,38 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                     addBulkOperation(dataObjectRequest, operations);
                 }
                 BulkRequest bulkRequest = new BulkRequest.Builder().operations(operations).refresh(Refresh.True).build();
-                BulkResponse bulkResponse = openSearchClient.bulk(bulkRequest);
-                log.info(
-                    "Bulk action complete for {} items: {}",
-                    bulkResponse.items().size(),
-                    bulkResponse.errors() ? "has failures" : "success"
-                );
-                DataObjectResponse[] responses = bulkResponseItemsToArray(bulkResponse.items());
-                return bulkResponse.ingestTook() == null
-                    ? new BulkDataObjectResponse(responses, bulkResponse.took(), bulkResponse.errors(), createParser(bulkResponse))
-                    : new BulkDataObjectResponse(
-                        responses,
-                        bulkResponse.took(),
-                        bulkResponse.ingestTook().longValue(),
-                        bulkResponse.errors(),
-                        createParser(bulkResponse)
+                return openSearchAsyncClient.bulk(bulkRequest).thenApply(bulkResponse -> {
+                    log.info(
+                        "Bulk action complete for {} items: {}",
+                        bulkResponse.items().size(),
+                        bulkResponse.errors() ? "has failures" : "success"
                     );
-            } catch (IOException e) {
-                // Rethrow unchecked exception on XContent parsing error
-                throw new OpenSearchStatusException("Failed to parse data object in a bulk response", RestStatus.INTERNAL_SERVER_ERROR);
+                    try {
+                        DataObjectResponse[] responses = bulkResponseItemsToArray(bulkResponse.items());
+                        return bulkResponse.ingestTook() == null
+                            ? new BulkDataObjectResponse(responses, bulkResponse.took(), bulkResponse.errors(), createParser(bulkResponse))
+                            : new BulkDataObjectResponse(
+                                responses,
+                                bulkResponse.took(),
+                                bulkResponse.ingestTook().longValue(),
+                                bulkResponse.errors(),
+                                createParser(bulkResponse)
+                            );
+                    } catch (IOException e) {
+                        throw new OpenSearchStatusException(
+                            "Failed to parse data object in a bulk response",
+                            RestStatus.INTERNAL_SERVER_ERROR,
+                            e
+                        );
+                    }
+                })
+                    .exceptionally(
+                        e -> { throw new OpenSearchStatusException("Failed to execute bulk request", RestStatus.INTERNAL_SERVER_ERROR, e); }
+                    );
+            } catch (Exception e) {
+                throw new OpenSearchStatusException("Failed to execute bulk request", RestStatus.INTERNAL_SERVER_ERROR, e);
             }
-        }, executor);
+        });
     }
 
     private void addBulkOperation(DataObjectRequest dataObjectRequest, List<BulkOperation> operations) {
@@ -423,7 +500,7 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        return executePrivilegedAsync(() -> {
+        return doPrivileged(() -> {
             try {
                 log.info("Searching {}", Arrays.toString(request.indices()));
                 // work around https://github.com/opensearch-project/opensearch-java/issues/1150
@@ -448,18 +525,38 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 } else {
                     searchRequest = searchRequest.toBuilder().index(Arrays.asList(request.indices())).build();
                 }
-                SearchResponse<?> searchResponse = openSearchClient.search(searchRequest, MAP_DOCTYPE);
-                log.info("Search returned {} hits", searchResponse.hits().total().value());
-                return SearchDataObjectResponse.builder().parser(createParser(searchResponse)).build();
+
+                return openSearchAsyncClient.search(searchRequest, MAP_DOCTYPE).thenApply(searchResponse -> {
+                    log.info("Search returned {} hits", searchResponse.hits().total().value());
+                    try {
+                        return SearchDataObjectResponse.builder().parser(createParser(searchResponse)).build();
+                    } catch (IOException e) {
+                        throw new OpenSearchStatusException(
+                            "Failed to create parser for search response",
+                            RestStatus.INTERNAL_SERVER_ERROR,
+                            e
+                        );
+                    }
+                }).exceptionally(e -> {
+                    log.error("Error searching {}: {}", Arrays.toString(request.indices()), e.getMessage(), e);
+                    if (e instanceof OpenSearchException) {
+                        throw (OpenSearchException) e;
+                    }
+                    throw new OpenSearchStatusException(
+                        "Failed to search indices " + Arrays.toString(request.indices()),
+                        RestStatus.INTERNAL_SERVER_ERROR,
+                        e
+                    );
+                });
             } catch (IOException e) {
-                log.error("Error searching {}: {}", Arrays.toString(request.indices()), e.getMessage(), e);
-                // Rethrow unchecked exception on exception
+                log.error("Error preparing search for {}: {}", Arrays.toString(request.indices()), e.getMessage(), e);
                 throw new OpenSearchStatusException(
-                    "Failed to search indices " + Arrays.toString(request.indices()),
-                    RestStatus.INTERNAL_SERVER_ERROR
+                    "Failed to prepare search for indices " + Arrays.toString(request.indices()),
+                    RestStatus.INTERNAL_SERVER_ERROR,
+                    e
                 );
             }
-        }, executor);
+        });
     }
 
     private XContentParser createParser(JsonpSerializable obj) throws IOException {
@@ -471,10 +568,10 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
     }
 
     /**
-     * Create an instance of {@link OpenSearchClient}
-     * @return An OpenSearchClient instance
+     * Create an instance of {@link OpenSearchAsyncClient}
+     * @return An OpenSearchAsyncClient instance
      */
-    protected OpenSearchClient createOpenSearchClient() {
+    protected OpenSearchAsyncClient createOpenSearchAsyncClient() {
         try {
             Map<String, String> env = System.getenv();
             String user = env.getOrDefault("user", "admin");
@@ -482,6 +579,7 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
             // Endpoint syntax: https://127.0.0.1:9200
             HttpHost host = HttpHost.create(remoteMetadataEndpoint);
             SSLContext sslContext = SSLContextBuilder.create().loadTrustMaterial(null, (chain, authType) -> true).build();
+
             ApacheHttpClient5Transport transport = ApacheHttpClient5TransportBuilder.builder(host)
                 .setMapper(
                     new JacksonJsonpMapper(
@@ -509,7 +607,8 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                     return httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider).setConnectionManager(connectionManager);
                 })
                 .build();
-            return new OpenSearchClient(transport);
+
+            return new OpenSearchAsyncClient(transport);
         } catch (Exception e) {
             throw new org.opensearch.OpenSearchException(e);
         }
@@ -517,8 +616,8 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
 
     @Override
     public void close() throws Exception {
-        if (openSearchClient != null && openSearchClient._transport() != null) {
-            openSearchClient._transport().close();
+        if (openSearchAsyncClient != null && openSearchAsyncClient._transport() != null) {
+            openSearchAsyncClient._transport().close();
         }
     }
 }
