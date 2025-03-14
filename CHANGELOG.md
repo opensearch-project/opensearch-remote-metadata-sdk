@@ -12,8 +12,11 @@ Inspired from [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Make Remote Cluster Client and AOS client fully async ([#80](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/80))
 
 ### Bug Fixes
+- Fix version conflict check for update ([#114](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/114))
+
 ### Infrastructure
 ### Documentation
 ### Maintenance
 - Bump aws sdk to 2.30.18 from 2.29.50 ([#93](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/93))
+
 ### Refactoring
