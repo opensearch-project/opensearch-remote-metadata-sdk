@@ -10,6 +10,7 @@ package org.opensearch.remote.metadata.client.impl;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.opensearch.ExceptionsHelper;
 import org.opensearch.OpenSearchStatusException;
 import org.opensearch.action.DocWriteRequest.OpType;
 import org.opensearch.action.bulk.BulkItemResponse;
@@ -237,13 +238,14 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
                         }
                     }
                 }, e -> {
-                    if (e instanceof VersionConflictEngineException) {
+                    Throwable t = ExceptionsHelper.unwrapCause(e);
+                    if (t instanceof VersionConflictEngineException) {
                         log.error("Document version conflict updating {} in {}: {}", request.id(), request.index(), e.getMessage(), e);
                         future.completeExceptionally(
                             new OpenSearchStatusException(
                                 "Document version conflict updating " + request.id() + " in index " + request.index(),
                                 RestStatus.CONFLICT,
-                                e
+                                t
                             )
                         );
                     } else {
@@ -251,7 +253,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
                             new OpenSearchStatusException(
                                 "Failed to update data object in index " + request.index(),
                                 RestStatus.INTERNAL_SERVER_ERROR,
-                                e
+                                t
                             )
                         );
                     }
