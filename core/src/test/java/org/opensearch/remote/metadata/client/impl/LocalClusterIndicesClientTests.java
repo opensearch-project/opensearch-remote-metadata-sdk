@@ -58,6 +58,7 @@ import org.opensearch.remote.metadata.client.UpdateDataObjectResponse;
 import org.opensearch.remote.metadata.common.TestDataObject;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.internal.InternalSearchResponse;
+import org.opensearch.transport.RemoteTransportException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -70,6 +71,7 @@ import java.util.stream.Collectors;
 
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
@@ -83,6 +85,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class LocalClusterIndicesClientTests {
 
@@ -457,6 +460,33 @@ public class LocalClusterIndicesClientTests {
         doAnswer(invocation -> {
             ActionListener<UpdateResponse> listener = invocation.getArgument(1);
             listener.onFailure(new VersionConflictEngineException(new ShardId(TEST_INDEX, "_na_", 0), TEST_ID, "test"));
+            return null;
+        }).when(mockedClient).update(any(UpdateRequest.class), any());
+
+        CompletableFuture<UpdateDataObjectResponse> future = sdkClient.updateDataObjectAsync(updateRequest).toCompletableFuture();
+
+        CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
+        Throwable cause = ce.getCause();
+        assertEquals(OpenSearchStatusException.class, cause.getClass());
+        assertEquals(RestStatus.CONFLICT, ((OpenSearchStatusException) cause).status());
+    }
+
+    @Test
+    public void testUpdateDataObject_VersionCheck_unwrap() throws IOException {
+        UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .dataObject(testDataObject)
+            .ifSeqNo(5)
+            .ifPrimaryTerm(2)
+            .build();
+
+        doAnswer(invocation -> {
+            ActionListener<UpdateResponse> listener = invocation.getArgument(1);
+            RemoteTransportException rte = Mockito.mock(RemoteTransportException.class);
+            when(rte.getCause()).thenReturn(new VersionConflictEngineException(new ShardId(TEST_INDEX, "_na_", 0), TEST_ID, "test"));
+            listener.onFailure(rte);
             return null;
         }).when(mockedClient).update(any(UpdateRequest.class), any());
 
