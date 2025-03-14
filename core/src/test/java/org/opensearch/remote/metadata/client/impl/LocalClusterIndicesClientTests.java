@@ -8,7 +8,6 @@
  */
 package org.opensearch.remote.metadata.client.impl;
 
-import org.mockito.Mockito;
 import org.opensearch.OpenSearchStatusException;
 import org.opensearch.action.DocWriteRequest.OpType;
 import org.opensearch.action.DocWriteResponse;
@@ -72,9 +71,9 @@ import java.util.stream.Collectors;
 
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
-import static org.mockito.Mockito.when;
 import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
 import static org.opensearch.remote.metadata.common.CommonValue.TENANT_ID_FIELD_KEY;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -86,6 +85,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class LocalClusterIndicesClientTests {
 
@@ -474,19 +474,18 @@ public class LocalClusterIndicesClientTests {
     @Test
     public void testUpdateDataObject_VersionCheck_unwrap() throws IOException {
         UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
-                .index(TEST_INDEX)
-                .id(TEST_ID)
-                .tenantId(TEST_TENANT_ID)
-                .dataObject(testDataObject)
-                .ifSeqNo(5)
-                .ifPrimaryTerm(2)
-                .build();
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .dataObject(testDataObject)
+            .ifSeqNo(5)
+            .ifPrimaryTerm(2)
+            .build();
 
         doAnswer(invocation -> {
             ActionListener<UpdateResponse> listener = invocation.getArgument(1);
             RemoteTransportException rte = Mockito.mock(RemoteTransportException.class);
-            when(rte.getCause()).thenReturn(new VersionConflictEngineException(new ShardId(TEST_INDEX, "_na_", 0),
-                    TEST_ID, "test"));
+            when(rte.getCause()).thenReturn(new VersionConflictEngineException(new ShardId(TEST_INDEX, "_na_", 0), TEST_ID, "test"));
             listener.onFailure(rte);
             return null;
         }).when(mockedClient).update(any(UpdateRequest.class), any());
