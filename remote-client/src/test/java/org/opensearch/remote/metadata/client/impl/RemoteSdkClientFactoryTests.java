@@ -56,6 +56,31 @@ public class RemoteSdkClientFactoryTests {
     }
 
     @Test
+    public void testRemoteOpenSearchBindingWithOtherClassLoader() {
+        ClassLoader originalClassLoader = Thread.currentThread().getContextClassLoader();
+        try {
+            // Set a classloader that can't see the implementation
+            Thread.currentThread().setContextClassLoader(new ClassLoader(null) {
+                @Override
+                public Class<?> loadClass(String name) throws ClassNotFoundException {
+                    throw new ClassNotFoundException("Simulating restricted access");
+                }
+            });
+
+            Map<String, String> settings = Map.ofEntries(
+                Map.entry(REMOTE_METADATA_TYPE_KEY, REMOTE_OPENSEARCH),
+                Map.entry(REMOTE_METADATA_ENDPOINT_KEY, "http://example.org"),
+                Map.entry(REMOTE_METADATA_REGION_KEY, "eu-west-3")
+            );
+            SdkClient sdkClient = SdkClientFactory.createSdkClient(mock(Client.class), NamedXContentRegistry.EMPTY, settings);
+            assertTrue(sdkClient.getDelegate() instanceof RemoteClusterIndicesClient);
+            resourcesToClose.add(sdkClient.getDelegate());
+        } finally {
+            Thread.currentThread().setContextClassLoader(originalClassLoader);
+        }
+    }
+
+    @Test
     public void testRemoteOpenSearchBindingException() {
         Map<String, String> settings = Map.of(REMOTE_METADATA_TYPE_KEY, REMOTE_OPENSEARCH);
         assertThrows(

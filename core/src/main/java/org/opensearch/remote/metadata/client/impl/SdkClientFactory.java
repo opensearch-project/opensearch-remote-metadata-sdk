@@ -59,7 +59,7 @@ public class SdkClientFactory {
         String remoteMetadataType = metadataSettings.get(REMOTE_METADATA_TYPE_KEY);
         Boolean multiTenancy = Boolean.parseBoolean(metadataSettings.get(TENANT_AWARE_KEY));
 
-        ServiceLoader<SdkClientDelegate> loader = ServiceLoader.load(SdkClientDelegate.class);
+        ServiceLoader<SdkClientDelegate> loader = ServiceLoader.load(SdkClientDelegate.class, SdkClientDelegate.class.getClassLoader());
         Iterator<SdkClientDelegate> iterator = loader.iterator();
 
         if (Strings.isNullOrEmpty(remoteMetadataType)) {
