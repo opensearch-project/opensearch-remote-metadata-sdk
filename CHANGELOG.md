@@ -3,7 +3,6 @@ All notable changes to this project are documented in this file.
 
 Inspired from [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
-## [Unreleased 2.x](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/compare/2.19...2.x)
 ### Features
 ### Enhancements
 ### Bug Fixes
@@ -12,6 +11,7 @@ Inspired from [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Refactor SDKClientUtil for better readability, fix javadocs ([#78](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/78))
 - Make DynamoDBClient fully async ([#79](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/79))
 - Fix version conflict check for update ([#114](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/114))
+- Use SdkClientDelegate's classloader for ServiceLoader ([#121](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/121))
 
 ### Infrastructure
 ### Documentation
