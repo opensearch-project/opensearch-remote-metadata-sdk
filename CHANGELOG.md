@@ -12,6 +12,8 @@ Inspired from [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ### Infrastructure
 ### Documentation
+- Add a developer guide ([#124](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/124))
+
 ### Maintenance
 ### Refactoring
 - Update o.o.client imports to o.o.transport.client ([#73](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/73))
