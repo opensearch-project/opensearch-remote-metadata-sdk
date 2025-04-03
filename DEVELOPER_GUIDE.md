@@ -62,6 +62,7 @@ public Collection<Object> createComponents(
         client,
         xContentRegistry,
         Map.ofEntries(
+            // Assumes you have these values in plugin settings
             Map.entry(REMOTE_METADATA_TYPE_KEY, REMOTE_METADATA_TYPE.get(settings)),
             Map.entry(REMOTE_METADATA_ENDPOINT_KEY, REMOTE_METADATA_ENDPOINT.get(settings)),
             Map.entry(REMOTE_METADATA_REGION_KEY, REMOTE_METADATA_REGION.get(settings)),
@@ -69,7 +70,7 @@ public Collection<Object> createComponents(
             Map.entry(TENANT_AWARE_KEY, "true"), // Set to "false" if multitenancy is not needed
             Map.entry(TENANT_ID_FIELD_KEY, TENANT_ID_FIELD) // "tenant_id" field added in documents with multitenancy
         ),
-        // Currently unused with non-blocking client implementations but may be needed in the future
+        // Placeholder. Currently unused with non-blocking client implementations but a thread pool may be needed in the future
         client.threadPool().executor(ThreadPool.Names.GENERIC)
     );
     // Other existing code in this method. Pass sdkClient to any other classes that may need it
@@ -105,46 +106,33 @@ Replace Request classes with their SDK wrapper equivalents:
 Example of migrating a `get` operation:
 
 ```java
+// Assume an ActionListener<GetResponse> actionListener
+
 // Old NodeClient code
 GetRequest getRequest = new GetRequest(indexName, documentId);
-client.get(getRequest, ActionListener.wrap(
-    getResponse -> {
-        // handle getResponse (success)
-    },
-    exception -> {
-        // handle exception (failure)
-    }
-));
+client.get(getRequest, actionListener);
 
 // New SdkClient code
 GetDataObjectRequest getDataObjectRequest = GetDataObjectRequest.builder()
     .index(indexName)
     .id(documentId)
     .build();
-sdkClient.getDataObjectAsync(getDataObjectRequest).whenComplete(SdkClientUtils.wrapGetCompletion(
-    // copy existing ActionListener<GetResponse>
-    ActionListener.wrap(
-        getResponse -> {
-            // handle getResponse (success)
-        },
-        exception -> {
-            // handle exception (failure)
-        }
-    )
-    // optionally add vararg exception types to unwrap
-));
+sdkClient.getDataObjectAsync(getDataObjectRequest)
+    .whenComplete(SdkClientUtils.wrapGetCompletion(actionListener));
 ```
+
+Additional wrappers are available for the other operations, and finer control over which exceptions to unwrap is available.
 
 ## 5. Update Exception Handling
 
-Replace OpenSearch-specific exception checks with more generic status checks:
+Expand NodeClient-specific exception checks with more generic status checks:
 
 ```java
 // Old code
 if (e instanceof VersionConflictEngineException)
 
 // New code
-if (e instanceof OpenSearchException && ((OpenSearchException) e).status() == RestStatus.CONFLICT)
+if (e instanceof VersionConflictEngineException || (e instanceof OpenSearchException && ((OpenSearchException) e).status() == RestStatus.CONFLICT))
 ```
 
 ## 6. Optional: Handle Multitenancy
@@ -156,5 +144,9 @@ If multitenancy is enabled:
 3. Validate that the tenant ID exists and matches the document tenant ID when required
 4. Add `.tenantId(tenantId)` to your request objects
 
-For examples of multitenancy implementation, refer to the ML Commons plugin and Flow Framework plugin.
+For examples of multitenancy implementation, refer to the ML Commons and Flow Framework plugins.
 ```
+
+## Other notes
+
+This client does not create indices (on OpenSearch) or tables (on DynamoDB). You will need to manually create those.
