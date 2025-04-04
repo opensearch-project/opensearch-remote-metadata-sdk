@@ -599,6 +599,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                     Map.entry(RANGE_KEY, AttributeValue.builder().s(documentId).build())
                 )
             )
+            .consistentRead(true)
             .build();
     }
 
