@@ -9,6 +9,7 @@ Inspired from [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 ### Bug Fixes
 - Fix version conflict check for update ([#114](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/114))
 - Use SdkClientDelegate's classloader for ServiceLoader ([#121](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/121))
+- Ensure consistent reads on DynamoDB getItem calls ([#128](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/128))
 
 ### Infrastructure
 ### Documentation
