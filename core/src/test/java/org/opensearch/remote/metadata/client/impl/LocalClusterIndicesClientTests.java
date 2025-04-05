@@ -39,6 +39,7 @@ import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.ToXContentObject;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.IndexNotFoundException;
 import org.opensearch.index.engine.VersionConflictEngineException;
 import org.opensearch.index.get.GetResult;
 import org.opensearch.remote.metadata.client.BulkDataObjectRequest;
@@ -792,6 +793,30 @@ public class LocalClusterIndicesClientTests {
     }
 
     @Test
+    public void testSearchDataObject_IndexNotFoundException() throws IOException {
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        SearchDataObjectRequest searchRequest = SearchDataObjectRequest.builder()
+            .indices(TEST_INDEX)
+            .tenantId(TEST_TENANT_ID)
+            .searchSourceBuilder(searchSourceBuilder)
+            .build();
+
+        doAnswer(invocation -> {
+            ActionListener<SearchResponse> listener = invocation.getArgument(1);
+            listener.onFailure(new IndexNotFoundException("test"));
+            return null;
+        }).when(mockedClient).search(any(SearchRequest.class), any());
+
+        CompletableFuture<SearchDataObjectResponse> future = sdkClient.searchDataObjectAsync(searchRequest).toCompletableFuture();
+
+        CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
+        Throwable cause = ce.getCause();
+        assertEquals(OpenSearchStatusException.class, cause.getClass());
+        assertEquals(RestStatus.NOT_FOUND, ((OpenSearchStatusException) cause).status());
+        assertEquals("Failed to search indices [test_index]", cause.getMessage());
+    }
+
+    @Test
     public void testSearchDataObject_Exception() throws IOException {
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
         SearchDataObjectRequest searchRequest = SearchDataObjectRequest.builder()
@@ -811,6 +836,7 @@ public class LocalClusterIndicesClientTests {
         CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
         Throwable cause = ce.getCause();
         assertEquals(OpenSearchStatusException.class, cause.getClass());
+        assertEquals(RestStatus.INTERNAL_SERVER_ERROR, ((OpenSearchStatusException) cause).status());
         assertEquals("Failed to search indices [test_index]", cause.getMessage());
     }
 
