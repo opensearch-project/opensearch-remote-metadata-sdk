@@ -32,6 +32,7 @@ import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.IndexNotFoundException;
 import org.opensearch.index.engine.VersionConflictEngineException;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
@@ -472,7 +473,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
                 e -> future.completeExceptionally(
                     new OpenSearchStatusException(
                         "Failed to search indices " + Arrays.toString(request.indices()),
-                        RestStatus.INTERNAL_SERVER_ERROR,
+                        e instanceof IndexNotFoundException ? RestStatus.NOT_FOUND : RestStatus.INTERNAL_SERVER_ERROR,
                         e
                     )
                 )
