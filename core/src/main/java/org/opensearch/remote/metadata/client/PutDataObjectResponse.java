@@ -8,13 +8,57 @@
  */
 package org.opensearch.remote.metadata.client;
 
+import org.opensearch.OpenSearchException;
+import org.opensearch.action.DocWriteResponse;
+import org.opensearch.action.bulk.BulkItemResponse;
+import org.opensearch.action.index.IndexResponse;
+import org.opensearch.common.Nullable;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.remote.metadata.common.SdkClientUtils;
+
+import java.io.IOException;
 
 /**
  * A class abstracting an OpenSearch IndexeResponse
  */
 public class PutDataObjectResponse extends DataObjectResponse {
+
+    // If populated directly, will populate superclass fields
+    private final IndexResponse indexResponse;
+
+    /**
+     * Instantiate this response with an {@link IndexResponse}.
+     * @param indexResponse a pre-completed Index response
+     */
+    public PutDataObjectResponse(IndexResponse indexResponse) {
+        super(indexResponse.getIndex(), indexResponse.getId(), null, false, null, null);
+        this.indexResponse = indexResponse;
+    }
+
+    /**
+     * Instantiate this response with a {@link BulkItemResponse} for an index operation.
+     * @param itemResponse a bulk item response for an index operation
+     */
+    public PutDataObjectResponse(BulkItemResponse itemResponse) {
+        super(
+            itemResponse.getIndex(),
+            itemResponse.getId(),
+            null,
+            itemResponse.isFailed(),
+            itemResponse.getFailure() != null ? itemResponse.getFailure().getCause() : null,
+            itemResponse.getFailure() != null ? itemResponse.getFailure().getStatus() : null
+        );
+        DocWriteResponse response = itemResponse.getResponse();
+        this.indexResponse = switch (response) {
+            case null -> null;
+            case IndexResponse ir -> ir;
+            default -> throw new OpenSearchException(
+                "Expected IndexResponse but got " + response.getClass().getSimpleName(),
+                RestStatus.INTERNAL_SERVER_ERROR
+            );
+        };
+    }
 
     /**
      * Instantiate this request with an id and parser representing an IndexResponse
@@ -29,6 +73,34 @@ public class PutDataObjectResponse extends DataObjectResponse {
      */
     public PutDataObjectResponse(String index, String id, XContentParser parser, boolean failed, Exception cause, RestStatus status) {
         super(index, id, parser, failed, cause, status);
+        this.indexResponse = null;
+    }
+
+    /**
+     * Returns the IndexResponse object
+     * @return the index response if present, or parsed otherwise
+     */
+    public @Nullable IndexResponse indexResponse() {
+        if (this.indexResponse == null) {
+            try {
+                return IndexResponse.fromXContent(parser());
+            } catch (IOException | NullPointerException e) {
+                return null;
+            }
+        }
+        return this.indexResponse;
+    }
+
+    @Override
+    public XContentParser parser() {
+        if (super.parser() == null) {
+            try {
+                return SdkClientUtils.createParser(this.indexResponse);
+            } catch (IOException | NullPointerException e) {
+                return null;
+            }
+        }
+        return super.parser();
     }
 
     /**

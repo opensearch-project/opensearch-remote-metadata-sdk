@@ -8,16 +8,21 @@
  */
 package org.opensearch.remote.metadata.client;
 
+import org.opensearch.action.get.GetResponse;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.XContentParser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.util.Collections;
 import java.util.Map;
 
+import static org.junit.Assert.assertNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class GetDataObjectResponseTests {
 
@@ -28,6 +33,7 @@ public class GetDataObjectResponseTests {
     private Exception testCause;
     private RestStatus testStatus;
     private Map<String, Object> testSource;
+    private GetResponse testGetResponse;
 
     @BeforeEach
     public void setUp() {
@@ -38,6 +44,10 @@ public class GetDataObjectResponseTests {
         testCause = mock(RuntimeException.class);
         testStatus = RestStatus.BAD_REQUEST;
         testSource = Map.of("foo", "bar");
+        testGetResponse = mock(GetResponse.class);
+        when(testGetResponse.getIndex()).thenReturn(testIndex);
+        when(testGetResponse.getId()).thenReturn(testId);
+        when(testGetResponse.getSourceAsMap()).thenReturn(testSource);
     }
 
     @Test
@@ -59,5 +69,26 @@ public class GetDataObjectResponseTests {
         assertSame(testCause, response.cause());
         assertEquals(testStatus, response.status());
         assertEquals(testSource, response.source());
+    }
+
+    @Test
+    public void testGetDataObjectResponseWithGetResponse() throws IOException {
+        GetDataObjectResponse response = new GetDataObjectResponse(testGetResponse);
+
+        assertEquals(testIndex, response.index());
+        assertEquals(testId, response.id());
+        assertEquals(false, response.isFailed());
+        assertNull(response.cause());
+        assertNull(response.status());
+        assertEquals(testSource, response.source());
+        assertSame(testGetResponse, response.getResponse());
+    }
+
+    @Test
+    public void testGetDataObjectResponseWithNullSource() {
+        when(testGetResponse.getSourceAsMap()).thenReturn(null);
+        GetDataObjectResponse response = new GetDataObjectResponse(testGetResponse);
+
+        assertEquals(Collections.emptyMap(), response.source());
     }
 }
