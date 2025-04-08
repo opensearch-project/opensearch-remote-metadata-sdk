@@ -13,9 +13,7 @@ import org.apache.logging.log4j.Logger;
 import org.opensearch.ExceptionsHelper;
 import org.opensearch.OpenSearchStatusException;
 import org.opensearch.action.DocWriteRequest.OpType;
-import org.opensearch.action.bulk.BulkItemResponse;
 import org.opensearch.action.bulk.BulkRequest;
-import org.opensearch.action.bulk.BulkResponse;
 import org.opensearch.action.delete.DeleteRequest;
 import org.opensearch.action.get.GetRequest;
 import org.opensearch.action.index.IndexRequest;
@@ -25,12 +23,8 @@ import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.Strings;
 import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.DeprecationHandler;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.IndexNotFoundException;
 import org.opensearch.index.engine.VersionConflictEngineException;
 import org.opensearch.index.query.BoolQueryBuilder;
@@ -41,7 +35,6 @@ import org.opensearch.remote.metadata.client.AbstractSdkClient;
 import org.opensearch.remote.metadata.client.BulkDataObjectRequest;
 import org.opensearch.remote.metadata.client.BulkDataObjectResponse;
 import org.opensearch.remote.metadata.client.DataObjectRequest;
-import org.opensearch.remote.metadata.client.DataObjectResponse;
 import org.opensearch.remote.metadata.client.DeleteDataObjectRequest;
 import org.opensearch.remote.metadata.client.DeleteDataObjectResponse;
 import org.opensearch.remote.metadata.client.GetDataObjectRequest;
@@ -65,7 +58,6 @@ import java.util.concurrent.Executor;
 
 import static org.opensearch.action.support.WriteRequest.RefreshPolicy.IMMEDIATE;
 import static org.opensearch.common.util.concurrent.ThreadContextAccess.doPrivileged;
-import static org.opensearch.common.xcontent.json.JsonXContent.jsonXContent;
 import static org.opensearch.core.xcontent.ToXContent.EMPTY_PARAMS;
 
 /**
@@ -76,7 +68,6 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
     private static final Logger log = LogManager.getLogger(LocalClusterIndicesClient.class);
 
     private final Client client;
-    private final NamedXContentRegistry xContentRegistry;
 
     @Override
     public boolean supportsMetadataType(String metadataType) {
@@ -92,7 +83,6 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
     public LocalClusterIndicesClient(Client client, NamedXContentRegistry xContentRegistry, Map<String, String> metadataSettings) {
         super.initialize(metadataSettings);
         this.client = client;
-        this.xContentRegistry = xContentRegistry;
     }
 
     @Override
@@ -108,21 +98,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
                 IndexRequest indexRequest = createIndexRequest(request).setRefreshPolicy(IMMEDIATE);
                 client.index(indexRequest, ActionListener.wrap(indexResponse -> {
                     log.info("Creation status for id {}: {}", indexResponse.getId(), indexResponse.getResult());
-                    try {
-                        PutDataObjectResponse response = PutDataObjectResponse.builder()
-                            .id(indexResponse.getId())
-                            .parser(createParser(indexResponse))
-                            .build();
-                        future.complete(response);
-                    } catch (Exception e) {
-                        future.completeExceptionally(
-                            new OpenSearchStatusException(
-                                "Failed to create response for index " + request.index(),
-                                RestStatus.INTERNAL_SERVER_ERROR,
-                                e
-                            )
-                        );
-                    }
+                    future.complete(new PutDataObjectResponse(indexResponse));
                 },
                     e -> future.completeExceptionally(
                         new OpenSearchStatusException(
@@ -166,36 +142,19 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         CompletableFuture<GetDataObjectResponse> future = new CompletableFuture<>();
         return doPrivileged(() -> {
             GetRequest getRequest = createGetRequest(request);
-            client.get(getRequest, ActionListener.wrap(getResponse -> {
-                if (getResponse == null) {
-                    future.complete(GetDataObjectResponse.builder().id(request.id()).parser(null).build());
-                } else {
-                    try {
-                        GetDataObjectResponse response = GetDataObjectResponse.builder()
-                            .id(getResponse.getId())
-                            .parser(createParser(getResponse))
-                            .source(getResponse.getSource())
-                            .build();
-                        future.complete(response);
-                    } catch (IOException e) {
-                        future.completeExceptionally(
-                            new OpenSearchStatusException(
-                                "Failed to create parser for data object retrieved from index " + request.index(),
-                                RestStatus.INTERNAL_SERVER_ERROR,
-                                e
-                            )
-                        );
-                    }
-                }
-            },
-                e -> future.completeExceptionally(
-                    new OpenSearchStatusException(
-                        "Failed to get data object from index " + request.index(),
-                        RestStatus.INTERNAL_SERVER_ERROR,
-                        e
+            client.get(
+                getRequest,
+                ActionListener.wrap(
+                    getResponse -> future.complete(new GetDataObjectResponse(getResponse)),
+                    e -> future.completeExceptionally(
+                        new OpenSearchStatusException(
+                            "Failed to get data object from index " + request.index(),
+                            RestStatus.INTERNAL_SERVER_ERROR,
+                            e
+                        )
                     )
                 )
-            ));
+            );
             return future;
         });
 
@@ -222,21 +181,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
                         future.complete(UpdateDataObjectResponse.builder().id(request.id()).parser(null).build());
                     } else {
                         log.info("Update status for id {}: {}", updateResponse.getId(), updateResponse.getResult());
-                        try {
-                            UpdateDataObjectResponse response = UpdateDataObjectResponse.builder()
-                                .id(updateResponse.getId())
-                                .parser(createParser(updateResponse))
-                                .build();
-                            future.complete(response);
-                        } catch (IOException e) {
-                            future.completeExceptionally(
-                                new OpenSearchStatusException(
-                                    "Failed to create parser for updated data object in index " + request.index(),
-                                    RestStatus.INTERNAL_SERVER_ERROR,
-                                    e
-                                )
-                            );
-                        }
+                        future.complete(new UpdateDataObjectResponse(updateResponse));
                     }
                 }, e -> {
                     Throwable t = ExceptionsHelper.unwrapCause(e);
@@ -302,21 +247,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
             DeleteRequest deleteRequest = createDeleteRequest(request).setRefreshPolicy(IMMEDIATE);
             client.delete(deleteRequest, ActionListener.wrap(deleteResponse -> {
                 log.info("Deletion status for id {}: {}", deleteResponse.getId(), deleteResponse.getResult());
-                try {
-                    DeleteDataObjectResponse response = DeleteDataObjectResponse.builder()
-                        .id(deleteResponse.getId())
-                        .parser(createParser(deleteResponse))
-                        .build();
-                    future.complete(response);
-                } catch (IOException e) {
-                    future.completeExceptionally(
-                        new OpenSearchStatusException(
-                            "Failed to parse deletion response for data object in index " + request.index(),
-                            RestStatus.INTERNAL_SERVER_ERROR,
-                            e
-                        )
-                    );
-                }
+                future.complete(new DeleteDataObjectResponse(deleteResponse));
             },
                 e -> future.completeExceptionally(
                     new OpenSearchStatusException(
@@ -356,18 +287,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
                     }
                 }
                 client.bulk(bulkRequest.setRefreshPolicy(IMMEDIATE), ActionListener.wrap(bulkResponse -> {
-                    try {
-                        BulkDataObjectResponse response = bulkResponseToDataObjectResponse(bulkResponse);
-                        future.complete(response);
-                    } catch (IOException e) {
-                        future.completeExceptionally(
-                            new OpenSearchStatusException(
-                                "Failed to parse data object in a bulk response",
-                                RestStatus.INTERNAL_SERVER_ERROR,
-                                e
-                            )
-                        );
-                    }
+                    future.complete(new BulkDataObjectResponse(bulkResponse));
                 },
                     e -> future.completeExceptionally(
                         new OpenSearchStatusException("Failed to execute bulk request", RestStatus.INTERNAL_SERVER_ERROR, e)
@@ -378,49 +298,6 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
             }
             return future;
         });
-    }
-
-    private BulkDataObjectResponse bulkResponseToDataObjectResponse(BulkResponse bulkResponse) throws IOException {
-        int responseCount = bulkResponse.getItems().length;
-        log.info("Bulk action complete for {} items: {}", responseCount, bulkResponse.hasFailures() ? "has failures" : "success");
-        DataObjectResponse[] responses = new DataObjectResponse[responseCount];
-        for (int i = 0; i < responseCount; i++) {
-            BulkItemResponse itemResponse = bulkResponse.getItems()[i];
-            responses[i] = createDataObjectResponse(itemResponse);
-        }
-        return new BulkDataObjectResponse(
-            responses,
-            bulkResponse.getTook().millis(),
-            bulkResponse.getIngestTookInMillis(),
-            bulkResponse.hasFailures(),
-            createParser(bulkResponse)
-        );
-    }
-
-    private DataObjectResponse createDataObjectResponse(BulkItemResponse itemResponse) throws IOException {
-        switch (itemResponse.getOpType()) {
-            case INDEX:
-            case CREATE:
-                return PutDataObjectResponse.builder()
-                    .id(itemResponse.getId())
-                    .parser(createParser(itemResponse))
-                    .failed(itemResponse.isFailed())
-                    .build();
-            case UPDATE:
-                return UpdateDataObjectResponse.builder()
-                    .id(itemResponse.getId())
-                    .parser(createParser(itemResponse))
-                    .failed(itemResponse.isFailed())
-                    .build();
-            case DELETE:
-                return DeleteDataObjectResponse.builder()
-                    .id(itemResponse.getId())
-                    .parser(createParser(itemResponse))
-                    .failed(itemResponse.isFailed())
-                    .build();
-            default:
-                throw new OpenSearchStatusException("Invalid operation type for bulk response", RestStatus.INTERNAL_SERVER_ERROR);
-        }
     }
 
     @Override
@@ -457,18 +334,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
             SearchRequest searchRequest = new SearchRequest(request.indices(), searchSource);
             client.search(searchRequest, ActionListener.wrap(searchResponse -> {
                 log.info("Search returned {} hits", searchResponse.getHits().getTotalHits());
-                try {
-                    SearchDataObjectResponse response = SearchDataObjectResponse.builder().parser(createParser(searchResponse)).build();
-                    future.complete(response);
-                } catch (IOException e) {
-                    future.completeExceptionally(
-                        new OpenSearchStatusException(
-                            "Failed to parse search response for indices " + Arrays.toString(request.indices()),
-                            RestStatus.INTERNAL_SERVER_ERROR,
-                            e
-                        )
-                    );
-                }
+                future.complete(new SearchDataObjectResponse(searchResponse));
             },
                 e -> future.completeExceptionally(
                     new OpenSearchStatusException(
@@ -480,14 +346,6 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
             ));
             return future;
         });
-    }
-
-    private XContentParser createParser(ToXContent obj) throws IOException {
-        return jsonXContent.createParser(
-            xContentRegistry,
-            DeprecationHandler.IGNORE_DEPRECATIONS,
-            Strings.toString(MediaTypeRegistry.JSON, obj)
-        );
     }
 
     @Override

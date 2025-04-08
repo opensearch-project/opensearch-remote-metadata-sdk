@@ -44,7 +44,7 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
     }
 
     /**
-     * Execute this priveleged action asynchronously
+     * Execute this privileged action asynchronously
      * @param <T> The return type of the completable future to be returned
      * @param action the action to execute
      * @param executor the executor for the action
