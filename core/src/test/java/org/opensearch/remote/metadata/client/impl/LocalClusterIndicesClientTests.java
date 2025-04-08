@@ -56,6 +56,7 @@ import org.opensearch.remote.metadata.client.SearchDataObjectResponse;
 import org.opensearch.remote.metadata.client.UpdateDataObjectRequest;
 import org.opensearch.remote.metadata.client.UpdateDataObjectResponse;
 import org.opensearch.remote.metadata.common.TestDataObject;
+import org.opensearch.search.aggregations.metrics.ParsedAvg;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.internal.InternalSearchResponse;
 import org.opensearch.transport.RemoteTransportException;
@@ -83,6 +84,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -891,6 +893,7 @@ public class LocalClusterIndicesClientTests {
             + "    \"hits\": []\n"
             + "  },\n"
             + "  \"aggregations\": {\n"
+            // tests the primary parser
             + "    \"sterms#unique2_connector_names\": {\n"
             + "      \"doc_count_error_upper_bound\": 0,\n"
             + "      \"sum_other_doc_count\": 0,\n"
@@ -900,9 +903,23 @@ public class LocalClusterIndicesClientTests {
             + "          \"doc_count\": 5\n"
             + "        }\n"
             + "      ]\n"
+            + "    },\n"
+            // tests the backup parser
+            + "    \"custom_agg#custom_value\": {\n"
+            + "      \"value\": 42.5\n"
             + "    }\n"
             + "  }\n"
             + "}";
+
+        // Have our backup xContentRegistry handle the custom class
+        when(xContentRegistry.parseNamedObject(any(), eq("custom_agg"), any(XContentParser.class), any())).thenAnswer(invocation -> {
+            XContentParser parser = invocation.getArgument(2);
+            parser.nextToken(); // Move to the "value" field
+            parser.nextToken(); // Move to the value
+            parser.doubleValue(); // Read the value
+            return new ParsedAvg(); // Return an aggregator object
+        });
+
         XContentParser parser = ((LocalClusterIndicesClient) sdkClient.getDelegate()).createParser(searchResponseJson);
         SearchResponse response = SearchResponse.fromXContent(parser);
         assertTrue(response.getAggregations().asMap().containsKey("unique2_connector_names"));

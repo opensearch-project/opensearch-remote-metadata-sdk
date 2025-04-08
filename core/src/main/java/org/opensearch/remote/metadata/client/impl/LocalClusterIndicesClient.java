@@ -76,8 +76,6 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
     private static final Logger log = LogManager.getLogger(LocalClusterIndicesClient.class);
 
     private final Client client;
-    // TODO Combine this with the default entries
-    private final NamedXContentRegistry xContentRegistry;
 
     @Override
     public boolean supportsMetadataType(String metadataType) {
@@ -91,9 +89,8 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
      * @param metadataSettings The map of metadata settings.
      */
     public LocalClusterIndicesClient(Client client, NamedXContentRegistry xContentRegistry, Map<String, String> metadataSettings) {
-        super.initialize(metadataSettings);
+        super.initialize(xContentRegistry, metadataSettings);
         this.client = client;
-        this.xContentRegistry = xContentRegistry;
     }
 
     @Override

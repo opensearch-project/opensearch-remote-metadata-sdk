@@ -8,11 +8,11 @@
  */
 package org.opensearch.remote.metadata.client;
 
-import org.opensearch.common.settings.Settings;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.xcontent.ContextParser;
+import org.opensearch.core.xcontent.NamedObjectNotFoundException;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.search.SearchModule;
+import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.search.aggregations.Aggregation;
 import org.opensearch.search.aggregations.bucket.adjacency.AdjacencyMatrixAggregationBuilder;
 import org.opensearch.search.aggregations.bucket.adjacency.ParsedAdjacencyMatrix;
@@ -107,6 +107,7 @@ import org.opensearch.search.aggregations.pipeline.ParsedStatsBucket;
 import org.opensearch.search.aggregations.pipeline.PercentilesBucketPipelineAggregationBuilder;
 import org.opensearch.search.aggregations.pipeline.StatsBucketPipelineAggregationBuilder;
 
+import java.io.IOException;
 import java.security.PrivilegedAction;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -135,20 +136,34 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
     protected String remoteMetadataEndpoint;
     protected String region;
     protected String serviceName;
-    protected NamedXContentRegistry defaultXContentRegistry = createXContentRegistry();
+    protected NamedXContentRegistry defaultXContentRegistry;
 
     @Override
     public void initialize(Map<String, String> metadataSettings) {
+        initialize(null, metadataSettings);
+    }
+
+    /**
+     * Initialize with an optional xContentRegistry
+     * @param xContentRegistry a registry to be used for custom named objects not handled by the default
+     * @param metadataSettings the metadata settings
+     */
+    public void initialize(NamedXContentRegistry xContentRegistry, Map<String, String> metadataSettings) {
         this.tenantIdField = metadataSettings.get(TENANT_ID_FIELD_KEY);
 
         this.remoteMetadataType = metadataSettings.get(REMOTE_METADATA_TYPE_KEY);
         this.remoteMetadataEndpoint = metadataSettings.get(REMOTE_METADATA_ENDPOINT_KEY);
         this.region = metadataSettings.get(REMOTE_METADATA_REGION_KEY);
         this.serviceName = metadataSettings.get(REMOTE_METADATA_SERVICE_NAME_KEY);
+
+        NamedXContentRegistry defaultRegistry = createXContentRegistry();
+        this.defaultXContentRegistry = (xContentRegistry != null)
+            ? new CombinedNamedXContentRegistry(defaultRegistry, xContentRegistry)
+            : defaultRegistry;
     }
 
     /**
-     * Execute this priveleged action asynchronously
+     * Execute this privileged action asynchronously
      * @param <T> The return type of the completable future to be returned
      * @param action the action to execute
      * @param executor the executor for the action
@@ -156,10 +171,6 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
      */
     protected <T> CompletionStage<T> executePrivilegedAsync(PrivilegedAction<T> action, Executor executor) {
         return CompletableFuture.supplyAsync(() -> doPrivileged(action), executor);
-    }
-
-    protected static NamedXContentRegistry searchAggregationXContentRegistry(NamedXContentRegistry registry) {
-        return new NamedXContentRegistry(new SearchModule(Settings.EMPTY, Collections.emptyList()).getNamedXContents());
     }
 
     private NamedXContentRegistry createXContentRegistry() {
@@ -223,5 +234,32 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
             .map((entry) -> new NamedXContentRegistry.Entry(Aggregation.class, new ParseField((String) entry.getKey()), entry.getValue()))
             .collect(Collectors.toList());
         return entries;
+    }
+
+    private static class CombinedNamedXContentRegistry extends NamedXContentRegistry {
+        private final NamedXContentRegistry primaryRegistry;
+        private final NamedXContentRegistry backupRegistry;
+
+        /**
+         * Create a wrapper NamedXContentRegistry for parsing
+         * @param primaryRegistry the registry to attempt to use to parse first
+         * @param backupRegistry the backup registry to use if the provided registry doesn't have the named object
+         */
+        public CombinedNamedXContentRegistry(NamedXContentRegistry primaryRegistry, NamedXContentRegistry backupRegistry) {
+            super(Collections.emptyList()); // No-arg constructor not available
+            this.primaryRegistry = primaryRegistry;
+            this.backupRegistry = backupRegistry;
+        }
+
+        @Override
+        public <T, C> T parseNamedObject(Class<T> categoryClass, String name, XContentParser parser, C context) throws IOException {
+            try {
+                // Attempt to parse first with client provided registry
+                return primaryRegistry.parseNamedObject(categoryClass, name, parser, context);
+            } catch (NamedObjectNotFoundException e) {
+                // If the NamedObject isn't there, try the backup
+                return backupRegistry.parseNamedObject(categoryClass, name, parser, context);
+            }
+        }
     }
 }
