@@ -76,6 +76,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
     private static final Logger log = LogManager.getLogger(LocalClusterIndicesClient.class);
 
     private final Client client;
+    // TODO Combine this with the default entries
     private final NamedXContentRegistry xContentRegistry;
 
     @Override
@@ -482,12 +483,13 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         });
     }
 
+    // Package private for testing
+    XContentParser createParser(String json) throws IOException {
+        return jsonXContent.createParser(defaultXContentRegistry, DeprecationHandler.IGNORE_DEPRECATIONS, json);
+    }
+
     private XContentParser createParser(ToXContent obj) throws IOException {
-        return jsonXContent.createParser(
-            xContentRegistry,
-            DeprecationHandler.IGNORE_DEPRECATIONS,
-            Strings.toString(MediaTypeRegistry.JSON, obj)
-        );
+        return createParser(Strings.toString(MediaTypeRegistry.JSON, obj));
     }
 
     @Override
