@@ -23,8 +23,8 @@ buildscript {
 
         opensearch_java_version = '2.22.0'
         aws_sdk_version = '2.30.18'
-        junit_version = '5.12.1' // version catalog is 4.x
-        junit_platform_version = '1.12.1' // version catalog brings in earlier
+        junit_version = '5.12.2' // version catalog is 4.x
+        junit_platform_version = '1.12.2' // version catalog brings in earlier
     }
 
     repositories {
