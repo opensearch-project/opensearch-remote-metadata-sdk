@@ -559,12 +559,17 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         });
     }
 
+    // Package private for testing
+    XContentParser createParser(String json) throws IOException {
+        return jsonXContent.createParser(defaultXContentRegistry, DeprecationHandler.IGNORE_DEPRECATIONS, json);
+    }
+
     private XContentParser createParser(JsonpSerializable obj) throws IOException {
         StringWriter stringWriter = new StringWriter();
         try (JsonGenerator generator = mapper.jsonProvider().createGenerator(stringWriter)) {
             mapper.serialize(obj, generator);
         }
-        return jsonXContent.createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.IGNORE_DEPRECATIONS, stringWriter.toString());
+        return createParser(stringWriter.toString());
     }
 
     /**

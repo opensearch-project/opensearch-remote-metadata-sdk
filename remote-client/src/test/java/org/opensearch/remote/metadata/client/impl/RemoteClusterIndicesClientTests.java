@@ -867,4 +867,41 @@ public class RemoteClusterIndicesClientTests {
         assertEquals(UnsupportedOperationException.class, cause.getClass());
         assertEquals("test", cause.getMessage());
     }
+
+    @Test
+    public void testParsingAggregations() throws IOException {
+        String searchResponseJson = "{\n"
+            + "  \"took\": 5,\n"
+            + "  \"timed_out\": false,\n"
+            + "  \"_shards\": {\n"
+            + "    \"total\": 1,\n"
+            + "    \"successful\": 1,\n"
+            + "    \"skipped\": 0,\n"
+            + "    \"failed\": 0\n"
+            + "  },\n"
+            + "  \"hits\": {\n"
+            + "    \"total\": {\n"
+            + "      \"value\": 0,\n"
+            + "      \"relation\": \"eq\"\n"
+            + "    },\n"
+            + "    \"max_score\": null,\n"
+            + "    \"hits\": []\n"
+            + "  },\n"
+            + "  \"aggregations\": {\n"
+            + "    \"sterms#unique2_connector_names\": {\n"
+            + "      \"doc_count_error_upper_bound\": 0,\n"
+            + "      \"sum_other_doc_count\": 0,\n"
+            + "      \"buckets\": [\n"
+            + "        {\n"
+            + "          \"key\": \"sample_connector\",\n"
+            + "          \"doc_count\": 5\n"
+            + "        }\n"
+            + "      ]\n"
+            + "    }\n"
+            + "  }\n"
+            + "}";
+        XContentParser parser = ((RemoteClusterIndicesClient) sdkClient.getDelegate()).createParser(searchResponseJson);
+        org.opensearch.action.search.SearchResponse response = org.opensearch.action.search.SearchResponse.fromXContent(parser);
+        assertTrue(response.getAggregations().asMap().containsKey("unique2_connector_names"));
+    }
 }
