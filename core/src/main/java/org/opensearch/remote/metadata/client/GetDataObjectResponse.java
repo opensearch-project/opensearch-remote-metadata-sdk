@@ -8,17 +8,34 @@
  */
 package org.opensearch.remote.metadata.client;
 
+import org.opensearch.action.get.GetResponse;
+import org.opensearch.common.Nullable;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.remote.metadata.common.SdkClientUtils;
 
+import java.io.IOException;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * A class abstracting an OpenSearch GetResponse
  */
 public class GetDataObjectResponse extends DataObjectResponse {
     private final Map<String, Object> source;
+    // If populated directly, will populate superclass fields
+    private final GetResponse getResponse;
+
+    /**
+     * Instantiate this response with a {@link GetResponse}.
+     * @param getResponse a pre-completed Get response
+     */
+    public GetDataObjectResponse(GetResponse getResponse) {
+        super(getResponse.getIndex(), getResponse.getId(), null, false, null, null);
+        this.getResponse = getResponse;
+        this.source = Optional.ofNullable(getResponse.getSourceAsMap()).orElse(Collections.emptyMap());
+    }
 
     /**
      * Instantiate this request with an id and parser/map used to recreate the data object.
@@ -42,6 +59,7 @@ public class GetDataObjectResponse extends DataObjectResponse {
         Map<String, Object> source
     ) {
         super(index, id, parser, failed, cause, status);
+        this.getResponse = null;
         this.source = source;
     }
 
@@ -51,6 +69,33 @@ public class GetDataObjectResponse extends DataObjectResponse {
      */
     public Map<String, Object> source() {
         return this.source;
+    }
+
+    /**
+     * Returns the GetResponse object
+     * @return the get response if present, or parsed otherwise
+     */
+    public @Nullable GetResponse getResponse() {
+        if (this.getResponse == null) {
+            try {
+                return GetResponse.fromXContent(parser());
+            } catch (IOException | NullPointerException e) {
+                return null;
+            }
+        }
+        return this.getResponse;
+    }
+
+    @Override
+    public XContentParser parser() {
+        if (super.parser() == null) {
+            try {
+                return SdkClientUtils.createParser(this.getResponse);
+            } catch (IOException | NullPointerException e) {
+                return null;
+            }
+        }
+        return super.parser();
     }
 
     /**
