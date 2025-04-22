@@ -8,13 +8,57 @@
  */
 package org.opensearch.remote.metadata.client;
 
+import org.opensearch.OpenSearchException;
+import org.opensearch.action.DocWriteResponse;
+import org.opensearch.action.bulk.BulkItemResponse;
+import org.opensearch.action.delete.DeleteResponse;
+import org.opensearch.common.Nullable;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.remote.metadata.common.SdkClientUtils;
+
+import java.io.IOException;
 
 /**
  * A class abstracting an OpenSearch DeleteResponse
  */
 public class DeleteDataObjectResponse extends DataObjectResponse {
+
+    // If populated directly, will populate superclass fields
+    private final DeleteResponse deleteResponse;
+
+    /**
+     * Instantiate this response with a {@link DeleteResponse}.
+     * @param deleteResponse a pre-completed Get response
+     */
+    public DeleteDataObjectResponse(DeleteResponse deleteResponse) {
+        super(deleteResponse.getIndex(), deleteResponse.getId(), null, false, null, null);
+        this.deleteResponse = deleteResponse;
+    }
+
+    /**
+     * Instantiate this response with a {@link BulkItemResponse} for a delete operation.
+     * @param itemResponse a bulk item response for a delete operation
+     */
+    public DeleteDataObjectResponse(BulkItemResponse itemResponse) {
+        super(
+            itemResponse.getIndex(),
+            itemResponse.getId(),
+            null,
+            itemResponse.isFailed(),
+            itemResponse.getFailure() != null ? itemResponse.getFailure().getCause() : null,
+            itemResponse.getFailure() != null ? itemResponse.getFailure().getStatus() : null
+        );
+        DocWriteResponse response = itemResponse.getResponse();
+        this.deleteResponse = switch (response) {
+            case null -> null;
+            case DeleteResponse dr -> dr;
+            default -> throw new OpenSearchException(
+                "Expected DeleteResponse but got " + response.getClass().getSimpleName(),
+                RestStatus.INTERNAL_SERVER_ERROR
+            );
+        };
+    }
 
     /**
      * Instantiate this request with an id and parser representing a DeleteResponse
@@ -29,6 +73,34 @@ public class DeleteDataObjectResponse extends DataObjectResponse {
      */
     public DeleteDataObjectResponse(String index, String id, XContentParser parser, boolean failed, Exception cause, RestStatus status) {
         super(index, id, parser, failed, cause, status);
+        this.deleteResponse = null;
+    }
+
+    /**
+     * Returns the DeleteResponse object
+     * @return the delete response if present, or parsed otherwise
+     */
+    public @Nullable DeleteResponse deleteResponse() {
+        if (this.deleteResponse == null) {
+            try {
+                return DeleteResponse.fromXContent(parser());
+            } catch (IOException | NullPointerException e) {
+                return null;
+            }
+        }
+        return this.deleteResponse;
+    }
+
+    @Override
+    public XContentParser parser() {
+        if (super.parser() == null) {
+            try {
+                return SdkClientUtils.createParser(this.deleteResponse);
+            } catch (IOException | NullPointerException e) {
+                return null;
+            }
+        }
+        return super.parser();
     }
 
     /**

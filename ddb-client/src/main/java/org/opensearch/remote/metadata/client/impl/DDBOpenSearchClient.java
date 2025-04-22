@@ -46,7 +46,6 @@ import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.json.JsonXContent;
 import org.opensearch.core.common.Strings;
 import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.DeprecationHandler;
 import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.ToXContent;
@@ -85,7 +84,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.opensearch.common.util.concurrent.ThreadContextAccess.doPrivileged;
-import static org.opensearch.common.xcontent.json.JsonXContent.jsonXContent;
 import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_PRIMARY_TERM;
 import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
 import static org.opensearch.remote.metadata.common.CommonValue.AWS_DYNAMO_DB;
@@ -200,7 +198,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                         Map.of("result", "created")
                     );
                     try {
-                        return PutDataObjectResponse.builder().id(id).parser(createParser(simulatedIndexResponse)).build();
+                        return PutDataObjectResponse.builder().id(id).parser(SdkClientUtils.createParser(simulatedIndexResponse)).build();
                     } catch (IOException e) {
                         throw new OpenSearchStatusException("Failed to create parser for response", RestStatus.INTERNAL_SERVER_ERROR, e);
                     }
@@ -296,7 +294,10 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                             sequenceNumber,
                             Map.of("result", "updated")
                         );
-                        return UpdateDataObjectResponse.builder().id(request.id()).parser(createParser(simulatedUpdateResponse)).build();
+                        return UpdateDataObjectResponse.builder()
+                            .id(request.id())
+                            .parser(SdkClientUtils.createParser(simulatedUpdateResponse))
+                            .build();
                     } catch (IOException e) {
                         throw new OpenSearchStatusException("Parsing error creating update response", RestStatus.INTERNAL_SERVER_ERROR, e);
                     }
@@ -419,7 +420,10 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                     sequenceNumber,
                     Map.of("result", "deleted")
                 );
-                return DeleteDataObjectResponse.builder().id(request.id()).parser(createParser(simulatedDeleteResponse)).build();
+                return DeleteDataObjectResponse.builder()
+                    .id(request.id())
+                    .parser(SdkClientUtils.createParser(simulatedDeleteResponse))
+                    .build();
             } catch (IOException e) {
                 // Rethrow unchecked exception on XContent parsing error
                 throw new OpenSearchStatusException("Failed to parse response", RestStatus.INTERNAL_SERVER_ERROR);
@@ -522,7 +526,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                     responses.toArray(new DataObjectResponse[0]),
                     tookMillis,
                     br.hasFailures(),
-                    createParser(builder.toString())
+                    SdkClientUtils.createParser(builder.toString())
                 )
             );
         } catch (IOException e) {
@@ -583,10 +587,6 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
     private String getIndexName(String index) {
         // System index is not supported in remote index. Replacing '.' from index name.
         return (index.length() > 1 && index.charAt(0) == '.') ? index.substring(1) : index;
-    }
-
-    private XContentParser createParser(String json) throws IOException {
-        return jsonXContent.createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.IGNORE_DEPRECATIONS, json);
     }
 
     private GetItemRequest buildGetItemRequest(String requestTenantId, String documentId, String index) {

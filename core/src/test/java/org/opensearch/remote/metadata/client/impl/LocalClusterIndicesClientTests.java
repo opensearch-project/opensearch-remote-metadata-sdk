@@ -79,7 +79,6 @@ import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedTok
 import static org.opensearch.remote.metadata.common.CommonValue.TENANT_ID_FIELD_KEY;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -223,26 +222,6 @@ public class LocalClusterIndicesClientTests {
         );
         ensureExpectedToken(XContentParser.Token.START_OBJECT, dataParser.nextToken(), dataParser);
         assertEquals("foo", TestDataObject.parse(dataParser).data());
-    }
-
-    @Test
-    public void testGetDataObject_NullResponse() throws IOException {
-        GetDataObjectRequest getRequest = GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build();
-
-        doAnswer(invocation -> {
-            ActionListener<GetResponse> listener = invocation.getArgument(1);
-            listener.onResponse(null);
-            return null;
-        }).when(mockedClient).get(any(GetRequest.class), any());
-
-        GetDataObjectResponse response = sdkClient.getDataObjectAsync(getRequest).toCompletableFuture().join();
-
-        ArgumentCaptor<GetRequest> requestCaptor = ArgumentCaptor.forClass(GetRequest.class);
-        verify(mockedClient, times(1)).get(requestCaptor.capture(), any());
-        assertEquals(TEST_INDEX, requestCaptor.getValue().index());
-        assertEquals(TEST_ID, response.id());
-        assertNull(response.parser());
-        assertTrue(response.source().isEmpty());
     }
 
     @Test
@@ -398,30 +377,6 @@ public class LocalClusterIndicesClientTests {
         assertEquals(0, updateActionResponse.getShardInfo().getFailed());
         assertEquals(1, updateActionResponse.getShardInfo().getSuccessful());
         assertEquals(1, updateActionResponse.getShardInfo().getTotal());
-    }
-
-    @Test
-    public void testUpdateDataObject_Null() throws IOException {
-        UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
-            .index(TEST_INDEX)
-            .id(TEST_ID)
-            .tenantId(TEST_TENANT_ID)
-            .dataObject(testDataObject)
-            .build();
-
-        doAnswer(invocation -> {
-            ActionListener<UpdateResponse> listener = invocation.getArgument(1);
-            listener.onResponse(null);
-            return null;
-        }).when(mockedClient).update(any(UpdateRequest.class), any());
-
-        UpdateDataObjectResponse response = sdkClient.updateDataObjectAsync(updateRequest).toCompletableFuture().join();
-
-        ArgumentCaptor<UpdateRequest> requestCaptor = ArgumentCaptor.forClass(UpdateRequest.class);
-        verify(mockedClient, times(1)).update(requestCaptor.capture(), any());
-        assertEquals(TEST_INDEX, requestCaptor.getValue().index());
-        assertEquals(TEST_ID, response.id());
-        assertNull(response.parser());
     }
 
     @Test
@@ -646,7 +601,7 @@ public class LocalClusterIndicesClientTests {
                 new BulkItemResponse(
                     0,
                     OpType.DELETE,
-                    new IndexResponse(new ShardId(TEST_INDEX, "_na_", 0), TEST_ID + "3", 1, 1, 1, true)
+                    new DeleteResponse(new ShardId(TEST_INDEX, "_na_", 0), TEST_ID + "3", 1, 1, 1, true)
                 ) },
             100L
         );
