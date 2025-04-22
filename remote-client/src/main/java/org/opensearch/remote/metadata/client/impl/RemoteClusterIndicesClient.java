@@ -62,7 +62,6 @@ import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.json.JsonXContent;
 import org.opensearch.core.common.Strings;
 import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.DeprecationHandler;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
@@ -102,7 +101,6 @@ import java.util.concurrent.Executor;
 import jakarta.json.stream.JsonGenerator;
 import jakarta.json.stream.JsonParser;
 
-import static org.opensearch.common.xcontent.json.JsonXContent.jsonXContent;
 import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_OPENSEARCH;
 import static org.opensearch.remote.metadata.common.CommonValue.TENANT_ID_FIELD_KEY;
 
@@ -467,7 +465,7 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         try (JsonGenerator generator = mapper.jsonProvider().createGenerator(stringWriter)) {
             mapper.serialize(obj, generator);
         }
-        return jsonXContent.createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.IGNORE_DEPRECATIONS, stringWriter.toString());
+        return SdkClientUtils.createParser(stringWriter.toString());
     }
 
     /**

@@ -27,9 +27,8 @@ import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.bytes.BytesArray;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.DeprecationHandler;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.ToXContent;
+import org.opensearch.core.xcontent.ToXContentObject;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.get.GetResult;
@@ -48,10 +47,13 @@ import java.util.EnumSet;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 import org.mockito.ArgumentCaptor;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -79,19 +81,33 @@ public class SdkClientUtilsTests {
     }
 
     @Test
-    void testWrapPutCompletion_Success() throws IOException {
-        @SuppressWarnings("unchecked")
-        ActionListener<IndexResponse> listener = mock(ActionListener.class);
-        PutDataObjectResponse response = mock(PutDataObjectResponse.class);
-        XContentBuilder builder = JsonXContent.contentBuilder();
-        new IndexResponse(new ShardId(TEST_INDEX, "_na_", 0), TEST_ID, 1, 0, 2, true).toXContent(builder, ToXContent.EMPTY_PARAMS);
-        XContentParser parser = createParser(builder);
-        when(response.parser()).thenReturn(parser);
-        CompletableFuture<PutDataObjectResponse> future = CompletableFuture.completedFuture(response);
+    void testLowerCaseEnumValues() {
+        // Test normal case
+        String input = "{\"status\":\"CREATED\"}";
+        String result = SdkClientUtils.lowerCaseEnumValues("status", input);
+        assertEquals("{\"status\":\"created\"}", result);
 
-        future.whenComplete(SdkClientUtils.wrapPutCompletion(listener));
+        // Test with multiple occurrences
+        input = "{\"status\":\"CREATED\",\"other\":\"UPDATED\"}";
+        result = SdkClientUtils.lowerCaseEnumValues("status", input);
+        assertEquals("{\"status\":\"created\",\"other\":\"UPDATED\"}", result);
 
-        verify(listener).onResponse(any(IndexResponse.class));
+        // Test with no matches
+        input = "{\"status\":\"created\"}";
+        result = SdkClientUtils.lowerCaseEnumValues("status", input);
+        assertEquals(input, result);
+
+        // Test with empty string
+        assertEquals("", SdkClientUtils.lowerCaseEnumValues("status", ""));
+
+        // Test null cases
+        assertNull(SdkClientUtils.lowerCaseEnumValues("status", null));
+        assertEquals("some json", SdkClientUtils.lowerCaseEnumValues(null, "some json"));
+
+        // Test with mixed case (should only match all caps)
+        input = "{\"status\":\"Created\"}";
+        result = SdkClientUtils.lowerCaseEnumValues("status", input);
+        assertEquals(input, result);
     }
 
     @Test
@@ -116,7 +132,7 @@ public class SdkClientUtilsTests {
 
         future.whenComplete(SdkClientUtils.wrapPutCompletion(listener));
 
-        verify(listener).onResponse(null);
+        verify(listener).onFailure(any(OpenSearchException.class));
     }
 
     @Test
@@ -150,6 +166,7 @@ public class SdkClientUtilsTests {
         );
         XContentParser parser = createParser(builder);
         when(response.parser()).thenReturn(parser);
+        when(response.getResponse()).thenCallRealMethod();
         CompletableFuture<GetDataObjectResponse> future = CompletableFuture.completedFuture(response);
 
         future.whenComplete(SdkClientUtils.wrapGetCompletion(listener));
@@ -179,7 +196,7 @@ public class SdkClientUtilsTests {
 
         future.whenComplete(SdkClientUtils.wrapGetCompletion(listener));
 
-        verify(listener).onResponse(null);
+        verify(listener).onFailure(any(OpenSearchException.class));
     }
 
     @Test
@@ -212,6 +229,7 @@ public class SdkClientUtilsTests {
         );
         XContentParser parser = createParser(builder);
         when(response.parser()).thenReturn(parser);
+        when(response.updateResponse()).thenCallRealMethod();
         CompletableFuture<UpdateDataObjectResponse> future = CompletableFuture.completedFuture(response);
 
         future.whenComplete(SdkClientUtils.wrapUpdateCompletion(listener));
@@ -241,7 +259,7 @@ public class SdkClientUtilsTests {
 
         future.whenComplete(SdkClientUtils.wrapUpdateCompletion(listener));
 
-        verify(listener).onResponse(null);
+        verify(listener).onFailure(any(OpenSearchException.class));
     }
 
     @Test
@@ -271,6 +289,7 @@ public class SdkClientUtilsTests {
         new DeleteResponse(new ShardId(TEST_INDEX, "_na_", 0), TEST_ID, 1, 0, 2, true).toXContent(builder, ToXContent.EMPTY_PARAMS);
         XContentParser parser = createParser(builder);
         when(response.parser()).thenReturn(parser);
+        when(response.deleteResponse()).thenCallRealMethod();
         CompletableFuture<DeleteDataObjectResponse> future = CompletableFuture.completedFuture(response);
 
         future.whenComplete(SdkClientUtils.wrapDeleteCompletion(listener));
@@ -300,7 +319,7 @@ public class SdkClientUtilsTests {
 
         future.whenComplete(SdkClientUtils.wrapDeleteCompletion(listener));
 
-        verify(listener).onResponse(null);
+        verify(listener).onFailure(any(OpenSearchException.class));
     }
 
     @Test
@@ -322,14 +341,11 @@ public class SdkClientUtilsTests {
     }
 
     @Test
-    void testWrapBulkCompletion_Success() throws IOException {
+    void testWrapBulkCompletion_Success() throws IOException, InterruptedException, ExecutionException {
         @SuppressWarnings("unchecked")
         ActionListener<BulkResponse> listener = mock(ActionListener.class);
         BulkDataObjectResponse response = mock(BulkDataObjectResponse.class);
-        XContentBuilder builder = JsonXContent.contentBuilder();
-        new BulkResponse(new BulkItemResponse[0], 100L).toXContent(builder, ToXContent.EMPTY_PARAMS);
-        XContentParser parser = createParser(builder);
-        when(response.parser()).thenReturn(parser);
+        when(response.bulkResponse()).thenReturn(new BulkResponse(new BulkItemResponse[0], 100L));
         CompletableFuture<BulkDataObjectResponse> future = CompletableFuture.completedFuture(response);
 
         future.whenComplete(SdkClientUtils.wrapBulkCompletion(listener));
@@ -359,7 +375,7 @@ public class SdkClientUtilsTests {
 
         future.whenComplete(SdkClientUtils.wrapBulkCompletion(listener));
 
-        verify(listener).onResponse(null);
+        verify(listener).onFailure(any(OpenSearchException.class));
     }
 
     @Test
@@ -384,7 +400,6 @@ public class SdkClientUtilsTests {
     void testWrapSearchCompletion_Success() throws IOException {
         @SuppressWarnings("unchecked")
         ActionListener<SearchResponse> listener = mock(ActionListener.class);
-        SearchDataObjectResponse response = mock(SearchDataObjectResponse.class);
         XContentBuilder builder = JsonXContent.contentBuilder();
         new SearchResponse(
             InternalSearchResponse.empty(),
@@ -401,7 +416,7 @@ public class SdkClientUtilsTests {
             null
         ).toXContent(builder, ToXContent.EMPTY_PARAMS);
         XContentParser parser = createParser(builder);
-        when(response.parser()).thenReturn(parser);
+        SearchDataObjectResponse response = SearchDataObjectResponse.builder().parser(parser).build();
         CompletableFuture<SearchDataObjectResponse> future = CompletableFuture.completedFuture(response);
 
         future.whenComplete(SdkClientUtils.wrapSearchCompletion(listener));
@@ -422,26 +437,12 @@ public class SdkClientUtilsTests {
     }
 
     @Test
-    void testWrapSearchCompletion_NullParser() {
-        @SuppressWarnings("unchecked")
-        ActionListener<SearchResponse> listener = mock(ActionListener.class);
-        SearchDataObjectResponse response = mock(SearchDataObjectResponse.class);
-        when(response.parser()).thenReturn(null);
-        CompletableFuture<SearchDataObjectResponse> future = CompletableFuture.completedFuture(response);
-
-        future.whenComplete(SdkClientUtils.wrapSearchCompletion(listener));
-
-        verify(listener).onResponse(null);
-    }
-
-    @Test
     void testWrapSearchCompletion_ParseFailure() throws IOException {
         @SuppressWarnings("unchecked")
         ActionListener<SearchResponse> listener = mock(ActionListener.class);
-        SearchDataObjectResponse response = mock(SearchDataObjectResponse.class);
         XContentParser parser = mock(XContentParser.class);
         when(parser.nextToken()).thenThrow(new IOException("Test IO Exception"));
-        when(response.parser()).thenReturn(parser);
+        SearchDataObjectResponse response = SearchDataObjectResponse.builder().parser(parser).build();
         CompletableFuture<SearchDataObjectResponse> future = CompletableFuture.completedFuture(response);
 
         future.whenComplete(SdkClientUtils.wrapSearchCompletion(listener));
@@ -558,11 +559,89 @@ public class SdkClientUtilsTests {
         assertSame(ioException, wrapped);
     }
 
+    @Test
+    void testCreateParser_FromToXContent() throws IOException {
+        ToXContentObject simpleObject = new ToXContentObject() {
+            @Override
+            public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+                return builder.startObject().field("key", "value").endObject();
+            }
+        };
+
+        XContentParser parser = SdkClientUtils.createParser(simpleObject);
+        assertEquals(XContentParser.Token.START_OBJECT, parser.nextToken());
+        assertEquals(XContentParser.Token.FIELD_NAME, parser.nextToken());
+        assertEquals("key", parser.currentName());
+        assertEquals(XContentParser.Token.VALUE_STRING, parser.nextToken());
+        assertEquals("value", parser.text());
+        assertEquals(XContentParser.Token.END_OBJECT, parser.nextToken());
+        assertNull(parser.nextToken());
+    }
+
+    @Test
+    void testCreateParser_FromString() throws IOException {
+        String json = "{\"key\":\"value\"}";
+        XContentParser parser = SdkClientUtils.createParser(json);
+        assertEquals(XContentParser.Token.START_OBJECT, parser.nextToken());
+        assertEquals(XContentParser.Token.FIELD_NAME, parser.nextToken());
+        assertEquals("key", parser.currentName());
+        assertEquals(XContentParser.Token.VALUE_STRING, parser.nextToken());
+        assertEquals("value", parser.text());
+        assertEquals(XContentParser.Token.END_OBJECT, parser.nextToken());
+        assertNull(parser.nextToken());
+    }
+
+    @Test
+    void testCreateParser_NullInput() {
+        assertThrows(NullPointerException.class, () -> SdkClientUtils.createParser((ToXContent) null));
+        assertThrows(NullPointerException.class, () -> SdkClientUtils.createParser((String) null));
+    }
+
+    @Test
+    void testCreateParser_InvalidJson() throws IOException {
+        String invalidJson = "invalid json";
+        XContentParser parser = SdkClientUtils.createParser(invalidJson);
+        assertThrows(IOException.class, () -> parser.nextToken());
+    }
+
+    @Test
+    public void testParsingAggregations() throws IOException {
+        String searchResponseJson = "{\n"
+            + "  \"took\": 5,\n"
+            + "  \"timed_out\": false,\n"
+            + "  \"_shards\": {\n"
+            + "    \"total\": 1,\n"
+            + "    \"successful\": 1,\n"
+            + "    \"skipped\": 0,\n"
+            + "    \"failed\": 0\n"
+            + "  },\n"
+            + "  \"hits\": {\n"
+            + "    \"total\": {\n"
+            + "      \"value\": 0,\n"
+            + "      \"relation\": \"eq\"\n"
+            + "    },\n"
+            + "    \"max_score\": null,\n"
+            + "    \"hits\": []\n"
+            + "  },\n"
+            + "  \"aggregations\": {\n"
+            + "    \"sterms#unique_connector_names\": {\n"
+            + "      \"doc_count_error_upper_bound\": 0,\n"
+            + "      \"sum_other_doc_count\": 0,\n"
+            + "      \"buckets\": [\n"
+            + "        {\n"
+            + "          \"key\": \"sample_connector\",\n"
+            + "          \"doc_count\": 5\n"
+            + "        }\n"
+            + "      ]\n"
+            + "    }\n"
+            + "  }\n"
+            + "}";
+        XContentParser parser = SdkClientUtils.createParser(searchResponseJson);
+        org.opensearch.action.search.SearchResponse response = org.opensearch.action.search.SearchResponse.fromXContent(parser);
+        assertTrue(response.getAggregations().asMap().containsKey("unique_connector_names"));
+    }
+
     private XContentParser createParser(XContentBuilder builder) throws IOException {
-        return JsonXContent.jsonXContent.createParser(
-            NamedXContentRegistry.EMPTY,
-            DeprecationHandler.IGNORE_DEPRECATIONS,
-            builder.toString()
-        );
+        return SdkClientUtils.createParser(builder.toString());
     }
 }

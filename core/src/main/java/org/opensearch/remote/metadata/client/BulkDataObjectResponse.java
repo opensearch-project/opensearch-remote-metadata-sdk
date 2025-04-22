@@ -8,8 +8,17 @@
  */
 package org.opensearch.remote.metadata.client;
 
+import org.opensearch.OpenSearchException;
+import org.opensearch.action.bulk.BulkResponse;
+import org.opensearch.common.Nullable;
+import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.remote.metadata.common.SdkClientUtils;
 
+import java.io.IOException;
+import java.util.Arrays;
+
+import static org.opensearch.action.DocWriteRequest.OpType;
 import static org.opensearch.action.bulk.BulkResponse.NO_INGEST_TOOK;
 
 /**
@@ -21,7 +30,44 @@ public class BulkDataObjectResponse {
     private final long tookInMillis;
     private final long ingestTookInMillis;
     private final boolean failures;
+    // Only one of these will be non-null
     private final XContentParser parser;
+    private final BulkResponse bulkResponse;
+
+    /**
+     * Instantiate this response with a {@link BulkResponse}.
+     * @param bulkResponse a pre-completed Bulk response
+     */
+    public BulkDataObjectResponse(BulkResponse bulkResponse) {
+        this(
+            generateDataObjectResponseArray(bulkResponse),
+            bulkResponse.getTook().millis(),
+            NO_INGEST_TOOK,
+            bulkResponse.hasFailures(),
+            null,
+            bulkResponse
+        );
+    }
+
+    /**
+     * Generate an array of DataObjectResponses from a BulkResponse
+     * @param bulkResponse The BulkResponse
+     * @return An array of DataObjectResponse corresponding to the items. Array elements may be null on failed responses.
+     */
+    private static DataObjectResponse[] generateDataObjectResponseArray(BulkResponse bulkResponse) {
+        return Arrays.stream(bulkResponse.getItems()).map(itemResponse -> {
+            OpType opType = itemResponse.getOpType();
+            if (opType == OpType.INDEX || opType == OpType.CREATE) {
+                return new PutDataObjectResponse(itemResponse);
+            } else if (opType == OpType.UPDATE) {
+                return new UpdateDataObjectResponse(itemResponse);
+            } else if (opType == OpType.DELETE) {
+                return new DeleteDataObjectResponse(itemResponse);
+            } else {
+                throw new OpenSearchException("Invalid operation type for bulk response", RestStatus.INTERNAL_SERVER_ERROR);
+            }
+        }).toArray(DataObjectResponse[]::new);
+    }
 
     /**
      * Instantiate this response
@@ -31,7 +77,7 @@ public class BulkDataObjectResponse {
      * @param parser a parser that can be used to recreate the object
      */
     public BulkDataObjectResponse(DataObjectResponse[] responses, long tookInMillis, boolean failures, XContentParser parser) {
-        this(responses, tookInMillis, NO_INGEST_TOOK, failures, parser);
+        this(responses, tookInMillis, NO_INGEST_TOOK, failures, parser, null);
     }
 
     /**
@@ -49,11 +95,23 @@ public class BulkDataObjectResponse {
         boolean failures,
         XContentParser parser
     ) {
+        this(responses, tookInMillis, ingestTookInMillis, failures, parser, null);
+    }
+
+    private BulkDataObjectResponse(
+        DataObjectResponse[] responses,
+        long tookInMillis,
+        long ingestTookInMillis,
+        boolean failures,
+        XContentParser parser,
+        BulkResponse bulkResponse
+    ) {
         this.responses = responses;
         this.tookInMillis = tookInMillis;
         this.ingestTookInMillis = ingestTookInMillis;
         this.failures = failures;
         this.parser = parser;
+        this.bulkResponse = bulkResponse;
     }
 
     /**
@@ -89,10 +147,32 @@ public class BulkDataObjectResponse {
     }
 
     /**
+     * Returns the BulkhResponse object
+     * @return the bulk response if present, or parsed otherwise
+     */
+    public @Nullable BulkResponse bulkResponse() {
+        if (this.bulkResponse == null) {
+            try {
+                return BulkResponse.fromXContent(parser);
+            } catch (IOException | NullPointerException e) {
+                return null;
+            }
+        }
+        return this.bulkResponse;
+    }
+
+    /**
      * Returns the parser
      * @return the parser
      */
     public XContentParser parser() {
+        if (this.parser == null) {
+            try {
+                return SdkClientUtils.createParser(bulkResponse);
+            } catch (IOException | NullPointerException e) {
+                return null;
+            }
+        }
         return this.parser;
     }
 }
