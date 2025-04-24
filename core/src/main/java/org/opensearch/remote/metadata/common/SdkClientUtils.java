@@ -8,8 +8,11 @@
  */
 package org.opensearch.remote.metadata.common;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.opensearch.OpenSearchException;
 import org.opensearch.OpenSearchStatusException;
+import org.opensearch.action.bulk.BulkItemResponse;
 import org.opensearch.action.bulk.BulkResponse;
 import org.opensearch.action.delete.DeleteResponse;
 import org.opensearch.action.get.GetResponse;
@@ -148,6 +151,7 @@ import static org.opensearch.core.rest.RestStatus.INTERNAL_SERVER_ERROR;
  * Utility methods for client implementations
  */
 public class SdkClientUtils {
+    private static final Logger log = LogManager.getLogger(SdkClientUtils.class);
 
     private static final NamedXContentRegistry DEFAULT_XCONTENT_REGISTRY = createDefaultXContentRegistry();
 
@@ -175,6 +179,7 @@ public class SdkClientUtils {
                 handleParseFailure(listener, "index");
                 return;
             }
+            log.info("Put success for {} in {}", indexResponse.getId(), indexResponse.getIndex());
             listener.onResponse(indexResponse);
         };
     }
@@ -201,6 +206,7 @@ public class SdkClientUtils {
                 handleParseFailure(listener, "get");
                 return;
             }
+            log.info("Get success for {} in {}", getResponse.getId(), getResponse.getIndex());
             listener.onResponse(getResponse);
         };
     }
@@ -227,6 +233,7 @@ public class SdkClientUtils {
                 handleParseFailure(listener, "update");
                 return;
             }
+            log.info("Update success for {} in {}", updateResponse.getId(), updateResponse.getIndex());
             listener.onResponse(updateResponse);
         };
 
@@ -254,6 +261,7 @@ public class SdkClientUtils {
                 handleParseFailure(listener, "delete");
                 return;
             }
+            log.info("Deleate success for {} in {}", deleteResponse.getId(), deleteResponse.getIndex());
             listener.onResponse(deleteResponse);
         };
     }
@@ -280,8 +288,16 @@ public class SdkClientUtils {
                 handleParseFailure(listener, "bulk");
                 return;
             }
+            log.info("Bulk complete for {} items. {} failures.", bulkResponse.getItems().length, countBulkFailures(bulkResponse));
             listener.onResponse(bulkResponse);
         };
+    }
+
+    private static long countBulkFailures(BulkResponse bulkResponse) {
+        if (bulkResponse.hasFailures()) {
+            return Arrays.stream(bulkResponse.getItems()).filter(BulkItemResponse::isFailed).count();
+        }
+        return 0;
     }
 
     /**
@@ -306,6 +322,7 @@ public class SdkClientUtils {
                 handleParseFailure(listener, "search");
                 return;
             }
+            log.info("Search complete. {}.", searchResponse.getHits().getTotalHits());
             listener.onResponse(searchResponse);
         };
     }
