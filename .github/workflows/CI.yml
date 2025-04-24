@@ -80,6 +80,9 @@ jobs:
     needs: build-linux
     runs-on: ubuntu-24.04
     steps:
+      # The checkout step should not be necessary but adding to work around CodeCov upload issue
+      # see: https://github.com/codecov/codecov-action/issues/1801
+      - uses: actions/checkout@v4
       - name: Download Coverage Report Artifact
         uses: actions/download-artifact@v4
         with:
