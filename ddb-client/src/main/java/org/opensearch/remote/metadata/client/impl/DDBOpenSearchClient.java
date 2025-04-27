@@ -8,6 +8,7 @@
  */
 package org.opensearch.remote.metadata.client.impl;
 
+import com.fasterxml.jackson.core.io.JsonStringEncoder;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -611,7 +612,8 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         return sequenceNumber;
     }
 
-    private String simulateOpenSearchResponse(
+    // package private for testing
+    static String simulateOpenSearchResponse(
         String index,
         String id,
         String source,
@@ -626,8 +628,9 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         }
         StringBuilder sb = new StringBuilder("{");
         // Fields with a DDB counterpart
-        sb.append("\"_index\":\"").append(index).append("\",");
-        sb.append("\"_id\":\"").append(id).append("\",");
+        JsonStringEncoder encoder = JsonStringEncoder.getInstance();
+        sb.append("\"_index\":\"").append(new String(encoder.quoteAsString(index))).append("\",");
+        sb.append("\"_id\":\"").append(new String(encoder.quoteAsString(id))).append("\",");
         // Fields we must simulate using default values
         sb.append("\"_primary_term\":").append(primaryTerm).append(",");
         sb.append("\"_seq_no\":").append(seqNo).append(",");
@@ -638,9 +641,13 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
             .stream()
             .forEach(
                 e -> sb.append("\"")
-                    .append(e.getKey())
+                    .append(new String(encoder.quoteAsString(e.getKey())))
                     .append("\":")
-                    .append(e.getValue() instanceof String ? ("\"" + e.getValue() + "\"") : e.getValue())
+                    .append(
+                        e.getValue() instanceof String
+                            ? ("\"" + new String(encoder.quoteAsString(e.getValue().toString())) + "\"")
+                            : e.getValue()
+                    )
                     .append(",")
             );
         sb.append("\"_source\":").append(source).append("}");
