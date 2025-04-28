@@ -12,8 +12,13 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 
+import org.apache.lucene.search.join.ScoreMode;
+import org.opensearch.ExceptionsHelper;
 import org.opensearch.OpenSearchStatusException;
 import org.opensearch.action.DocWriteResponse;
+import org.opensearch.action.search.SearchPhaseExecutionException;
+import org.opensearch.action.search.ShardSearchFailure;
+import org.opensearch.client.json.JsonData;
 import org.opensearch.client.json.jackson.JacksonJsonpMapper;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.opensearch._types.ErrorCause;
@@ -47,9 +52,15 @@ import org.opensearch.common.util.concurrent.OpenSearchExecutors;
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.core.index.Index;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.MatchQueryBuilder;
+import org.opensearch.index.query.NestedQueryBuilder;
+import org.opensearch.index.query.QueryShardContext;
+import org.opensearch.index.query.QueryShardException;
 import org.opensearch.remote.metadata.client.BulkDataObjectRequest;
 import org.opensearch.remote.metadata.client.BulkDataObjectResponse;
 import org.opensearch.remote.metadata.client.DeleteDataObjectRequest;
@@ -75,9 +86,12 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import org.mockito.ArgumentCaptor;
@@ -92,6 +106,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -866,5 +881,66 @@ public class RemoteClusterIndicesClientTests {
         cause = ce.getCause();
         assertEquals(UnsupportedOperationException.class, cause.getClass());
         assertEquals("test", cause.getMessage());
+    }
+
+    @Test
+    public void testSearch_InvalidNestedPath_ReturnsBadRequest() throws IOException {
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        BoolQueryBuilder boolQuery = new BoolQueryBuilder().must(new MatchQueryBuilder("tree.branch", "leaf"));
+        NestedQueryBuilder nestedQuery = new NestedQueryBuilder("NULL", boolQuery, ScoreMode.None);
+        searchSourceBuilder.query(nestedQuery);
+        SearchDataObjectRequest searchRequest = SearchDataObjectRequest.builder()
+            .indices(TEST_INDEX)
+            .tenantId(TEST_TENANT_ID)
+            .searchSourceBuilder(searchSourceBuilder)
+            .build();
+
+        QueryShardContext mockContext = mock(QueryShardContext.class);
+        Index mockIndex = new Index(TEST_INDEX, "_na_");
+        when(mockContext.getFullyQualifiedIndex()).thenReturn(mockIndex);
+        QueryShardException queryShardException = new QueryShardException(
+            mockContext,
+            "[nested] failed to find nested object under path [NULL]"
+        );
+        assertEquals(RestStatus.BAD_REQUEST, ExceptionsHelper.status(queryShardException));
+
+        ShardSearchFailure[] shardFailures = new ShardSearchFailure[] { new ShardSearchFailure(queryShardException) };
+        SearchPhaseExecutionException searchException = new SearchPhaseExecutionException("search", "all shards failed", shardFailures);
+        assertEquals(RestStatus.BAD_REQUEST, ExceptionsHelper.status(searchException));
+
+        OpenSearchException openSearchException = new OpenSearchException(
+            new ErrorResponse.Builder().status(ExceptionsHelper.status(searchException).getStatus())
+                .error(
+                    new ErrorCause.Builder().rootCause(
+                        List.of(
+                            new ErrorCause.Builder().type(QueryShardException.class.getSimpleName())
+                                .reason("failed to create query: [nested] failed to find nested object under path [NULL]")
+                                .metadata(Map.of("index", JsonData.of(TEST_INDEX), "index_uuid", JsonData.of("_na_")))
+                                .build()
+                        )
+                    ).type(SearchPhaseExecutionException.class.getSimpleName()).reason("all shards failed").build()
+                )
+                .build()
+        );
+        assertEquals(RestStatus.BAD_REQUEST, RestStatus.fromCode(openSearchException.status()));
+
+        when(mockedOpenSearchAsyncClient.search(any(SearchRequest.class), any())).thenReturn(
+            CompletableFuture.failedFuture(openSearchException)
+        );
+
+        CompletionStage<SearchDataObjectResponse> result = sdkClient.searchDataObjectAsync(
+            searchRequest,
+            testThreadPool.executor(TEST_THREAD_POOL)
+        );
+        ExecutionException executionException = assertThrows(ExecutionException.class, () -> result.toCompletableFuture().get());
+
+        Throwable actualCause = executionException.getCause();
+        assertTrue(actualCause instanceof OpenSearchStatusException);
+        assertEquals(RestStatus.BAD_REQUEST, ((OpenSearchStatusException) actualCause).status());
+        assertEquals("Failed to search indices [test_index]", actualCause.getMessage());
+        Throwable nestedCause = actualCause.getCause();
+        assertEquals(OpenSearchException.class, nestedCause.getClass());
+        assertTrue(nestedCause.getMessage().contains(searchException.getMessage()));
+        assertEquals(RestStatus.BAD_REQUEST.getStatus(), ((OpenSearchException) nestedCause).status());
     }
 }
