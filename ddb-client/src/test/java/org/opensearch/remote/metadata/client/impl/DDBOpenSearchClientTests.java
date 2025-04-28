@@ -36,6 +36,8 @@ import org.opensearch.common.xcontent.json.JsonXContent;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.DeprecationHandler;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.core.xcontent.ToXContentObject;
+import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.remote.metadata.client.BulkDataObjectRequest;
 import org.opensearch.remote.metadata.client.BulkDataObjectResponse;
@@ -303,6 +305,46 @@ public class DDBOpenSearchClientTests {
 
         CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
         assertEquals(RuntimeException.class, ce.getCause().getClass());
+    }
+
+    @Test
+    public void testPutDataObject_InvalidId_ThrowsBadRequest() {
+        String longId = String.join("", Collections.nCopies(513, "a"));
+        PutDataObjectRequest putRequest = PutDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(longId)
+            .tenantId(TENANT_ID)
+            .dataObject(testDataObject)
+            .build();
+        OpenSearchStatusException ose = assertThrows(
+            OpenSearchStatusException.class,
+            () -> sdkClient.putDataObjectAsync(putRequest, testThreadPool.executor(TEST_THREAD_POOL))
+        );
+        assertEquals(RestStatus.BAD_REQUEST, ose.status());
+        assertTrue(ose.getMessage().contains("is too long, must be no longer than 512 bytes but was: 513"));
+    }
+
+    @Test
+    public void testPutDataObject_InvalidDataObject_ThrowsBadRequest() {
+        ToXContentObject invalidDataObject = new ToXContentObject() {
+            public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+                throw new IOException("Test IOException");
+            }
+        };
+        PutDataObjectRequest putRequest = PutDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TENANT_ID)
+            .dataObject(invalidDataObject)
+            .build();
+        OpenSearchStatusException ose = assertThrows(
+            OpenSearchStatusException.class,
+            () -> sdkClient.putDataObjectAsync(putRequest, testThreadPool.executor(TEST_THREAD_POOL))
+        );
+        assertEquals(RestStatus.BAD_REQUEST, ose.status());
+        assertEquals("Request body validation failed.", ose.getMessage());
+        assertTrue(ose.getCause() instanceof IOException);
+        assertEquals("Test IOException", ose.getCause().getMessage());
     }
 
     @Test
@@ -677,6 +719,45 @@ public class DDBOpenSearchClientTests {
         Throwable cause = ce.getCause();
         assertEquals(OpenSearchStatusException.class, cause.getClass());
         assertEquals(RestStatus.CONFLICT, ((OpenSearchStatusException) cause).status());
+    }
+
+    @Test
+    public void testUpdateDataObject_MissingId_ThrowsBadRequest() {
+        UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(null)  // Missing ID
+            .tenantId(TENANT_ID)
+            .dataObject(testDataObject)
+            .build();
+        OpenSearchStatusException ose = assertThrows(
+            OpenSearchStatusException.class,
+            () -> sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(TEST_THREAD_POOL))
+        );
+        assertEquals(RestStatus.BAD_REQUEST, ose.status());
+        assertTrue(ose.getMessage().contains("id is missing"));
+    }
+
+    @Test
+    public void testUpdateDataObject_InvalidDataObject_ThrowsBadRequest() {
+        ToXContentObject invalidDataObject = new ToXContentObject() {
+            public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+                throw new IOException("Test IOException");
+            }
+        };
+        UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TENANT_ID)
+            .dataObject(invalidDataObject)
+            .build();
+        OpenSearchStatusException ose = assertThrows(
+            OpenSearchStatusException.class,
+            () -> sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(TEST_THREAD_POOL))
+        );
+        assertEquals(RestStatus.BAD_REQUEST, ose.status());
+        assertEquals("Request body validation failed.", ose.getMessage());
+        assertTrue(ose.getCause() instanceof IOException);
+        assertEquals("Test IOException", ose.getCause().getMessage());
     }
 
     @Test

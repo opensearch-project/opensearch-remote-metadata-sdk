@@ -33,14 +33,17 @@ import org.apache.logging.log4j.Logger;
 import org.opensearch.ExceptionsHelper;
 import org.opensearch.OpenSearchException;
 import org.opensearch.OpenSearchStatusException;
+import org.opensearch.action.ActionRequestValidationException;
 import org.opensearch.action.DocWriteRequest.OpType;
 import org.opensearch.action.DocWriteResponse;
 import org.opensearch.action.bulk.BulkItemResponse;
 import org.opensearch.action.bulk.BulkResponse;
 import org.opensearch.action.delete.DeleteResponse;
 import org.opensearch.action.get.GetResponse;
+import org.opensearch.action.index.IndexRequest;
 import org.opensearch.action.index.IndexResponse;
 import org.opensearch.action.support.replication.ReplicationResponse.ShardInfo;
+import org.opensearch.action.update.UpdateRequest;
 import org.opensearch.action.update.UpdateResponse;
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
 import org.opensearch.common.xcontent.XContentFactory;
@@ -164,6 +167,18 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         Boolean isMultiTenancyEnabled
     ) {
         final String id = request.id() != null ? request.id() : UUID.randomUUID().toString();
+        // Validate parameters and data object body
+        try (XContentBuilder sourceBuilder = XContentFactory.jsonBuilder()) {
+            IndexRequest indexRequest = new IndexRequest(request.index()).opType(request.overwriteIfExists() ? OpType.INDEX : OpType.CREATE)
+                .source(request.dataObject().toXContent(sourceBuilder, ToXContent.EMPTY_PARAMS));
+            indexRequest.id(id);
+            ActionRequestValidationException validationException = indexRequest.validate();
+            if (validationException != null) {
+                throw new OpenSearchStatusException(validationException.getMessage(), RestStatus.BAD_REQUEST);
+            }
+        } catch (IOException e) {
+            throw new OpenSearchStatusException("Request body validation failed.", RestStatus.BAD_REQUEST, e);
+        }
         final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
         final String tableName = request.index();
         final GetItemRequest getItemRequest = buildGetItemRequest(tenantId, id, request.index());
@@ -283,6 +298,28 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
+        // Validate parameters and data object body
+        try (XContentBuilder sourceBuilder = XContentFactory.jsonBuilder()) {
+            UpdateRequest updateRequest = new UpdateRequest(request.index(), request.id()).doc(
+                request.dataObject().toXContent(sourceBuilder, ToXContent.EMPTY_PARAMS)
+            );
+
+            if (request.ifSeqNo() != null) {
+                updateRequest.setIfSeqNo(request.ifSeqNo());
+            }
+            if (request.ifPrimaryTerm() != null) {
+                updateRequest.setIfPrimaryTerm(request.ifPrimaryTerm());
+            }
+            if (request.retryOnConflict() > 0) {
+                updateRequest.retryOnConflict(request.retryOnConflict());
+            }
+            ActionRequestValidationException validationException = updateRequest.validate();
+            if (validationException != null) {
+                throw new OpenSearchStatusException(validationException.getMessage(), RestStatus.BAD_REQUEST);
+            }
+        } catch (IOException e) {
+            throw new OpenSearchStatusException("Request body validation failed.", RestStatus.BAD_REQUEST, e);
+        }
         final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
         return doPrivileged(() -> {
             try {
