@@ -31,6 +31,49 @@ import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.BoostingQueryBuilder;
+import org.opensearch.index.query.ConstantScoreQueryBuilder;
+import org.opensearch.index.query.DisMaxQueryBuilder;
+import org.opensearch.index.query.DistanceFeatureQueryBuilder;
+import org.opensearch.index.query.ExistsQueryBuilder;
+import org.opensearch.index.query.FieldMaskingSpanQueryBuilder;
+import org.opensearch.index.query.FuzzyQueryBuilder;
+import org.opensearch.index.query.GeoBoundingBoxQueryBuilder;
+import org.opensearch.index.query.GeoDistanceQueryBuilder;
+import org.opensearch.index.query.GeoPolygonQueryBuilder;
+import org.opensearch.index.query.GeoShapeQueryBuilder;
+import org.opensearch.index.query.IdsQueryBuilder;
+import org.opensearch.index.query.IntervalQueryBuilder;
+import org.opensearch.index.query.MatchAllQueryBuilder;
+import org.opensearch.index.query.MatchBoolPrefixQueryBuilder;
+import org.opensearch.index.query.MatchNoneQueryBuilder;
+import org.opensearch.index.query.MatchPhrasePrefixQueryBuilder;
+import org.opensearch.index.query.MatchPhraseQueryBuilder;
+import org.opensearch.index.query.MatchQueryBuilder;
+import org.opensearch.index.query.MoreLikeThisQueryBuilder;
+import org.opensearch.index.query.MultiMatchQueryBuilder;
+import org.opensearch.index.query.NestedQueryBuilder;
+import org.opensearch.index.query.PrefixQueryBuilder;
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryStringQueryBuilder;
+import org.opensearch.index.query.RangeQueryBuilder;
+import org.opensearch.index.query.RegexpQueryBuilder;
+import org.opensearch.index.query.ScriptQueryBuilder;
+import org.opensearch.index.query.SimpleQueryStringBuilder;
+import org.opensearch.index.query.SpanContainingQueryBuilder;
+import org.opensearch.index.query.SpanFirstQueryBuilder;
+import org.opensearch.index.query.SpanNearQueryBuilder;
+import org.opensearch.index.query.SpanNotQueryBuilder;
+import org.opensearch.index.query.SpanOrQueryBuilder;
+import org.opensearch.index.query.SpanTermQueryBuilder;
+import org.opensearch.index.query.SpanWithinQueryBuilder;
+import org.opensearch.index.query.TemplateQueryBuilder;
+import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.index.query.TermsQueryBuilder;
+import org.opensearch.index.query.TermsSetQueryBuilder;
+import org.opensearch.index.query.WildcardQueryBuilder;
+import org.opensearch.index.query.WrapperQueryBuilder;
 import org.opensearch.remote.metadata.client.BulkDataObjectResponse;
 import org.opensearch.remote.metadata.client.DeleteDataObjectResponse;
 import org.opensearch.remote.metadata.client.GetDataObjectResponse;
@@ -436,7 +479,61 @@ public class SdkClientUtils {
     }
 
     private static List<NamedXContentRegistry.Entry> getDefaultNamedXContents() {
-        Map<String, ContextParser<Object, ? extends Aggregation>> map = Map.ofEntries(
+        List<NamedXContentRegistry.Entry> entries = new ArrayList<>();
+
+        Map<String, ContextParser<Object, ? extends QueryBuilder>> queryMap = Map.ofEntries(
+            Map.entry(BoolQueryBuilder.NAME, (p, c) -> BoolQueryBuilder.fromXContent(p)),
+            Map.entry(BoostingQueryBuilder.NAME, (p, c) -> BoostingQueryBuilder.fromXContent(p)),
+            Map.entry(ConstantScoreQueryBuilder.NAME, (p, c) -> ConstantScoreQueryBuilder.fromXContent(p)),
+            Map.entry(DisMaxQueryBuilder.NAME, (p, c) -> DisMaxQueryBuilder.fromXContent(p)),
+            Map.entry(DistanceFeatureQueryBuilder.NAME, (p, c) -> DistanceFeatureQueryBuilder.fromXContent(p)),
+            Map.entry(ExistsQueryBuilder.NAME, (p, c) -> ExistsQueryBuilder.fromXContent(p)),
+            Map.entry(FieldMaskingSpanQueryBuilder.NAME, (p, c) -> FieldMaskingSpanQueryBuilder.fromXContent(p)),
+            Map.entry(FuzzyQueryBuilder.NAME, (p, c) -> FuzzyQueryBuilder.fromXContent(p)),
+            Map.entry(GeoBoundingBoxQueryBuilder.NAME, (p, c) -> GeoBoundingBoxQueryBuilder.fromXContent(p)),
+            Map.entry(GeoDistanceQueryBuilder.NAME, (p, c) -> GeoDistanceQueryBuilder.fromXContent(p)),
+            Map.entry(GeoPolygonQueryBuilder.NAME, (p, c) -> GeoPolygonQueryBuilder.fromXContent(p)),
+            Map.entry(GeoShapeQueryBuilder.NAME, (p, c) -> GeoShapeQueryBuilder.fromXContent(p)),
+            Map.entry(IdsQueryBuilder.NAME, (p, c) -> IdsQueryBuilder.fromXContent(p)),
+            Map.entry(IntervalQueryBuilder.NAME, (p, c) -> IntervalQueryBuilder.fromXContent(p)),
+            Map.entry(MatchAllQueryBuilder.NAME, (p, c) -> MatchAllQueryBuilder.fromXContent(p)),
+            Map.entry(MatchBoolPrefixQueryBuilder.NAME, (p, c) -> MatchBoolPrefixQueryBuilder.fromXContent(p)),
+            Map.entry(MatchNoneQueryBuilder.NAME, (p, c) -> MatchNoneQueryBuilder.fromXContent(p)),
+            Map.entry(MatchPhrasePrefixQueryBuilder.NAME, (p, c) -> MatchPhrasePrefixQueryBuilder.fromXContent(p)),
+            Map.entry(MatchPhraseQueryBuilder.NAME, (p, c) -> MatchPhraseQueryBuilder.fromXContent(p)),
+            Map.entry(MatchQueryBuilder.NAME, (p, c) -> MatchQueryBuilder.fromXContent(p)),
+            Map.entry(MoreLikeThisQueryBuilder.NAME, (p, c) -> MoreLikeThisQueryBuilder.fromXContent(p)),
+            Map.entry(MultiMatchQueryBuilder.NAME, (p, c) -> MultiMatchQueryBuilder.fromXContent(p)),
+            Map.entry(NestedQueryBuilder.NAME, (p, c) -> NestedQueryBuilder.fromXContent(p)),
+            Map.entry(PrefixQueryBuilder.NAME, (p, c) -> PrefixQueryBuilder.fromXContent(p)),
+            Map.entry(QueryStringQueryBuilder.NAME, (p, c) -> QueryStringQueryBuilder.fromXContent(p)),
+            Map.entry(RangeQueryBuilder.NAME, (p, c) -> RangeQueryBuilder.fromXContent(p)),
+            Map.entry(RegexpQueryBuilder.NAME, (p, c) -> RegexpQueryBuilder.fromXContent(p)),
+            Map.entry(ScriptQueryBuilder.NAME, (p, c) -> ScriptQueryBuilder.fromXContent(p)),
+            Map.entry(SimpleQueryStringBuilder.NAME, (p, c) -> SimpleQueryStringBuilder.fromXContent(p)),
+            Map.entry(SpanContainingQueryBuilder.NAME, (p, c) -> SpanContainingQueryBuilder.fromXContent(p)),
+            Map.entry(SpanFirstQueryBuilder.NAME, (p, c) -> SpanFirstQueryBuilder.fromXContent(p)),
+            Map.entry(SpanNearQueryBuilder.NAME, (p, c) -> SpanNearQueryBuilder.fromXContent(p)),
+            Map.entry(SpanNotQueryBuilder.NAME, (p, c) -> SpanNotQueryBuilder.fromXContent(p)),
+            Map.entry(SpanOrQueryBuilder.NAME, (p, c) -> SpanOrQueryBuilder.fromXContent(p)),
+            Map.entry(SpanTermQueryBuilder.NAME, (p, c) -> SpanTermQueryBuilder.fromXContent(p)),
+            Map.entry(SpanWithinQueryBuilder.NAME, (p, c) -> SpanWithinQueryBuilder.fromXContent(p)),
+            Map.entry(TemplateQueryBuilder.NAME, (p, c) -> TemplateQueryBuilder.fromXContent(p)),
+            Map.entry(TermQueryBuilder.NAME, (p, c) -> TermQueryBuilder.fromXContent(p)),
+            Map.entry(TermsQueryBuilder.NAME, (p, c) -> TermsQueryBuilder.fromXContent(p)),
+            Map.entry(TermsSetQueryBuilder.NAME, (p, c) -> TermsSetQueryBuilder.fromXContent(p)),
+            Map.entry(WildcardQueryBuilder.NAME, (p, c) -> WildcardQueryBuilder.fromXContent(p)),
+            Map.entry(WrapperQueryBuilder.NAME, (p, c) -> WrapperQueryBuilder.fromXContent(p))
+        );
+
+        entries.addAll(
+            queryMap.entrySet()
+                .stream()
+                .map(entry -> new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField(entry.getKey()), entry.getValue()))
+                .collect(Collectors.toList())
+        );
+
+        Map<String, ContextParser<Object, ? extends Aggregation>> aggMap = Map.ofEntries(
             Map.entry(AvgAggregationBuilder.NAME, (p, c) -> ParsedAvg.fromXContent(p, (String) c)),
             Map.entry(WeightedAvgAggregationBuilder.NAME, (p, c) -> ParsedWeightedAvg.fromXContent(p, (String) c)),
             Map.entry(SumAggregationBuilder.NAME, (p, c) -> ParsedSum.fromXContent(p, (String) c)),
@@ -485,10 +582,14 @@ public class SdkClientUtils {
             Map.entry(ExtendedStatsBucketPipelineAggregationBuilder.NAME, (p, c) -> ParsedExtendedStatsBucket.fromXContent(p, (String) c))
         );
 
-        List<NamedXContentRegistry.Entry> entries = map.entrySet()
-            .stream()
-            .map((entry) -> new NamedXContentRegistry.Entry(Aggregation.class, new ParseField((String) entry.getKey()), entry.getValue()))
-            .collect(Collectors.toList());
+        entries.addAll(
+            aggMap.entrySet()
+                .stream()
+                .map(
+                    (entry) -> new NamedXContentRegistry.Entry(Aggregation.class, new ParseField((String) entry.getKey()), entry.getValue())
+                )
+                .collect(Collectors.toList())
+        );
         return entries;
     }
 }

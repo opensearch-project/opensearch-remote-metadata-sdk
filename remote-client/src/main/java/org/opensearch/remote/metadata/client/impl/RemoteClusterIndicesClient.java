@@ -88,6 +88,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 
@@ -536,9 +537,17 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                         );
                     }
                 }).exceptionally(e -> {
-                    log.error("Error searching {}: {}", Arrays.toString(request.indices()), e.getMessage(), e);
-                    if (e instanceof OpenSearchException) {
-                        throw (OpenSearchException) e;
+                    Throwable cause = e;
+                    while (cause instanceof CompletionException && cause.getCause() != null) {
+                        cause = cause.getCause();
+                    }
+                    log.error("Error searching {}: {}", Arrays.toString(request.indices()), cause.getMessage(), cause);
+                    if (cause instanceof OpenSearchException) {
+                        throw new OpenSearchStatusException(
+                            "Failed to search indices " + Arrays.toString(request.indices()),
+                            RestStatus.fromCode(((OpenSearchException) cause).status()),
+                            cause
+                        );
                     }
                     throw new OpenSearchStatusException(
                         "Failed to search indices " + Arrays.toString(request.indices()),
