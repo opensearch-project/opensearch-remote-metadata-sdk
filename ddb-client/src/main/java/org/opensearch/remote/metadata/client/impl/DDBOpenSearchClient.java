@@ -8,6 +8,7 @@
  */
 package org.opensearch.remote.metadata.client.impl;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -74,6 +75,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -192,14 +194,14 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 final PutItemRequest putItemRequest = builder.build();
 
                 return dynamoDbAsyncClient.putItem(putItemRequest).thenApply(putItemResponse -> {
-                    String simulatedIndexResponse = simulateOpenSearchResponse(
-                        request.index(),
-                        id,
-                        source,
-                        sequenceNumber,
-                        Map.of("result", "created")
-                    );
                     try {
+                        String simulatedIndexResponse = simulateOpenSearchResponse(
+                            request.index(),
+                            id,
+                            source,
+                            sequenceNumber,
+                            Map.of("result", "created")
+                        );
                         return PutDataObjectResponse.builder().id(id).parser(createParser(simulatedIndexResponse)).build();
                     } catch (IOException e) {
                         throw new OpenSearchStatusException("Failed to create parser for response", RestStatus.INTERNAL_SERVER_ERROR, e);
@@ -585,7 +587,8 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         return (index.length() > 1 && index.charAt(0) == '.') ? index.substring(1) : index;
     }
 
-    private XContentParser createParser(String json) throws IOException {
+    // package private for testing
+    static XContentParser createParser(String json) throws IOException {
         return jsonXContent.createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.IGNORE_DEPRECATIONS, json);
     }
 
@@ -611,40 +614,32 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         return sequenceNumber;
     }
 
-    private String simulateOpenSearchResponse(
+    // package private for testing
+    static String simulateOpenSearchResponse(
         String index,
         String id,
         String source,
         Long sequenceNumber,
         Map<String, Object> additionalFields
-    ) {
-        Long seqNo = UNASSIGNED_SEQ_NO;
-        Long primaryTerm = UNASSIGNED_PRIMARY_TERM;
-        if (sequenceNumber != null) {
-            seqNo = sequenceNumber;
-            primaryTerm = DEFAULT_PRIMARY_TERM;
+    ) throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("_index", index);
+        response.put("_id", id);
+        if (sequenceNumber == null) {
+            response.put("_primary_term", UNASSIGNED_PRIMARY_TERM);
+            response.put("_seq_no", UNASSIGNED_SEQ_NO);
+        } else {
+            response.put("_primary_term", DEFAULT_PRIMARY_TERM);
+            response.put("_seq_no", sequenceNumber);
         }
-        StringBuilder sb = new StringBuilder("{");
-        // Fields with a DDB counterpart
-        sb.append("\"_index\":\"").append(index).append("\",");
-        sb.append("\"_id\":\"").append(id).append("\",");
-        // Fields we must simulate using default values
-        sb.append("\"_primary_term\":").append(primaryTerm).append(",");
-        sb.append("\"_seq_no\":").append(seqNo).append(",");
-        sb.append("\"_version\":").append(-1).append(",");
-        sb.append("\"_shards\":").append(Strings.toString(MediaTypeRegistry.JSON, new ShardInfo())).append(",");
-        // Finish up
-        additionalFields.entrySet()
-            .stream()
-            .forEach(
-                e -> sb.append("\"")
-                    .append(e.getKey())
-                    .append("\":")
-                    .append(e.getValue() instanceof String ? ("\"" + e.getValue() + "\"") : e.getValue())
-                    .append(",")
-            );
-        sb.append("\"_source\":").append(source).append("}");
-        return sb.toString();
+        response.put("_version", -1);
+        response.put("_shards", new ShardInfo());
+        response.putAll(additionalFields);
+        if (source != null) {
+            response.put("_source", mapper.readTree(source));
+        }
+        return mapper.writeValueAsString(response);
     }
 
     private static void validateAwsParams(String clientType, String remoteMetadataEndpoint, String region, String serviceName) {
