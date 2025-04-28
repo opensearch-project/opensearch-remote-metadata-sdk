@@ -52,6 +52,7 @@ import org.opensearch.remote.metadata.client.UpdateDataObjectRequest;
 import org.opensearch.remote.metadata.client.UpdateDataObjectResponse;
 import org.opensearch.remote.metadata.common.CommonValue;
 import org.opensearch.remote.metadata.common.ComplexDataObject;
+import org.opensearch.remote.metadata.common.SdkClientUtils;
 import org.opensearch.remote.metadata.common.TestDataObject;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.threadpool.ScalingExecutorBuilder;
@@ -76,6 +77,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
+import static org.opensearch.remote.metadata.client.impl.DDBOpenSearchClient.simulateOpenSearchResponse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -836,5 +838,68 @@ public class DDBOpenSearchClientTests {
             Map.entry("testList", AttributeValue.builder().l(Arrays.asList(AttributeValue.builder().s("testString").build())).build()),
             Map.entry("testObject", AttributeValue.builder().m(Map.of("data", AttributeValue.builder().s("foo").build())).build())
         );
+    }
+
+    @Test
+    public void testDeleteResponseWithQuotes() throws IOException {
+        // Test with double quote in ID
+        String json = simulateOpenSearchResponse("test-index", "\"", null, 0L, Map.of("result", "deleted"));
+
+        XContentParser parser = SdkClientUtils.createParser(json);
+        DeleteResponse response = DeleteResponse.fromXContent(parser);
+
+        assertEquals("\"", response.getId());
+        assertEquals("test-index", response.getIndex());
+        assertEquals("deleted", response.getResult().toString().toLowerCase());
+    }
+
+    @Test
+    public void testGetResponseWithBackslash() throws IOException {
+        // Test with backslash in ID
+        String source = "{\"field\":\"value\"}";
+        String json = simulateOpenSearchResponse("test-index", "\\", source, 0L, Map.of("found", true));
+
+        XContentParser parser = SdkClientUtils.createParser(json);
+        GetResponse response = GetResponse.fromXContent(parser);
+
+        assertEquals("\\", response.getId());
+        assertEquals("test-index", response.getIndex());
+        assertTrue(response.isExists());
+        assertNotNull(response.getSourceAsString());
+        assertEquals("{\"field\":\"value\"}", response.getSourceAsString());
+    }
+
+    @Test
+    public void testUpdateResponseWithSpecialChars() throws IOException {
+        // Test with multiple special characters in ID
+        String source = "{\"updated_field\":\"new_value\"}";
+        String json = simulateOpenSearchResponse("test-index", "<>?:\"{}|+", source, 0L, Map.of("result", "updated"));
+
+        XContentParser parser = SdkClientUtils.createParser(json);
+        UpdateResponse response = UpdateResponse.fromXContent(parser);
+
+        assertEquals("<>?:\"{}|+", response.getId());
+        assertEquals("test-index", response.getIndex());
+        assertEquals("updated", response.getResult().toString().toLowerCase());
+    }
+
+    @Test
+    public void testIndexResponseWithUrlEncodedChars() throws IOException {
+        // Test with URL-encoded characters in both index and ID
+        String source = "{\"new_field\":\"test_value\"}";
+        String json = simulateOpenSearchResponse(
+            "test%20index",
+            "%22%3C%3E", // URL encoded "<>"
+            source,
+            0L,
+            Map.of("result", "created")
+        );
+
+        XContentParser parser = SdkClientUtils.createParser(json);
+        IndexResponse response = IndexResponse.fromXContent(parser);
+
+        assertEquals("%22%3C%3E", response.getId());
+        assertEquals("test%20index", response.getIndex());
+        assertEquals("created", response.getResult().toString().toLowerCase());
     }
 }
