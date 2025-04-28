@@ -451,6 +451,13 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 SearchResponse<?> searchResponse = openSearchClient.search(searchRequest, MAP_DOCTYPE);
                 log.info("Search returned {} hits", searchResponse.hits().total().value());
                 return SearchDataObjectResponse.builder().parser(createParser(searchResponse)).build();
+            } catch (OpenSearchException e) {
+                log.error("Error searching {}: {}", Arrays.toString(request.indices()), e.getMessage(), e);
+                throw new OpenSearchStatusException(
+                    "Failed to search indices " + Arrays.toString(request.indices()),
+                    RestStatus.fromCode(e.status()),
+                    e
+                );
             } catch (IOException e) {
                 log.error("Error searching {}: {}", Arrays.toString(request.indices()), e.getMessage(), e);
                 // Rethrow unchecked exception on exception
