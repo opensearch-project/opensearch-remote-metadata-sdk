@@ -10,7 +10,7 @@ dependencies {
 
     implementation "org.opensearch.client:opensearch-java:${opensearch_java_version}"
 
-    implementation(platform("software.amazon.awssdk:bom:${aws_sdk_version}"))
+    implementation(platform("software.amazon.awssdk:bom:${versions.aws}"))
     implementation("software.amazon.awssdk:apache-client")
     implementation("software.amazon.awssdk:sdk-core")
     implementation("software.amazon.awssdk:aws-core")

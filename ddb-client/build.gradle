@@ -9,6 +9,6 @@ dependencies {
     implementation project(':opensearch-remote-metadata-sdk-remote-client')
     implementation project(':opensearch-remote-metadata-sdk-aos-client')
 
-    implementation(platform("software.amazon.awssdk:bom:${aws_sdk_version}"))
+    implementation(platform("software.amazon.awssdk:bom:${versions.aws}"))
     implementation "software.amazon.awssdk:dynamodb"
 }
