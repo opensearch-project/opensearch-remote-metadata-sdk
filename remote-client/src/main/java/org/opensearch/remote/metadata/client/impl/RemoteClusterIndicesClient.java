@@ -59,7 +59,6 @@ import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.query.MatchPhraseQueryBuilder;
 import org.opensearch.remote.metadata.client.AbstractSdkClient;
 import org.opensearch.remote.metadata.client.BulkDataObjectRequest;
 import org.opensearch.remote.metadata.client.BulkDataObjectResponse;
@@ -502,12 +501,7 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         return doPrivileged(() -> {
             try {
                 log.info("Searching {}", Arrays.toString(request.indices()));
-                // work around https://github.com/opensearch-project/opensearch-java/issues/1150
-                String json = SdkClientUtils.lowerCaseEnumValues(
-                    MatchPhraseQueryBuilder.ZERO_TERMS_QUERY_FIELD.getPreferredName(),
-                    request.searchSourceBuilder().toString()
-                );
-                JsonParser parser = mapper.jsonProvider().createParser(new StringReader(json));
+                JsonParser parser = mapper.jsonProvider().createParser(new StringReader(request.searchSourceBuilder().toString()));
                 SearchRequest searchRequest = SearchRequest._DESERIALIZER.deserialize(parser, mapper);
                 if (Boolean.TRUE.equals(isMultiTenancyEnabled)) {
                     if (request.tenantId() == null) {
