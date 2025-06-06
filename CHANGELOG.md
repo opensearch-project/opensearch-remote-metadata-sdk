@@ -7,6 +7,8 @@ Inspired from [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 ### Features
 ### Enhancements
 ### Bug Fixes
+- Generate random ID for empty ID string on DDB Client ([#192](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/192))
+
 ### Infrastructure
 ### Documentation
 ### Maintenance

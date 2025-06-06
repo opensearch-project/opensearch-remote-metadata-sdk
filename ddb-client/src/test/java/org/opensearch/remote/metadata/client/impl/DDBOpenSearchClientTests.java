@@ -285,7 +285,28 @@ public class DDBOpenSearchClientTests {
 
         PutItemRequest putItemRequest = putItemRequestArgumentCaptor.getValue();
         assertNotNull(putItemRequest.item().get(RANGE_KEY).s());
-        assertNotNull(response.id());
+        assertFalse(response.id().isEmpty());
+    }
+
+    @Test
+    public void testPutDataObject_EmptyId_GeneratesId() {
+        PutDataObjectRequest putRequest = PutDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id("")
+            .tenantId(TENANT_ID)
+            .dataObject(testDataObject)
+            .build();
+        when(dynamoDbAsyncClient.putItem(any(PutItemRequest.class))).thenReturn(
+            CompletableFuture.completedFuture(PutItemResponse.builder().build())
+        );
+        PutDataObjectResponse response = sdkClient.putDataObjectAsync(putRequest, testThreadPool.executor(TEST_THREAD_POOL))
+            .toCompletableFuture()
+            .join();
+        verify(dynamoDbAsyncClient).putItem(putItemRequestArgumentCaptor.capture());
+
+        PutItemRequest putItemRequest = putItemRequestArgumentCaptor.getValue();
+        assertNotNull(putItemRequest.item().get(RANGE_KEY).s());
+        assertFalse(response.id().isEmpty());
     }
 
     @Test
