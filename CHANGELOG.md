@@ -8,6 +8,7 @@ Inspired from [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 ### Enhancements
 ### Bug Fixes
 ### Infrastructure
+- CVE fix for CVE-2025-27820[#195](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/195)
 ### Documentation
 ### Maintenance
 ### Refactoring
