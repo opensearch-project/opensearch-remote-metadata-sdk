@@ -78,15 +78,9 @@ allprojects {
     }
 
     // Fix for CVE-2025-27820
-    configurations.all {
-        resolutionStrategy {
-            eachDependency { DependencyResolveDetails details ->
-                if (details.requested.group == 'org.apache.httpcomponents.client5' &&
-                        details.requested.name == 'httpclient5') {
-                    details.useVersion "${versions.httpclient5}"
-                }
-            }
-        }
+    configurations.checkstyle {
+        exclude group: 'org.apache.httpcomponents.client5', module: 'httpclient5'
+        exclude group: 'org.apache.httpcomponents.core5', module: 'httpcore5'
     }
 }
 
