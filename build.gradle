@@ -40,18 +40,6 @@ buildscript {
     }
 }
 
-// Fix for CVE-2025-27820
-configurations.all {
-    resolutionStrategy {
-        eachDependency { DependencyResolveDetails details ->
-            if (details.requested.group == 'org.apache.httpcomponents.client5' &&
-                    details.requested.name == 'httpclient5') {
-                details.useVersion "${versions.httpclient5}"
-            }
-        }
-    }
-}
-
 allprojects {
     apply plugin: 'java'
     apply plugin: 'idea'
@@ -89,6 +77,17 @@ allprojects {
         toolVersion = "latest.release"
     }
 
+    // Fix for CVE-2025-27820
+    configurations.all {
+        resolutionStrategy {
+            eachDependency { DependencyResolveDetails details ->
+                if (details.requested.group == 'org.apache.httpcomponents.client5' &&
+                        details.requested.name == 'httpclient5') {
+                    details.useVersion "${versions.httpclient5}"
+                }
+            }
+        }
+    }
 }
 
 subprojects {
