@@ -30,6 +30,7 @@ buildscript {
 
     repositories {
         mavenLocal()
+        maven { url "https://central.sonatype.com/repository/maven-snapshots/" }
         maven { url "https://aws.oss.sonatype.org/content/repositories/snapshots" }
         mavenCentral()
         maven { url "https://plugins.gradle.org/m2/" }
@@ -52,6 +53,7 @@ allprojects {
 
     repositories {
         mavenLocal()
+        maven { url "https://central.sonatype.com/repository/maven-snapshots/" }
         maven { url "https://aws.oss.sonatype.org/content/repositories/snapshots" }
         mavenCentral()
         maven { url "https://plugins.gradle.org/m2/" }
@@ -205,7 +207,7 @@ subprojects {
             }
             maven {
                 name = "Snapshots"
-                url = "https://aws.oss.sonatype.org/content/repositories/snapshots"
+                url = "https://central.sonatype.com/repository/maven-snapshots/"
                 credentials {
                     username "$System.env.SONATYPE_USERNAME"
                     password "$System.env.SONATYPE_PASSWORD"
