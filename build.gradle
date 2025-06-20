@@ -22,8 +22,8 @@ buildscript {
         }
 
         opensearch_java_version = '2.19.0'
-        apache_http_components_version = '5.4.1'
-        apache_http_core_version = '5.3.2'
+        apache_http_components_version = '5.5'
+        apache_http_core_version = '5.3.4'
         aws_sdk_version = '2.30.18'
         junit_version = '5.11.4' // version catalog is 4.x
     }
@@ -41,14 +41,6 @@ buildscript {
     }
 }
 
-plugins {
-    id 'checkstyle'
-}
-
-checkstyle {
-    toolVersion = "latest.release"
-}
-
 allprojects {
     apply plugin: 'java'
     apply plugin: 'idea'
@@ -56,6 +48,7 @@ allprojects {
     apply plugin: 'eclipse'
     apply plugin: 'jacoco'
     apply plugin: 'com.diffplug.spotless'
+    apply plugin: 'checkstyle'
 
     repositories {
         mavenLocal()
@@ -79,6 +72,16 @@ allprojects {
         withJavadocJar()
     }
     project.getExtensions().getExtraProperties().set("versions", VersionProperties.getVersions())
+
+    checkstyle {
+        toolVersion = "latest.release"
+    }
+
+    // Fix for CVE-2025-27820
+    configurations.checkstyle {
+        exclude group: 'org.apache.httpcomponents.client5', module: 'httpclient5'
+        exclude group: 'org.apache.httpcomponents.core5', module: 'httpcore5'
+    }
 }
 
 subprojects {
@@ -141,10 +144,6 @@ subprojects {
     java {
         withSourcesJar()
         withJavadocJar()
-    }
-
-    checkstyle {
-        toolVersion = "10.21.1"
     }
 
     // checkstyle gives us the warnings we need, suppress overzelous jdk checks
