@@ -77,10 +77,12 @@ allprojects {
         toolVersion = "latest.release"
     }
 
-    // Fix for CVE-2025-27820
+    // Fix for CVE-2025-27820 and WS-2019-0379
     configurations.checkstyle {
         exclude group: 'org.apache.httpcomponents.client5', module: 'httpclient5'
         exclude group: 'org.apache.httpcomponents.core5', module: 'httpcore5'
+        exclude group: 'org.apache.httpcomponents', module: 'httpclient'
+        exclude group: 'org.apache.httpcomponents', module: 'httpcore'
     }
 }
 
