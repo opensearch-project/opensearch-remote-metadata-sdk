@@ -454,7 +454,9 @@ public class SdkClientUtils {
      * @param field The JSON field to lowercase the value
      * @param json The full JSON to process
      * @return The JSON with the value lowercased
+     * @deprecated No longer required with OpenSearch Java Client v3
      */
+    @Deprecated
     public static String lowerCaseEnumValues(String field, String json) {
         if (field == null) {
             return json;
