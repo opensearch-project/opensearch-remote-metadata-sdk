@@ -237,6 +237,47 @@ public class DDBOpenSearchClientTests {
     }
 
     @Test
+    public void testPutDataObject_ConcurrentWrite_ThrowsConflict() {
+        PutDataObjectRequest putRequest = PutDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TENANT_ID)
+            .overwriteIfExists(false)
+            .dataObject(testDataObject)
+            .build();
+
+        // Mock the getItem to return no existing item
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(
+            CompletableFuture.completedFuture(GetItemResponse.builder().build())
+        );
+
+        // Mock putItem to throw ConditionalCheckFailedException
+        ConditionalCheckFailedException conditionalCheckFailedException = ConditionalCheckFailedException.builder()
+            .message("The conditional request failed")
+            .build();
+        when(dynamoDbAsyncClient.putItem(any(PutItemRequest.class))).thenReturn(
+            CompletableFuture.failedFuture(conditionalCheckFailedException)
+        );
+
+        CompletableFuture<PutDataObjectResponse> future = sdkClient.putDataObjectAsync(
+            putRequest,
+            testThreadPool.executor(TEST_THREAD_POOL)
+        ).toCompletableFuture();
+
+        CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
+        assertTrue(ce.getCause() instanceof OpenSearchStatusException);
+        OpenSearchStatusException ose = (OpenSearchStatusException) ce.getCause();
+        assertEquals(RestStatus.CONFLICT, ose.status());
+        assertEquals("Concurrent write detected for ID: " + TEST_ID, ose.getMessage());
+
+        // Verify that the conditional expression was set correctly
+        verify(dynamoDbAsyncClient).putItem(putItemRequestArgumentCaptor.capture());
+        PutItemRequest capturedRequest = putItemRequestArgumentCaptor.getValue();
+        assertEquals("attribute_not_exists(#hk) AND attribute_not_exists(#rk)", capturedRequest.conditionExpression());
+        assertEquals(Map.of("#hk", HASH_KEY, "#rk", RANGE_KEY), capturedRequest.expressionAttributeNames());
+    }
+
+    @Test
     public void testPutDataObject_WithComplexData() {
         ComplexDataObject complexDataObject = ComplexDataObject.builder()
             .testString("testString")
