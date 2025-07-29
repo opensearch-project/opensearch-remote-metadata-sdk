@@ -114,4 +114,17 @@ public interface SdkClientDelegate extends AutoCloseable {
         Executor executor,
         Boolean isMultiTenancyEnabled
     );
+
+    /**
+     * This method is to check if a given resource index and id is global resource or not.
+     * This is useful for invokers in case they need perform different operations based on
+     * resource type. It's false by default since for most cases, override this method if
+     * otherwise.
+     * @param index The index/table name.
+     * @param id The resource id.
+     * @return If the resource is global or not.
+     */
+    default boolean isGlobalResource(String index, String id) {
+        return false;
+    }
 }

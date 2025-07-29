@@ -23,9 +23,14 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.DescribeTableRequest;
+import software.amazon.awssdk.services.dynamodb.model.DescribeTableResponse;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
+import software.amazon.awssdk.services.dynamodb.model.ListTablesResponse;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
+import software.amazon.awssdk.services.dynamodb.model.QueryResponse;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 
 import org.apache.logging.log4j.LogManager;
@@ -72,6 +77,7 @@ import org.opensearch.remote.metadata.client.SearchDataObjectResponse;
 import org.opensearch.remote.metadata.client.UpdateDataObjectRequest;
 import org.opensearch.remote.metadata.client.UpdateDataObjectResponse;
 import org.opensearch.remote.metadata.common.SdkClientUtils;
+import software.amazon.awssdk.utils.ImmutableMap;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -80,18 +86,22 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.opensearch.common.util.concurrent.ThreadContextAccess.doPrivileged;
 import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_PRIMARY_TERM;
 import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
 import static org.opensearch.remote.metadata.common.CommonValue.AWS_DYNAMO_DB;
+import static org.opensearch.remote.metadata.common.CommonValue.TENANT_ID_FIELD_KEY;
 import static org.opensearch.remote.metadata.common.CommonValue.VALID_AWS_OPENSEARCH_SERVICE_NAMES;
 
 /**
@@ -117,6 +127,9 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
     private DynamoDbAsyncClient dynamoDbAsyncClient;
     private AOSOpenSearchClient aosOpenSearchClient;
 
+    public static String DEFAULT_GLOBAL_TENANT_ID = "_global_tenant_id";
+    private static final Map<String, Map<String, AttributeValue>> GLOBAL_RESOURCES_CACHE = new ConcurrentHashMap<>();
+
     @Override
     public boolean supportsMetadataType(String metadataType) {
         return AWS_DYNAMO_DB.equals(metadataType);
@@ -130,6 +143,17 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         this.dynamoDbAsyncClient = createDynamoDbAsyncClient(region);
         this.aosOpenSearchClient = new AOSOpenSearchClient();
         this.aosOpenSearchClient.initialize(metadataSettings);
+        cacheGlobalResources();
+    }
+
+    /**
+     * This method is to check if a resource is global based on index/table name and resource id.
+     * @param index The index/table name.
+     * @param id The resource id.
+     * @return If the resource global one.
+     */
+    public boolean isGlobalResource(String index, String id) {
+        return GLOBAL_RESOURCES_CACHE.containsKey(buildGlobalCacheKey(index, id));
     }
 
     /**
@@ -149,6 +173,75 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         this.dynamoDbAsyncClient = dynamoDbAsyncClient;
         this.aosOpenSearchClient = aosOpenSearchClient;
         this.tenantIdField = tenantIdField;
+    }
+
+    private void cacheGlobalResources() {
+        this.dynamoDbAsyncClient.listTables().thenAccept(tables -> {
+            Map<String, CompletableFuture<DescribeTableResponse>> describeTableCompletableFutureMap = getDescribeTableCompletableFutureMap(tables);
+            CompletableFuture.allOf(describeTableCompletableFutureMap.values().toArray(new CompletableFuture[0])).exceptionally(ex -> {
+                log.error("Failed to describe DDB tables", ex);
+                throw new OpenSearchStatusException("Failed to describe DDB tables",
+                        RestStatus.INTERNAL_SERVER_ERROR,
+                        ex);
+            }).thenAccept(y -> {
+                List<String> potentialGlobalResourceTables = new ArrayList<>();
+                for (Map.Entry<String, CompletableFuture<DescribeTableResponse>> responseFuture : describeTableCompletableFutureMap.entrySet()) {
+                    DescribeTableResponse describeTableResponse = responseFuture.getValue().join();
+                    if (describeTableResponse.table().hasKeySchema() && describeTableResponse.table().keySchema().stream().anyMatch(kse -> HASH_KEY.equals(kse.attributeName()))) {
+                        potentialGlobalResourceTables.add(describeTableResponse.table().tableName());
+                    }
+                }
+                if (!potentialGlobalResourceTables.isEmpty()) {
+                    log.info("Found potential global resource tables: {}", potentialGlobalResourceTables);
+                    Map<String, CompletableFuture<QueryResponse>> fetchGlobalResourcesCompletableFutureMap =
+                            potentialGlobalResourceTables.stream()
+                                    .collect(Collectors.toMap(
+                                            Function.identity(),
+                                            this::fetchGlobalResources
+                                    ));
+                    CompletableFuture.allOf(fetchGlobalResourcesCompletableFutureMap.values().toArray(new CompletableFuture[0])).exceptionally(ex -> {
+                        log.error("Failed to execute DDB query", ex);
+                        throw new OpenSearchStatusException("Failed to execute DDB query",
+                                RestStatus.INTERNAL_SERVER_ERROR,
+                                ex);
+                    }).thenAccept(z -> {
+                        for (Map.Entry<String, CompletableFuture<QueryResponse>> responseFuture : fetchGlobalResourcesCompletableFutureMap.entrySet()) {
+                            QueryResponse queryResponse = responseFuture.getValue().join();
+                            queryResponse.items().forEach(item -> {
+                                String id = item.get(RANGE_KEY).s();
+                                GLOBAL_RESOURCES_CACHE.put(buildGlobalCacheKey(responseFuture.getKey(), id), item);
+                            });
+                        }
+                    });
+                }
+            });
+        });
+    }
+
+    private Map<String, CompletableFuture<DescribeTableResponse>> getDescribeTableCompletableFutureMap(ListTablesResponse x) {
+        List<String> tableNames = x.tableNames();
+        // Build all tables describe table query
+        Map<String, CompletableFuture<DescribeTableResponse>> completableFutures = new HashMap<>();
+        tableNames.forEach(y -> {
+            DescribeTableRequest describeTableRequest = DescribeTableRequest.builder().tableName(y).build();
+            completableFutures.put(y, dynamoDbAsyncClient.describeTable(describeTableRequest));
+        });
+        return completableFutures;
+    }
+
+    private CompletableFuture<QueryResponse> fetchGlobalResources(String tableName) {
+        Map<String, AttributeValue> attributeValueMap = ImmutableMap.of(":hash_key", AttributeValue.builder().s(DEFAULT_GLOBAL_TENANT_ID).build());
+        QueryRequest request = QueryRequest.builder()
+                .tableName(tableName)
+                .keyConditionExpression("#tid = " + ":hash_key")
+                .expressionAttributeNames(ImmutableMap.of("#tid", "_tenant_id"))
+                .expressionAttributeValues(attributeValueMap)
+                .build();
+        return dynamoDbAsyncClient.query(request);
+    }
+
+    private String buildGlobalCacheKey(String index, String id) {
+        return index + ":" + id;
     }
 
     /**
@@ -178,6 +271,9 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
             throw new OpenSearchStatusException("Request body validation failed.", RestStatus.BAD_REQUEST, e);
         }
         final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
+        if (DEFAULT_GLOBAL_TENANT_ID.equals(tenantId)) {
+            throw new OpenSearchStatusException("Global tenant id is reserved for internal use, do not accept passing it from request!", RestStatus.BAD_REQUEST);
+        }
         final String tableName = request.index();
         final GetItemRequest getItemRequest = buildGetItemRequest(tenantId, id, request.index());
 
@@ -254,6 +350,10 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
+        CompletionStage<GetDataObjectResponse> getDataObjectFromCache = getGlobalResourceDataFromCache(request);
+        if (getDataObjectFromCache != null) {
+            return getDataObjectFromCache;
+        }
         final GetItemRequest getItemRequest = buildGetItemRequest(request.tenantId(), request.id(), request.index());
         return doPrivileged(() -> dynamoDbAsyncClient.getItem(getItemRequest)).thenApply(getItemResponse -> {
             try {
@@ -302,6 +402,49 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         });
     }
 
+    private CompletionStage<GetDataObjectResponse> getGlobalResourceDataFromCache(GetDataObjectRequest request) {
+        String checkingKey = request.index() + ":" + request.id();
+        if (GLOBAL_RESOURCES_CACHE.containsKey(checkingKey)) {
+            Map<String, AttributeValue> item = GLOBAL_RESOURCES_CACHE.get(checkingKey);
+            // Replace the tenant id in the global resource response to actual tenant id to bypass the validation of the resources:
+            // e.g.: https://github.com/opensearch-project/ml-commons/blob/main/ml-algorithms/src/main/java/org/opensearch/ml/engine/algorithms/agent/MLAgentExecutor.java#L206
+            Long seqNo = Optional.ofNullable(item.get(SEQ_NO_KEY))
+                    .map(AttributeValue::n)
+                    .map(Long::parseLong)
+                    .orElse(null);
+            ObjectNode sourceObject = null;
+            if (item.containsKey(SOURCE)) {
+                sourceObject = DDBJsonTransformer.convertDDBAttributeValueMapToObjectNode(item.get(SOURCE).m());
+            }
+            if (sourceObject == null) {
+                log.error("Empty global resource in cache!");
+                throw new OpenSearchStatusException("Empty global resource in cache!", RestStatus.INTERNAL_SERVER_ERROR);
+            } else {
+                try {
+                    sourceObject.put(TENANT_ID_FIELD_KEY, request.tenantId());
+                    String source = OBJECT_MAPPER.writeValueAsString(sourceObject);
+                    String simulatedGetResponse = simulateOpenSearchResponse(request.index(), request.id(), source, seqNo, Map.of("found", true));
+                    XContentParser parser = JsonXContent.jsonXContent.createParser(
+                            NamedXContentRegistry.EMPTY,
+                            LoggingDeprecationHandler.INSTANCE,
+                            simulatedGetResponse
+                    );
+                    Map<String, Object> sourceAsMap = GetResponse.fromXContent(
+                            JsonXContent.jsonXContent.createParser(
+                                    NamedXContentRegistry.EMPTY,
+                                    LoggingDeprecationHandler.INSTANCE,
+                                    simulatedGetResponse
+                            )
+                    ).getSourceAsMap();
+                    return CompletableFuture.completedFuture(GetDataObjectResponse.builder().id(request.id()).parser(parser).source(sourceAsMap).build());
+                } catch (IOException e) {
+                    throw new OpenSearchStatusException("Failed to parse cached global response", RestStatus.INTERNAL_SERVER_ERROR, e);
+                }
+            }
+        }
+        return null;
+    }
+
     /**
      * Makes use of DDB update request to update data object.
      *
@@ -336,6 +479,9 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
             throw new OpenSearchStatusException("Request body validation failed.", RestStatus.BAD_REQUEST, e);
         }
         final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
+        if (DEFAULT_GLOBAL_TENANT_ID.equals(tenantId)) {
+            throw new OpenSearchStatusException("Global tenant id is reserved for internal use.", RestStatus.INTERNAL_SERVER_ERROR);
+        }
         return doPrivileged(() -> {
             try {
                 String source = Strings.toString(MediaTypeRegistry.JSON, request.dataObject());
@@ -454,6 +600,9 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         Boolean isMultiTenancyEnabled
     ) {
         final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
+        if (DEFAULT_GLOBAL_TENANT_ID.equals(tenantId)) {
+            throw new OpenSearchStatusException("Global tenant id is reserved for internal use, do not accept passing it from request!", RestStatus.BAD_REQUEST);
+        }
         final DeleteItemRequest deleteItemRequest = DeleteItemRequest.builder()
             .tableName(request.index())
             .key(

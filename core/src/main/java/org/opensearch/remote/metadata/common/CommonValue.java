@@ -26,6 +26,8 @@ public class CommonValue {
     public static final String REMOTE_METADATA_REGION_KEY = "remote_metadata_region";
     /** The key for remote metadata service name used by service-specific SDKs */
     public static final String REMOTE_METADATA_SERVICE_NAME_KEY = "remote_metadata_service_name";
+    /** A configurable tenant id to identify global resources. */
+    public static final String REMOTE_METADATA_GLOBAL_TENANT_ID_KEY = "global_tenant_id";
 
     /** The value for remote metadata type for a remote OpenSearch cluster compatible with OpenSearch Java Client. */
     public static final String REMOTE_OPENSEARCH = "RemoteOpenSearch";
