@@ -185,6 +185,14 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
 
         return doPrivileged(() -> dynamoDbAsyncClient.getItem(getItemRequest).thenCompose(getItemResponse -> {
             try {
+                // Fail fast if item exists to save an attempted conditional write
+                if (!request.overwriteIfExists()
+                    && getItemResponse != null
+                    && getItemResponse.item() != null
+                    && !getItemResponse.item().isEmpty()) {
+                    throw new OpenSearchStatusException("Existing data object for ID: " + request.id(), RestStatus.CONFLICT);
+                }
+
                 Long sequenceNumber = initOrIncrementSeqNo(getItemResponse);
                 String source = Strings.toString(MediaTypeRegistry.JSON, request.dataObject());
                 JsonNode jsonNode = OBJECT_MAPPER.readTree(source);
@@ -199,11 +207,10 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 item.put(SEQ_NO_KEY, AttributeValue.builder().n(sequenceNumber.toString()).build());
                 PutItemRequest.Builder builder = PutItemRequest.builder().tableName(tableName).item(item);
 
-                if (!request.overwriteIfExists()
-                    && getItemResponse != null
-                    && getItemResponse.item() != null
-                    && !getItemResponse.item().isEmpty()) {
-                    throw new OpenSearchStatusException("Existing data object for ID: " + request.id(), RestStatus.CONFLICT);
+                // Protect against race condition if another thread just created this
+                if (!request.overwriteIfExists()) {
+                    builder.conditionExpression("attribute_not_exists(#hk) AND attribute_not_exists(#rk)")
+                        .expressionAttributeNames(Map.of("#hk", HASH_KEY, "#rk", RANGE_KEY));
                 }
 
                 final PutItemRequest putItemRequest = builder.build();
@@ -221,7 +228,17 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                     } catch (IOException e) {
                         throw new OpenSearchStatusException("Failed to create parser for response", RestStatus.INTERNAL_SERVER_ERROR, e);
                     }
-                });
+                })
+                    // Thrown if overwriteIfExists is false
+                    .exceptionally(e -> {
+                        if (e.getCause() instanceof ConditionalCheckFailedException) {
+                            throw new OpenSearchStatusException("Concurrent write detected for ID: " + request.id(), RestStatus.CONFLICT);
+                        }
+                        if (e instanceof RuntimeException) {
+                            throw (RuntimeException) e;
+                        }
+                        throw new CompletionException(e);
+                    });
             } catch (IOException e) {
                 throw new OpenSearchStatusException("Failed to parse data object " + request.id(), RestStatus.BAD_REQUEST, e);
             }
