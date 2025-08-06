@@ -80,6 +80,7 @@ public class SdkClientUtilsTests {
         testDataObject = new TestDataObject("foo");
     }
 
+    @SuppressWarnings("deprecation")
     @Test
     void testLowerCaseEnumValues() {
         // Test normal case
