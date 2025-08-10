@@ -154,8 +154,16 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 if (shouldUseId(request.id())) {
                     builder.id(request.id());
                 }
+                if (request.ifSeqNo() != null) {
+                    builder.ifSeqNo(request.ifSeqNo());
+                }
+                if (request.ifPrimaryTerm() != null) {
+                    builder.ifPrimaryTerm(request.ifPrimaryTerm());
+                }
+
                 IndexRequest<?> indexRequest = builder.build();
                 log.info("Indexing data object in {}", request.index());
+
                 return openSearchAsyncClient.index(indexRequest).thenApply(indexResponse -> {
                     log.info("Creation status for id {}: {}", indexResponse.id(), indexResponse.result());
                     try {
@@ -168,6 +176,17 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                         );
                     }
                 }).exceptionally(e -> {
+                    Throwable cause = e.getCause();
+                    if (cause instanceof OpenSearchException) {
+                        OpenSearchException ose = (OpenSearchException) cause;
+                        String errorType = ose.status() == RestStatus.CONFLICT.getStatus() ? "Document Version Conflict" : "Failed";
+                        log.error("{} putting {} in {}: {}", errorType, request.id(), request.index(), ose.getMessage(), ose);
+                        throw new OpenSearchStatusException(
+                            errorType + " putting " + request.id() + " in index " + request.index(),
+                            RestStatus.fromCode(ose.status()),
+                            ose
+                        );
+                    }
                     throw new OpenSearchStatusException(
                         "Failed to put data object in index " + request.index(),
                         RestStatus.INTERNAL_SERVER_ERROR,
@@ -176,7 +195,6 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 });
             } catch (IOException e) {
                 log.error("Error putting data object in {}: {}", request.index(), e.getMessage(), e);
-                // Rethrow unchecked exception on XContent parsing error
                 throw new OpenSearchStatusException(
                     "Failed to parse data object to put in index " + request.index(),
                     RestStatus.BAD_REQUEST
@@ -309,8 +327,18 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
     ) {
         return doPrivileged(() -> {
             try {
-                DeleteRequest deleteRequest = new DeleteRequest.Builder().index(request.index()).id(request.id()).build();
+                DeleteRequest.Builder builder = new DeleteRequest.Builder().index(request.index()).id(request.id());
+
+                if (request.ifSeqNo() != null) {
+                    builder.ifSeqNo(request.ifSeqNo());
+                }
+                if (request.ifPrimaryTerm() != null) {
+                    builder.ifPrimaryTerm(request.ifPrimaryTerm());
+                }
+
+                DeleteRequest deleteRequest = builder.build();
                 log.info("Deleting {} from {}", request.id(), request.index());
+
                 return openSearchAsyncClient.delete(deleteRequest).thenApply(deleteResponse -> {
                     log.info("Deletion status for id {}: {}", deleteResponse.id(), deleteResponse.result());
                     try {
@@ -323,7 +351,17 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                         );
                     }
                 }).exceptionally(e -> {
-                    log.error("Error deleting {} from {}: {}", request.id(), request.index(), e.getMessage(), e);
+                    Throwable cause = e.getCause();
+                    if (cause instanceof OpenSearchException) {
+                        OpenSearchException ose = (OpenSearchException) cause;
+                        String errorType = ose.status() == RestStatus.CONFLICT.getStatus() ? "Document Version Conflict" : "Failed";
+                        log.error("{} deleting {} from {}: {}", errorType, request.id(), request.index(), ose.getMessage(), ose);
+                        throw new OpenSearchStatusException(
+                            errorType + " deleting " + request.id() + " from index " + request.index(),
+                            RestStatus.fromCode(ose.status()),
+                            ose
+                        );
+                    }
                     throw new OpenSearchStatusException(
                         "Failed to delete data object " + request.id() + " from index " + request.index(),
                         RestStatus.INTERNAL_SERVER_ERROR,
@@ -411,6 +449,12 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 if (!Strings.isNullOrEmpty(putRequest.id())) {
                     i.id(putRequest.id());
                 }
+                if (putRequest.ifSeqNo() != null) {
+                    i.ifSeqNo(putRequest.ifSeqNo());
+                }
+                if (putRequest.ifPrimaryTerm() != null) {
+                    i.ifPrimaryTerm(putRequest.ifPrimaryTerm());
+                }
                 return i;
             })));
         } else {
@@ -421,6 +465,12 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                     .tDocumentSerializer(new JsonTransformer.XContentObjectJsonpSerializer());
                 if (!Strings.isNullOrEmpty(putRequest.id())) {
                     c.id(putRequest.id());
+                }
+                if (putRequest.ifSeqNo() != null) {
+                    c.ifSeqNo(putRequest.ifSeqNo());
+                }
+                if (putRequest.ifPrimaryTerm() != null) {
+                    c.ifPrimaryTerm(putRequest.ifPrimaryTerm());
                 }
                 return c;
             })));
@@ -455,7 +505,16 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
     }
 
     private void addBulkDeleteOperation(DeleteDataObjectRequest deleteRequest, List<BulkOperation> operations) {
-        operations.add(BulkOperation.of(op -> op.delete(d -> d.index(deleteRequest.index()).id(deleteRequest.id()))));
+        operations.add(BulkOperation.of(op -> op.delete(d -> {
+            d.index(deleteRequest.index()).id(deleteRequest.id());
+            if (deleteRequest.ifSeqNo() != null) {
+                d.ifSeqNo(deleteRequest.ifSeqNo());
+            }
+            if (deleteRequest.ifPrimaryTerm() != null) {
+                d.ifPrimaryTerm(deleteRequest.ifPrimaryTerm());
+            }
+            return d;
+        })));
     }
 
     private DataObjectResponse[] bulkResponseItemsToArray(List<BulkResponseItem> items) throws IOException {
@@ -601,7 +660,7 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                     final TlsStrategy tlsStrategy = ClientTlsStrategyBuilder.create()
                         .setSslContext(sslContext)
                         .setHostnameVerifier(NoopHostnameVerifier.INSTANCE)
-                        .build();
+                        .buildAsync();
                     final PoolingAsyncClientConnectionManager connectionManager = PoolingAsyncClientConnectionManagerBuilder.create()
                         .setTlsStrategy(tlsStrategy)
                         .build();

@@ -295,6 +295,77 @@ public class RemoteClusterIndicesClientTests {
     }
 
     @Test
+    public void testPutDataObject_VersionCheck() throws IOException {
+        PutDataObjectRequest putRequest = PutDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .dataObject(testDataObject)
+            .ifSeqNo(5L)
+            .ifPrimaryTerm(2L)
+            .build();
+
+        IndexResponse indexResponse = new IndexResponse.Builder().id(TEST_ID)
+            .index(TEST_INDEX)
+            .primaryTerm(2)
+            .seqNo(5)
+            .result(Result.Updated)
+            .shards(new ShardStatistics.Builder().failed(0).successful(1).total(1).build())
+            .version(1)
+            .build();
+
+        ArgumentCaptor<IndexRequest<?>> indexRequestCaptor = ArgumentCaptor.forClass(IndexRequest.class);
+        when(mockedOpenSearchAsyncClient.index(indexRequestCaptor.capture())).thenReturn(CompletableFuture.completedFuture(indexResponse));
+
+        PutDataObjectResponse response = sdkClient.putDataObjectAsync(putRequest, testThreadPool.executor(TEST_THREAD_POOL))
+            .toCompletableFuture()
+            .join();
+
+        assertEquals(TEST_INDEX, indexRequestCaptor.getValue().index());
+        assertEquals(TEST_ID, indexRequestCaptor.getValue().id());
+        assertEquals(5L, indexRequestCaptor.getValue().ifSeqNo());
+        assertEquals(2L, indexRequestCaptor.getValue().ifPrimaryTerm());
+
+        assertEquals(TEST_ID, response.id());
+    }
+
+    @Test
+    public void testPutDataObject_VersionConflict() throws IOException {
+        PutDataObjectRequest putRequest = PutDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .dataObject(testDataObject)
+            .ifSeqNo(5L)
+            .ifPrimaryTerm(2L)
+            .build();
+
+        OpenSearchException conflictException = new OpenSearchException(
+            new ErrorResponse.Builder().status(RestStatus.CONFLICT.getStatus())
+                .error(new ErrorCause.Builder().type("version_conflict_engine_exception").reason("version conflict").build())
+                .build()
+        );
+
+        ArgumentCaptor<IndexRequest<?>> indexRequestCaptor = ArgumentCaptor.forClass(IndexRequest.class);
+        when(mockedOpenSearchAsyncClient.index(indexRequestCaptor.capture())).thenReturn(CompletableFuture.failedFuture(conflictException));
+
+        CompletableFuture<PutDataObjectResponse> future = sdkClient.putDataObjectAsync(
+            putRequest,
+            testThreadPool.executor(TEST_THREAD_POOL)
+        ).toCompletableFuture();
+
+        IndexRequest<?> capturedRequest = indexRequestCaptor.getValue();
+        assertEquals(5L, capturedRequest.ifSeqNo());
+        assertEquals(2L, capturedRequest.ifPrimaryTerm());
+
+        CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
+        Throwable cause = ce.getCause();
+        assertEquals(OpenSearchStatusException.class, cause.getClass());
+        assertEquals(RestStatus.CONFLICT, ((OpenSearchStatusException) cause).status());
+        assertTrue(cause.getMessage().contains("Document Version Conflict"));
+    }
+
+    @Test
     @SuppressWarnings({ "unchecked", "rawtypes" })
     public void testGetDataObject() throws IOException {
         GetDataObjectRequest getRequest = GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build();
@@ -520,6 +591,52 @@ public class RemoteClusterIndicesClientTests {
             .id(TEST_ID)
             .tenantId(TEST_TENANT_ID)
             .dataObject(testDataObject)
+            .ifSeqNo(5L)
+            .ifPrimaryTerm(2L)
+            .build();
+
+        UpdateResponse<Map<String, Object>> updateResponse = new UpdateResponse.Builder<Map<String, Object>>().id(TEST_ID)
+            .index(TEST_INDEX)
+            .primaryTerm(2L)
+            .seqNo(5L)
+            .result(Result.Updated)
+            .shards(new ShardStatistics.Builder().failed(0).successful(1).total(1).build())
+            .version(1)
+            .build();
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<UpdateRequest<Map<String, Object>, ?>> updateRequestCaptor = ArgumentCaptor.forClass(UpdateRequest.class);
+        when(mockedOpenSearchAsyncClient.update(updateRequestCaptor.capture(), any())).thenReturn(
+            CompletableFuture.completedFuture(updateResponse)
+        );
+
+        UpdateDataObjectResponse response = sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(TEST_THREAD_POOL))
+            .toCompletableFuture()
+            .join();
+
+        // Verify request parameters
+        assertEquals(TEST_INDEX, updateRequestCaptor.getValue().index());
+        assertEquals(TEST_ID, updateRequestCaptor.getValue().id());
+        assertEquals(5L, updateRequestCaptor.getValue().ifSeqNo());
+        assertEquals(2L, updateRequestCaptor.getValue().ifPrimaryTerm());
+
+        // Verify response
+        org.opensearch.action.update.UpdateResponse updateActionResponse = org.opensearch.action.update.UpdateResponse.fromXContent(
+            response.parser()
+        );
+        assertEquals(TEST_ID, updateActionResponse.getId());
+        assertEquals(TEST_INDEX, updateActionResponse.getIndex());
+        assertEquals(5L, updateActionResponse.getSeqNo());
+        assertEquals(2L, updateActionResponse.getPrimaryTerm());
+    }
+
+    @Test
+    public void testUpdateDataObject_VersionConflict() throws IOException {
+        UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .dataObject(testDataObject)
             .ifSeqNo(5)
             .ifPrimaryTerm(2)
             .build();
@@ -640,6 +757,79 @@ public class RemoteClusterIndicesClientTests {
 
         CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
         assertEquals(OpenSearchStatusException.class, ce.getCause().getClass());
+    }
+
+    @Test
+    public void testDeleteDataObject_VersionCheck() throws IOException {
+        DeleteDataObjectRequest deleteRequest = DeleteDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .ifSeqNo(5L)
+            .ifPrimaryTerm(2L)
+            .build();
+
+        DeleteResponse deleteResponse = new DeleteResponse.Builder().id(TEST_ID)
+            .index(TEST_INDEX)
+            .primaryTerm(2)
+            .seqNo(5)
+            .result(Result.Deleted)
+            .shards(new ShardStatistics.Builder().failed(0).successful(1).total(1).build())
+            .version(1)
+            .build();
+
+        ArgumentCaptor<DeleteRequest> deleteRequestCaptor = ArgumentCaptor.forClass(DeleteRequest.class);
+        when(mockedOpenSearchAsyncClient.delete(deleteRequestCaptor.capture())).thenReturn(
+            CompletableFuture.completedFuture(deleteResponse)
+        );
+
+        DeleteDataObjectResponse response = sdkClient.deleteDataObjectAsync(deleteRequest, testThreadPool.executor(TEST_THREAD_POOL))
+            .toCompletableFuture()
+            .join();
+
+        assertEquals(TEST_INDEX, deleteRequestCaptor.getValue().index());
+        assertEquals(TEST_ID, deleteRequestCaptor.getValue().id());
+        assertEquals(5L, deleteRequestCaptor.getValue().ifSeqNo());
+        assertEquals(2L, deleteRequestCaptor.getValue().ifPrimaryTerm());
+
+        assertEquals(TEST_ID, response.deleteResponse().getId());
+    }
+
+    @Test
+    public void testDeleteDataObject_VersionConflict() throws IOException {
+        DeleteDataObjectRequest deleteRequest = DeleteDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .ifSeqNo(5L)
+            .ifPrimaryTerm(2L)
+            .build();
+
+        OpenSearchException conflictException = new OpenSearchException(
+            new ErrorResponse.Builder().status(RestStatus.CONFLICT.getStatus())
+                .error(new ErrorCause.Builder().type("version_conflict_engine_exception").reason("version conflict").build())
+                .build()
+        );
+
+        ArgumentCaptor<DeleteRequest> deleteRequestCaptor = ArgumentCaptor.forClass(DeleteRequest.class);
+        when(mockedOpenSearchAsyncClient.delete(deleteRequestCaptor.capture())).thenReturn(
+            CompletableFuture.failedFuture(conflictException)
+        );
+
+        CompletableFuture<DeleteDataObjectResponse> future = sdkClient.deleteDataObjectAsync(
+            deleteRequest,
+            testThreadPool.executor(TEST_THREAD_POOL)
+        ).toCompletableFuture();
+
+        DeleteRequest capturedRequest = deleteRequestCaptor.getValue();
+        assertEquals(5L, capturedRequest.ifSeqNo());
+        assertEquals(2L, capturedRequest.ifPrimaryTerm());
+
+        CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
+        Throwable cause = ce.getCause();
+        assertEquals(OpenSearchStatusException.class, cause.getClass());
+        assertEquals(RestStatus.CONFLICT, ((OpenSearchStatusException) cause).status());
+        assertTrue(cause.getMessage().contains("Document Version Conflict"));
     }
 
     @Test
