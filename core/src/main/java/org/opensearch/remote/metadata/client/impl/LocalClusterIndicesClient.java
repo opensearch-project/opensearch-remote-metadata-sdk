@@ -12,6 +12,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.opensearch.ExceptionsHelper;
 import org.opensearch.OpenSearchStatusException;
+import org.opensearch.action.DocWriteRequest;
 import org.opensearch.action.DocWriteRequest.OpType;
 import org.opensearch.action.bulk.BulkRequest;
 import org.opensearch.action.delete.DeleteRequest;
@@ -46,6 +47,7 @@ import org.opensearch.remote.metadata.client.SearchDataObjectRequest;
 import org.opensearch.remote.metadata.client.SearchDataObjectResponse;
 import org.opensearch.remote.metadata.client.UpdateDataObjectRequest;
 import org.opensearch.remote.metadata.client.UpdateDataObjectResponse;
+import org.opensearch.remote.metadata.client.WriteDataObjectRequest;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.transport.client.Client;
 
@@ -99,15 +101,27 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
                 client.index(indexRequest, ActionListener.wrap(indexResponse -> {
                     log.info("Creation status for id {}: {}", indexResponse.getId(), indexResponse.getResult());
                     future.complete(new PutDataObjectResponse(indexResponse));
-                },
-                    e -> future.completeExceptionally(
-                        new OpenSearchStatusException(
-                            "Failed to put data object in index " + request.index(),
-                            RestStatus.INTERNAL_SERVER_ERROR,
-                            e
-                        )
-                    )
-                ));
+                }, e -> {
+                    Throwable t = ExceptionsHelper.unwrapCause(e);
+                    if (t instanceof VersionConflictEngineException) {
+                        log.error("Document version conflict putting {} in {}: {}", request.id(), request.index(), e.getMessage(), e);
+                        future.completeExceptionally(
+                            new OpenSearchStatusException(
+                                "Document version conflict putting " + request.id() + " in index " + request.index(),
+                                RestStatus.CONFLICT,
+                                t
+                            )
+                        );
+                    } else {
+                        future.completeExceptionally(
+                            new OpenSearchStatusException(
+                                "Failed to put data object in index " + request.index(),
+                                RestStatus.INTERNAL_SERVER_ERROR,
+                                e
+                            )
+                        );
+                    }
+                }));
             } catch (IOException e) {
                 future.completeExceptionally(
                     new OpenSearchStatusException(
@@ -129,8 +143,18 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
             if (shouldUseId(putDataObjectRequest.id())) {
                 indexRequest.id(putDataObjectRequest.id());
             }
-            return indexRequest;
+            return setSeqNoAndPrimaryTerm(indexRequest, putDataObjectRequest);
         }
+    }
+
+    private <T extends DocWriteRequest<T>> T setSeqNoAndPrimaryTerm(T request, WriteDataObjectRequest writeRequest) {
+        if (writeRequest.ifSeqNo() != null) {
+            request.setIfSeqNo(writeRequest.ifSeqNo());
+        }
+        if (writeRequest.ifPrimaryTerm() != null) {
+            request.setIfPrimaryTerm(writeRequest.ifPrimaryTerm());
+        }
+        return request;
     }
 
     @Override
@@ -222,16 +246,10 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
             UpdateRequest updateRequest = new UpdateRequest(updateDataObjectRequest.index(), updateDataObjectRequest.id()).doc(
                 updateDataObjectRequest.dataObject().toXContent(sourceBuilder, EMPTY_PARAMS)
             );
-            if (updateDataObjectRequest.ifSeqNo() != null) {
-                updateRequest.setIfSeqNo(updateDataObjectRequest.ifSeqNo());
-            }
-            if (updateDataObjectRequest.ifPrimaryTerm() != null) {
-                updateRequest.setIfPrimaryTerm(updateDataObjectRequest.ifPrimaryTerm());
-            }
             if (updateDataObjectRequest.retryOnConflict() > 0) {
                 updateRequest.retryOnConflict(updateDataObjectRequest.retryOnConflict());
             }
-            return updateRequest;
+            return setSeqNoAndPrimaryTerm(updateRequest, updateDataObjectRequest);
         }
     }
 
@@ -248,21 +266,34 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
             client.delete(deleteRequest, ActionListener.wrap(deleteResponse -> {
                 log.info("Deletion status for id {}: {}", deleteResponse.getId(), deleteResponse.getResult());
                 future.complete(new DeleteDataObjectResponse(deleteResponse));
-            },
-                e -> future.completeExceptionally(
-                    new OpenSearchStatusException(
-                        "Failed to delete data object from index " + request.index(),
-                        RestStatus.INTERNAL_SERVER_ERROR,
-                        e
-                    )
-                )
-            ));
+            }, e -> {
+                Throwable t = ExceptionsHelper.unwrapCause(e);
+                if (t instanceof VersionConflictEngineException) {
+                    log.error("Document version conflict deleting {} from {}: {}", request.id(), request.index(), e.getMessage(), e);
+                    future.completeExceptionally(
+                        new OpenSearchStatusException(
+                            "Document version conflict deleting " + request.id() + " from index " + request.index(),
+                            RestStatus.CONFLICT,
+                            t
+                        )
+                    );
+                } else {
+                    future.completeExceptionally(
+                        new OpenSearchStatusException(
+                            "Failed to delete data object from index " + request.index(),
+                            RestStatus.INTERNAL_SERVER_ERROR,
+                            e
+                        )
+                    );
+                }
+            }));
             return future;
         });
     }
 
     private DeleteRequest createDeleteRequest(DeleteDataObjectRequest deleteDataObjectRequest) {
-        return new DeleteRequest(deleteDataObjectRequest.index(), deleteDataObjectRequest.id());
+        DeleteRequest deleteRequest = new DeleteRequest(deleteDataObjectRequest.index(), deleteDataObjectRequest.id());
+        return setSeqNoAndPrimaryTerm(deleteRequest, deleteDataObjectRequest);
     }
 
     @Override

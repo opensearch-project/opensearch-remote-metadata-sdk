@@ -226,6 +226,59 @@ public class LocalClusterIndicesClientTests {
     }
 
     @Test
+    public void testPutDataObject_VersionCheck() throws IOException {
+        PutDataObjectRequest putRequest = PutDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .dataObject(testDataObject)
+            .ifSeqNo(5L)
+            .ifPrimaryTerm(2L)
+            .build();
+
+        IndexResponse indexResponse = new IndexResponse(new ShardId(TEST_INDEX, "_na_", 0), TEST_ID, 1, 0, 2, true);
+        doAnswer(invocation -> {
+            ActionListener<IndexResponse> listener = invocation.getArgument(1);
+            listener.onResponse(indexResponse);
+            return null;
+        }).when(mockedClient).index(any(IndexRequest.class), any());
+
+        PutDataObjectResponse response = sdkClient.putDataObjectAsync(putRequest).toCompletableFuture().join();
+
+        ArgumentCaptor<IndexRequest> requestCaptor = ArgumentCaptor.forClass(IndexRequest.class);
+        verify(mockedClient, times(1)).index(requestCaptor.capture(), any());
+        assertEquals(TEST_INDEX, requestCaptor.getValue().index());
+        assertEquals(TEST_ID, requestCaptor.getValue().id());
+        assertEquals(5L, requestCaptor.getValue().ifSeqNo());
+        assertEquals(2L, requestCaptor.getValue().ifPrimaryTerm());
+    }
+
+    @Test
+    public void testPutDataObject_VersionConflict() throws IOException {
+        PutDataObjectRequest putRequest = PutDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .dataObject(testDataObject)
+            .ifSeqNo(5L)
+            .ifPrimaryTerm(2L)
+            .build();
+
+        doAnswer(invocation -> {
+            ActionListener<IndexResponse> listener = invocation.getArgument(1);
+            listener.onFailure(new VersionConflictEngineException(new ShardId(TEST_INDEX, "_na_", 0), TEST_ID, "version conflict"));
+            return null;
+        }).when(mockedClient).index(any(IndexRequest.class), any());
+
+        CompletableFuture<PutDataObjectResponse> future = sdkClient.putDataObjectAsync(putRequest).toCompletableFuture();
+
+        CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
+        Throwable cause = ce.getCause();
+        assertEquals(OpenSearchStatusException.class, cause.getClass());
+        assertEquals(RestStatus.CONFLICT, ((OpenSearchStatusException) cause).status());
+    }
+
+    @Test
     public void testGetDataObject() throws IOException {
         GetDataObjectRequest getRequest = GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build();
 
@@ -460,7 +513,7 @@ public class LocalClusterIndicesClientTests {
     }
 
     @Test
-    public void testUpdateDataObject_VersionCheck_unwrap() throws IOException {
+    public void testUpdateDataObject_VersionConflict() throws IOException {
         UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
             .index(TEST_INDEX)
             .id(TEST_ID)
@@ -534,6 +587,58 @@ public class LocalClusterIndicesClientTests {
         Throwable cause = ce.getCause();
         assertEquals(OpenSearchStatusException.class, cause.getClass());
         assertEquals("Failed to delete data object from index test_index", cause.getMessage());
+    }
+
+    @Test
+    public void testDeleteDataObject_VersionCheck() throws IOException {
+        DeleteDataObjectRequest deleteRequest = DeleteDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .ifSeqNo(5L)
+            .ifPrimaryTerm(2L)
+            .build();
+
+        DeleteResponse deleteResponse = new DeleteResponse(new ShardId(TEST_INDEX, "_na_", 0), TEST_ID, 1, 0, 2, true);
+
+        doAnswer(invocation -> {
+            ActionListener<DeleteResponse> listener = invocation.getArgument(1);
+            listener.onResponse(deleteResponse);
+            return null;
+        }).when(mockedClient).delete(any(DeleteRequest.class), any());
+
+        DeleteDataObjectResponse response = sdkClient.deleteDataObjectAsync(deleteRequest).toCompletableFuture().join();
+
+        ArgumentCaptor<DeleteRequest> requestCaptor = ArgumentCaptor.forClass(DeleteRequest.class);
+        verify(mockedClient, times(1)).delete(requestCaptor.capture(), any());
+        assertEquals(TEST_INDEX, requestCaptor.getValue().index());
+        assertEquals(TEST_ID, requestCaptor.getValue().id());
+        assertEquals(5L, requestCaptor.getValue().ifSeqNo());
+        assertEquals(2L, requestCaptor.getValue().ifPrimaryTerm());
+    }
+
+    @Test
+    public void testDeleteDataObject_VersionConflict() throws IOException {
+        DeleteDataObjectRequest deleteRequest = DeleteDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .ifSeqNo(5L)
+            .ifPrimaryTerm(2L)
+            .build();
+
+        doAnswer(invocation -> {
+            ActionListener<DeleteResponse> listener = invocation.getArgument(1);
+            listener.onFailure(new VersionConflictEngineException(new ShardId(TEST_INDEX, "_na_", 0), TEST_ID, "version conflict"));
+            return null;
+        }).when(mockedClient).delete(any(DeleteRequest.class), any());
+
+        CompletableFuture<DeleteDataObjectResponse> future = sdkClient.deleteDataObjectAsync(deleteRequest).toCompletableFuture();
+
+        CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
+        Throwable cause = ce.getCause();
+        assertEquals(OpenSearchStatusException.class, cause.getClass());
+        assertEquals(RestStatus.CONFLICT, ((OpenSearchStatusException) cause).status());
     }
 
     @Test
