@@ -207,8 +207,14 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
 
                 // Protect against race condition if another thread just created this
                 if (!request.overwriteIfExists()) {
+                    // CREATE operation - check item doesn't exist
                     builder.conditionExpression("attribute_not_exists(#hk) AND attribute_not_exists(#rk)")
                         .expressionAttributeNames(Map.of("#hk", HASH_KEY, "#rk", RANGE_KEY));
+                } else if (request.ifSeqNo() != null) {
+                    // INDEX operation with version check
+                    builder.conditionExpression("#seqNo = :seqNo")
+                        .expressionAttributeNames(Map.of("#seqNo", SEQ_NO_KEY))
+                        .expressionAttributeValues(Map.of(":seqNo", AttributeValue.builder().n(Long.toString(request.ifSeqNo())).build()));
                 }
 
                 final PutItemRequest putItemRequest = builder.build();
@@ -230,7 +236,10 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                     // Thrown if overwriteIfExists is false
                     .exceptionally(e -> {
                         if (e.getCause() instanceof ConditionalCheckFailedException) {
-                            throw new OpenSearchStatusException("Concurrent write detected for ID: " + request.id(), RestStatus.CONFLICT);
+                            String message = request.overwriteIfExists()
+                                ? "Document version conflict for ID: " + request.id()
+                                : "Concurrent write detected for ID: " + request.id();
+                            throw new OpenSearchStatusException(message, RestStatus.CONFLICT);
                         }
                         if (e instanceof RuntimeException) {
                             throw (RuntimeException) e;
@@ -411,6 +420,9 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 updateItemRequestBuilder.conditionExpression("#seqNo = :currentSeqNo");
                 updateItemRequestBuilder.expressionAttributeNames(expressionAttributeNames)
                     .expressionAttributeValues(expressionAttributeValues);
+                // Needed to get SEQ_NO_KEY value for the response
+                updateItemRequestBuilder.returnValues("UPDATED_NEW");
+
                 UpdateItemRequest updateItemRequest = updateItemRequestBuilder.build();
 
                 return dynamoDbAsyncClient.updateItem(updateItemRequest).thenApply(updateItemResponse -> {
@@ -454,7 +466,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         Boolean isMultiTenancyEnabled
     ) {
         final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
-        final DeleteItemRequest deleteItemRequest = DeleteItemRequest.builder()
+        DeleteItemRequest.Builder builder = DeleteItemRequest.builder()
             .tableName(request.index())
             .key(
                 Map.ofEntries(
@@ -462,7 +474,16 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                     Map.entry(RANGE_KEY, AttributeValue.builder().s(request.id()).build())
                 )
             )
-            .build();
+            // Needed to get SEQ_NO_KEY value for the response
+            .returnValues("ALL_OLD");
+
+        if (request.ifSeqNo() != null) {
+            builder.conditionExpression("#seqNo = :seqNo")
+                .expressionAttributeNames(Map.of("#seqNo", SEQ_NO_KEY))
+                .expressionAttributeValues(Map.of(":seqNo", AttributeValue.builder().n(Long.toString(request.ifSeqNo())).build()));
+        }
+
+        final DeleteItemRequest deleteItemRequest = builder.build();
         return doPrivileged(() -> dynamoDbAsyncClient.deleteItem(deleteItemRequest).thenApply(deleteItemResponse -> {
             try {
                 Long sequenceNumber = null;
@@ -484,7 +505,17 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 // Rethrow unchecked exception on XContent parsing error
                 throw new OpenSearchStatusException("Failed to parse response", RestStatus.INTERNAL_SERVER_ERROR);
             }
+        }).exceptionally(e -> {
+            if (e.getCause() instanceof ConditionalCheckFailedException) {
+                String message = "Document version conflict deleting " + request.id() + " from index " + request.index();
+                throw new OpenSearchStatusException(message, RestStatus.CONFLICT);
+            }
+            if (e instanceof RuntimeException) {
+                throw (RuntimeException) e;
+            }
+            throw new CompletionException(e);
         }));
+
     }
 
     @Override

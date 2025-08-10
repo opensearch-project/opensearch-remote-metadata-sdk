@@ -422,6 +422,60 @@ public class DDBOpenSearchClientTests {
     }
 
     @Test
+    public void testPutDataObject_WithVersionCheck() throws IOException {
+        PutDataObjectRequest putRequest = PutDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TENANT_ID)
+            .overwriteIfExists(true)
+            .ifSeqNo(5L)
+            .ifPrimaryTerm(2L)
+            .dataObject(testDataObject)
+            .build();
+
+        when(dynamoDbAsyncClient.putItem(any(PutItemRequest.class))).thenReturn(
+            CompletableFuture.completedFuture(PutItemResponse.builder().build())
+        );
+
+        sdkClient.putDataObjectAsync(putRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join();
+
+        verify(dynamoDbAsyncClient).putItem(putItemRequestArgumentCaptor.capture());
+        PutItemRequest capturedRequest = putItemRequestArgumentCaptor.getValue();
+
+        assertEquals("#seqNo = :seqNo", capturedRequest.conditionExpression());
+        assertEquals(Map.of("#seqNo", SEQ_NUM), capturedRequest.expressionAttributeNames());
+        assertEquals("5", capturedRequest.expressionAttributeValues().get(":seqNo").n());
+    }
+
+    @Test
+    public void testPutDataObject_VersionConflict() {
+        PutDataObjectRequest putRequest = PutDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TENANT_ID)
+            .overwriteIfExists(true)
+            .ifSeqNo(5L)
+            .ifPrimaryTerm(2L)
+            .dataObject(testDataObject)
+            .build();
+
+        when(dynamoDbAsyncClient.putItem(any(PutItemRequest.class))).thenReturn(
+            CompletableFuture.failedFuture(ConditionalCheckFailedException.builder().build())
+        );
+
+        CompletableFuture<PutDataObjectResponse> future = sdkClient.putDataObjectAsync(
+            putRequest,
+            testThreadPool.executor(TEST_THREAD_POOL)
+        ).toCompletableFuture();
+
+        CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
+        assertTrue(ce.getCause() instanceof OpenSearchStatusException);
+        OpenSearchStatusException ose = (OpenSearchStatusException) ce.getCause();
+        assertEquals(RestStatus.CONFLICT, ose.status());
+        assertEquals("Document version conflict for ID: " + TEST_ID, ose.getMessage());
+    }
+
+    @Test
     public void testGetDataObject_HappyCase() throws IOException {
         GetDataObjectRequest getRequest = GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TENANT_ID).build();
         GetItemResponse getItemResponse = GetItemResponse.builder()
@@ -553,6 +607,56 @@ public class DDBOpenSearchClientTests {
         assertEquals(0, deleteActionResponse.getShardInfo().getFailed());
         assertEquals(0, deleteActionResponse.getShardInfo().getSuccessful());
         assertEquals(0, deleteActionResponse.getShardInfo().getTotal());
+    }
+
+    @Test
+    public void testDeleteDataObject_WithVersionCheck() throws IOException {
+        DeleteDataObjectRequest deleteRequest = DeleteDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TENANT_ID)
+            .ifSeqNo(5L)
+            .ifPrimaryTerm(2L)
+            .build();
+
+        when(dynamoDbAsyncClient.deleteItem(deleteItemRequestArgumentCaptor.capture())).thenReturn(
+            CompletableFuture.completedFuture(
+                DeleteItemResponse.builder().attributes(Map.of(SEQ_NUM, AttributeValue.builder().n("5").build())).build()
+            )
+        );
+
+        sdkClient.deleteDataObjectAsync(deleteRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join();
+
+        DeleteItemRequest capturedRequest = deleteItemRequestArgumentCaptor.getValue();
+        assertEquals("#seqNo = :seqNo", capturedRequest.conditionExpression());
+        assertEquals(Map.of("#seqNo", SEQ_NUM), capturedRequest.expressionAttributeNames());
+        assertEquals("5", capturedRequest.expressionAttributeValues().get(":seqNo").n());
+    }
+
+    @Test
+    public void testDeleteDataObject_VersionConflict() {
+        DeleteDataObjectRequest deleteRequest = DeleteDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TENANT_ID)
+            .ifSeqNo(5L)
+            .ifPrimaryTerm(2L)
+            .build();
+
+        when(dynamoDbAsyncClient.deleteItem(any(DeleteItemRequest.class))).thenReturn(
+            CompletableFuture.failedFuture(ConditionalCheckFailedException.builder().build())
+        );
+
+        CompletableFuture<DeleteDataObjectResponse> future = sdkClient.deleteDataObjectAsync(
+            deleteRequest,
+            testThreadPool.executor(TEST_THREAD_POOL)
+        ).toCompletableFuture();
+
+        CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
+        assertTrue(ce.getCause() instanceof OpenSearchStatusException);
+        OpenSearchStatusException ose = (OpenSearchStatusException) ce.getCause();
+        assertEquals(RestStatus.CONFLICT, ose.status());
+        assertEquals("Document version conflict deleting " + TEST_ID + " from index " + TEST_INDEX, ose.getMessage());
     }
 
     @Test
