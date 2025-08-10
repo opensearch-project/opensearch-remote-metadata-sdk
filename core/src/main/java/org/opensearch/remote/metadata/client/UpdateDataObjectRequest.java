@@ -14,15 +14,11 @@ import org.opensearch.core.xcontent.XContentBuilder;
 import java.io.IOException;
 import java.util.Map;
 
-import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
-
 /**
  * A class abstracting an OpenSearch UpdateRequest
  */
-public class UpdateDataObjectRequest extends DataObjectRequest {
+public class UpdateDataObjectRequest extends WriteDataObjectRequest {
 
-    private final Long ifSeqNo;
-    private final Long ifPrimaryTerm;
     private final int retryOnConflict;
     private final ToXContentObject dataObject;
 
@@ -47,27 +43,9 @@ public class UpdateDataObjectRequest extends DataObjectRequest {
         int retryOnConflict,
         ToXContentObject dataObject
     ) {
-        super(index, id, tenantId);
-        this.ifSeqNo = ifSeqNo;
-        this.ifPrimaryTerm = ifPrimaryTerm;
+        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm);
         this.retryOnConflict = retryOnConflict;
         this.dataObject = dataObject;
-    }
-
-    /**
-     * Returns the sequence number to match, or null if no match required
-     * @return the ifSeqNo
-     */
-    public Long ifSeqNo() {
-        return ifSeqNo;
-    }
-
-    /**
-     * Returns the primary term to match, or null if no match required
-     * @return the ifPrimaryTerm
-     */
-    public Long ifPrimaryTerm() {
-        return ifPrimaryTerm;
     }
 
     /**
@@ -102,43 +80,9 @@ public class UpdateDataObjectRequest extends DataObjectRequest {
     /**
      * Class for constructing a Builder for this Request Object
      */
-    public static class Builder extends DataObjectRequest.Builder<Builder> {
-        private Long ifSeqNo = null;
-        private Long ifPrimaryTerm = null;
+    public static class Builder extends WriteDataObjectRequest.Builder<Builder> {
         private int retryOnConflict = 0;
         private ToXContentObject dataObject = null;
-
-        /**
-         * Only perform this update request if the document's modification was assigned the given
-         * sequence number. Must be used in combination with {@link #ifPrimaryTerm(long)}
-         * <p>
-         * Sequence number may be represented by a different document versioning key on non-OpenSearch data stores.
-         * @param seqNo the sequence number
-         * @return the updated builder
-         */
-        public Builder ifSeqNo(long seqNo) {
-            if (seqNo < 0 && seqNo != UNASSIGNED_SEQ_NO) {
-                throw new IllegalArgumentException("sequence numbers must be non negative. got [" + seqNo + "].");
-            }
-            this.ifSeqNo = seqNo;
-            return this;
-        }
-
-        /**
-         * Only performs this update request if the document's last modification was assigned the given
-         * primary term. Must be used in combination with {@link #ifSeqNo(long)}
-         * <p>
-         * Primary term may not be relevant on non-OpenSearch data stores.
-         * @param term the primary term
-         * @return the updated builder
-         */
-        public Builder ifPrimaryTerm(long term) {
-            if (term < 0) {
-                throw new IllegalArgumentException("primary term must be non negative. got [" + term + "]");
-            }
-            this.ifPrimaryTerm = term;
-            return this;
-        }
 
         /**
          * Retry the update request on a version conflict exception.
