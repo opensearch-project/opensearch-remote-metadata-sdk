@@ -41,7 +41,7 @@ public class PutDataObjectRequest extends WriteDataObjectRequest {
         boolean overwriteIfExists,
         ToXContentObject dataObject
     ) {
-        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm);
+        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, !overwriteIfExists);
         this.overwriteIfExists = overwriteIfExists;
         this.dataObject = dataObject;
     }
@@ -112,9 +112,12 @@ public class PutDataObjectRequest extends WriteDataObjectRequest {
          * @return A {@link PutDataObjectRequest}
          */
         public PutDataObjectRequest build() {
-            if ((ifSeqNo == null) != (ifPrimaryTerm == null)) {
-                throw new IllegalArgumentException("Either ifSeqNo and ifPrimaryTerm must both be null or both must be non-null.");
-            }
+            WriteDataObjectRequest.validateSeqNoAndPrimaryTerm(
+                this.ifSeqNo,
+                this.ifPrimaryTerm,
+                // createOperation = true when overwriteIfExists is false
+                !this.overwriteIfExists
+            );
             return new PutDataObjectRequest(
                 this.index,
                 this.id,

@@ -43,7 +43,7 @@ public class UpdateDataObjectRequest extends WriteDataObjectRequest {
         int retryOnConflict,
         ToXContentObject dataObject
     ) {
-        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm);
+        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, false);
         this.retryOnConflict = retryOnConflict;
         this.dataObject = dataObject;
     }
@@ -124,9 +124,7 @@ public class UpdateDataObjectRequest extends WriteDataObjectRequest {
          * @return A {@link UpdateDataObjectRequest}
          */
         public UpdateDataObjectRequest build() {
-            if ((ifSeqNo == null) != (ifPrimaryTerm == null)) {
-                throw new IllegalArgumentException("Either ifSeqNo and ifPrimaryTerm must both be null or both must be non-null.");
-            }
+            WriteDataObjectRequest.validateSeqNoAndPrimaryTerm(this.ifSeqNo, this.ifPrimaryTerm, false);
             return new UpdateDataObjectRequest(
                 this.index,
                 this.id,

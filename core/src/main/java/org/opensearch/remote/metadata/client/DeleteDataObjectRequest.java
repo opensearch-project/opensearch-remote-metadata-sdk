@@ -24,7 +24,7 @@ public class DeleteDataObjectRequest extends WriteDataObjectRequest {
      * @param ifPrimaryTerm the primary term to match or null if not required
      */
     public DeleteDataObjectRequest(String index, String id, String tenantId, Long ifSeqNo, Long ifPrimaryTerm) {
-        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm);
+        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, false);
     }
 
     /**
@@ -45,9 +45,7 @@ public class DeleteDataObjectRequest extends WriteDataObjectRequest {
          * @return A {@link DeleteDataObjectRequest}
          */
         public DeleteDataObjectRequest build() {
-            if ((ifSeqNo == null) != (ifPrimaryTerm == null)) {
-                throw new IllegalArgumentException("Either ifSeqNo and ifPrimaryTerm must both be null or both must be non-null.");
-            }
+            WriteDataObjectRequest.validateSeqNoAndPrimaryTerm(this.ifSeqNo, this.ifPrimaryTerm, false);
             return new DeleteDataObjectRequest(this.index, this.id, this.tenantId, this.ifSeqNo, this.ifPrimaryTerm);
         }
     }

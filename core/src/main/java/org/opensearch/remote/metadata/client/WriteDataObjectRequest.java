@@ -14,11 +14,30 @@ import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
  * An abstract class for write operations that support sequence numbers and primary terms
  */
 public abstract class WriteDataObjectRequest extends DataObjectRequest {
-    private final Long ifSeqNo;
-    private final Long ifPrimaryTerm;
+    protected final Long ifSeqNo;
+    protected final Long ifPrimaryTerm;
 
-    protected WriteDataObjectRequest(String index, String id, String tenantId, Long ifSeqNo, Long ifPrimaryTerm) {
+    /**
+     * Instantiate this request with an index, id, and concurrency information.
+     * <p>
+     * For data storage implementations other than OpenSearch, an index may be referred to as a table and the id may be referred to as a primary key.
+     * @param index the index location to delete the object
+     * @param id the document id
+     * @param tenantId the tenant id
+     * @param ifSeqNo the sequence number to match or null if not required
+     * @param ifPrimaryTerm the primary term to match or null if not required
+     * @param isCreateOperation whether this can only create a new document and not overwrite one
+     */
+    protected WriteDataObjectRequest(
+        String index,
+        String id,
+        String tenantId,
+        Long ifSeqNo,
+        Long ifPrimaryTerm,
+        boolean isCreateOperation
+    ) {
         super(index, id, tenantId);
+        validateSeqNoAndPrimaryTerm(ifSeqNo, ifPrimaryTerm, isCreateOperation);
         this.ifSeqNo = ifSeqNo;
         this.ifPrimaryTerm = ifPrimaryTerm;
     }
@@ -77,6 +96,22 @@ public abstract class WriteDataObjectRequest extends DataObjectRequest {
             }
             this.ifPrimaryTerm = term;
             return self();
+        }
+    }
+
+    /**
+     * Validates sequence number and primary term including a check on create optype
+     * @param ifSeqNo the sequence number
+     * @param ifPrimaryTerm the primary term
+     * @param createOperation whether this is a create operation that does not support seqNo/primaryTerm
+     * @throws IllegalArgumentException if validation fails
+     */
+    protected static void validateSeqNoAndPrimaryTerm(Long ifSeqNo, Long ifPrimaryTerm, boolean createOperation) {
+        if (createOperation && (ifSeqNo != null || ifPrimaryTerm != null)) {
+            throw new IllegalArgumentException("create operations (overwriteIfExists=false) do not support SeqNo and PrimaryTerm.");
+        }
+        if ((ifSeqNo == null) != (ifPrimaryTerm == null)) {
+            throw new IllegalArgumentException("Either ifSeqNo and ifPrimaryTerm must both be null or both must be non-null.");
         }
     }
 }
