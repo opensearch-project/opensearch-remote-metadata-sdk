@@ -11,7 +11,7 @@ package org.opensearch.remote.metadata.client;
 /**
  * A class abstracting an OpenSearch DeleteRequest
  */
-public class DeleteDataObjectRequest extends DataObjectRequest {
+public class DeleteDataObjectRequest extends WriteDataObjectRequest {
 
     /**
      * Instantiate this request with an index and id.
@@ -20,14 +20,11 @@ public class DeleteDataObjectRequest extends DataObjectRequest {
      * @param index the index location to delete the object
      * @param id the document id
      * @param tenantId the tenant id
+     * @param ifSeqNo the sequence number to match or null if not required
+     * @param ifPrimaryTerm the primary term to match or null if not required
      */
-    public DeleteDataObjectRequest(String index, String id, String tenantId) {
-        super(index, id, tenantId);
-    }
-
-    @Override
-    public boolean isWriteRequest() {
-        return true;
+    public DeleteDataObjectRequest(String index, String id, String tenantId, Long ifSeqNo, Long ifPrimaryTerm) {
+        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm);
     }
 
     /**
@@ -41,14 +38,17 @@ public class DeleteDataObjectRequest extends DataObjectRequest {
     /**
      * Class for constructing a Builder for this Request Object
      */
-    public static class Builder extends DataObjectRequest.Builder<Builder> {
+    public static class Builder extends WriteDataObjectRequest.Builder<Builder> {
 
         /**
          * Builds the object
          * @return A {@link DeleteDataObjectRequest}
          */
         public DeleteDataObjectRequest build() {
-            return new DeleteDataObjectRequest(this.index, this.id, this.tenantId);
+            if ((ifSeqNo == null) != (ifPrimaryTerm == null)) {
+                throw new IllegalArgumentException("Either ifSeqNo and ifPrimaryTerm must both be null or both must be non-null.");
+            }
+            return new DeleteDataObjectRequest(this.index, this.id, this.tenantId, this.ifSeqNo, this.ifPrimaryTerm);
         }
     }
 }

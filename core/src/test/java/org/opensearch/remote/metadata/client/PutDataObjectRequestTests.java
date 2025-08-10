@@ -25,7 +25,9 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
@@ -35,6 +37,8 @@ public class PutDataObjectRequestTests {
     private String testId;
     private String testTenantId;
     private ToXContentObject testDataObject;
+    private Long testSeqNo;
+    private Long testPrimaryTerm;
 
     @BeforeEach
     public void setUp() {
@@ -42,6 +46,8 @@ public class PutDataObjectRequestTests {
         testId = "test-id";
         testTenantId = "test-tenant-id";
         testDataObject = mock(ToXContentObject.class);
+        testSeqNo = 42L;
+        testPrimaryTerm = 6L;
     }
 
     @Test
@@ -54,6 +60,8 @@ public class PutDataObjectRequestTests {
         assertEquals(testTenantId, request.tenantId());
         assertTrue(request.overwriteIfExists());
         assertSame(testDataObject, request.dataObject());
+        assertNull(request.ifSeqNo());
+        assertNull(request.ifPrimaryTerm());
 
         builder.overwriteIfExists(false);
         request = builder.build();
@@ -72,6 +80,8 @@ public class PutDataObjectRequestTests {
         assertEquals(testId, request.id());
         assertEquals(testTenantId, request.tenantId());
         assertTrue(request.overwriteIfExists());
+        assertNull(request.ifSeqNo());
+        assertNull(request.ifPrimaryTerm());
 
         // Verify the dataObject field by converting it back to a Map and comparing
         ToXContentObject dataObject = request.dataObject();
@@ -85,4 +95,41 @@ public class PutDataObjectRequestTests {
         assertEquals(dataObjectMap, resultingMap);
     }
 
+    @Test
+    public void testPutDataObjectRequestConcurrency() {
+        PutDataObjectRequest request = PutDataObjectRequest.builder()
+            .index(testIndex)
+            .id(testId)
+            .tenantId(testTenantId)
+            .dataObject(testDataObject)
+            .ifSeqNo(testSeqNo)
+            .ifPrimaryTerm(testPrimaryTerm)
+            .build();
+
+        assertEquals(testIndex, request.index());
+        assertEquals(testId, request.id());
+        assertEquals(testTenantId, request.tenantId());
+        assertEquals(testDataObject, request.dataObject());
+        assertEquals(testSeqNo, request.ifSeqNo());
+        assertEquals(testPrimaryTerm, request.ifPrimaryTerm());
+
+        final Builder badSeqNoBuilder = PutDataObjectRequest.builder();
+        assertThrows(IllegalArgumentException.class, () -> badSeqNoBuilder.ifSeqNo(-99));
+        final Builder badPrimaryTermBuilder = PutDataObjectRequest.builder();
+        assertThrows(IllegalArgumentException.class, () -> badPrimaryTermBuilder.ifPrimaryTerm(-99));
+        final Builder onlySeqNoBuilder = PutDataObjectRequest.builder()
+            .index(testIndex)
+            .id(testId)
+            .tenantId(testTenantId)
+            .dataObject(testDataObject)
+            .ifSeqNo(testSeqNo);
+        assertThrows(IllegalArgumentException.class, () -> onlySeqNoBuilder.build());
+        final Builder onlyPrimaryTermBuilder = PutDataObjectRequest.builder()
+            .index(testIndex)
+            .id(testId)
+            .tenantId(testTenantId)
+            .dataObject(testDataObject)
+            .ifPrimaryTerm(testPrimaryTerm);
+        assertThrows(IllegalArgumentException.class, () -> onlyPrimaryTermBuilder.build());
+    }
 }

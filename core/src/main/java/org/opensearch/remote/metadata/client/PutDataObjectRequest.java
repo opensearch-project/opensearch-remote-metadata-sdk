@@ -15,7 +15,7 @@ import java.util.Map;
 /**
  * A class abstracting an OpenSearch IndexRequest
  */
-public class PutDataObjectRequest extends DataObjectRequest {
+public class PutDataObjectRequest extends WriteDataObjectRequest {
 
     private final boolean overwriteIfExists;
     private final ToXContentObject dataObject;
@@ -27,11 +27,21 @@ public class PutDataObjectRequest extends DataObjectRequest {
      * @param index the index location to put the object
      * @param id the document id
      * @param tenantId the tenant id
+     * @param ifSeqNo the sequence number to match or null if not required
+     * @param ifPrimaryTerm the primary term to match or null if not required
      * @param overwriteIfExists whether to overwrite the document if it exists (update)
      * @param dataObject the data object
      */
-    public PutDataObjectRequest(String index, String id, String tenantId, boolean overwriteIfExists, ToXContentObject dataObject) {
-        super(index, id, tenantId);
+    public PutDataObjectRequest(
+        String index,
+        String id,
+        String tenantId,
+        Long ifSeqNo,
+        Long ifPrimaryTerm,
+        boolean overwriteIfExists,
+        ToXContentObject dataObject
+    ) {
+        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm);
         this.overwriteIfExists = overwriteIfExists;
         this.dataObject = dataObject;
     }
@@ -52,11 +62,6 @@ public class PutDataObjectRequest extends DataObjectRequest {
         return this.dataObject;
     }
 
-    @Override
-    public boolean isWriteRequest() {
-        return true;
-    }
-
     /**
      * Instantiate a builder for this object
      * @return a builder instance
@@ -68,7 +73,7 @@ public class PutDataObjectRequest extends DataObjectRequest {
     /**
      * Class for constructing a Builder for this Request Object
      */
-    public static class Builder extends DataObjectRequest.Builder<Builder> {
+    public static class Builder extends WriteDataObjectRequest.Builder<Builder> {
         private boolean overwriteIfExists = true;
         private ToXContentObject dataObject = null;
 
@@ -107,7 +112,18 @@ public class PutDataObjectRequest extends DataObjectRequest {
          * @return A {@link PutDataObjectRequest}
          */
         public PutDataObjectRequest build() {
-            return new PutDataObjectRequest(this.index, this.id, this.tenantId, this.overwriteIfExists, this.dataObject);
+            if ((ifSeqNo == null) != (ifPrimaryTerm == null)) {
+                throw new IllegalArgumentException("Either ifSeqNo and ifPrimaryTerm must both be null or both must be non-null.");
+            }
+            return new PutDataObjectRequest(
+                this.index,
+                this.id,
+                this.tenantId,
+                this.ifSeqNo,
+                this.ifPrimaryTerm,
+                this.overwriteIfExists,
+                this.dataObject
+            );
         }
     }
 }
