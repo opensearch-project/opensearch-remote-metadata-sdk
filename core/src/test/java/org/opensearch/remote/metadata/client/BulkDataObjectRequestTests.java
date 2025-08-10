@@ -82,6 +82,7 @@ public class BulkDataObjectRequestTests {
         assertEquals(testTenantId, r1.tenantId());
     }
 
+    @SuppressWarnings("deprecation")
     @Test
     public void testBulkDataObjectRequest_Exceptions() {
         PutDataObjectRequest nullIndexRequest = PutDataObjectRequest.builder().build();

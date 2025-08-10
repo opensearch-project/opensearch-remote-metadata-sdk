@@ -58,8 +58,22 @@ public class BulkDataObjectRequest {
      * Add the given request to the {@link BulkDataObjectRequest}
      * @param request The request to add
      * @return the updated request object
+     * @deprecated Use {@link #addWriteRequest(WriteDataObjectRequest)} instead for type safety
      */
+    @Deprecated
     public BulkDataObjectRequest add(DataObjectRequest request) {
+        if (!(request instanceof WriteDataObjectRequest)) {
+            throw new IllegalArgumentException("No support for request [" + request.getClass().getName() + "]");
+        }
+        return add((WriteDataObjectRequest) request);
+    }
+
+    /**
+     * Add the given request to the {@link BulkDataObjectRequest}
+     * @param request The request to add
+     * @return the updated request object
+     */
+    public BulkDataObjectRequest add(WriteDataObjectRequest request) {
         if (!request.isWriteRequest()) {
             throw new IllegalArgumentException("No support for request [" + request.getClass().getName() + "]");
         }
