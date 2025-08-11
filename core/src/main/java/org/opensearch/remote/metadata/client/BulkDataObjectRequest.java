@@ -56,16 +56,17 @@ public class BulkDataObjectRequest {
 
     /**
      * Add the given request to the {@link BulkDataObjectRequest}
-     * @param request The request to add
-     * @return the updated request object
-     * @deprecated Use {@link #addWriteRequest(WriteDataObjectRequest)} instead for type safety
+     * @param request The request to add (will always result in an exception)
+     * @return never returns as this method always throws an exception
+     * @throws IllegalArgumentException always thrown, as request is not a WriteDataObjectRequest
+     * @deprecated This method is deprecated in favor of {@link #add(WriteDataObjectRequest)}.
+     * Due to Java's method overload resolution rules (JLS §15.12.2), any object that is an instance of WriteDataObjectRequest
+     * will automatically be routed to the more specific add(WriteDataObjectRequest) method rather than this method.
+     * The method is retained only for SemVer compile-time compatibility.
      */
     @Deprecated(since = "3.3.0", forRemoval = true)
     public BulkDataObjectRequest add(DataObjectRequest request) {
-        if (!(request instanceof WriteDataObjectRequest)) {
-            throw new IllegalArgumentException("No support for request [" + request.getClass().getName() + "]");
-        }
-        return add((WriteDataObjectRequest) request);
+        throw new IllegalArgumentException("No support for request [" + request.getClass().getName() + "]");
     }
 
     /**
@@ -74,9 +75,6 @@ public class BulkDataObjectRequest {
      * @return the updated request object
      */
     public BulkDataObjectRequest add(WriteDataObjectRequest request) {
-        if (!request.isWriteRequest()) {
-            throw new IllegalArgumentException("No support for request [" + request.getClass().getName() + "]");
-        }
         if (Strings.isNullOrEmpty(request.index())) {
             if (Strings.isNullOrEmpty(globalIndex)) {
                 throw new IllegalArgumentException(
