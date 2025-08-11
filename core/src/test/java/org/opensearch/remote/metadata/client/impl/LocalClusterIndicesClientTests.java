@@ -77,7 +77,6 @@ import org.mockito.MockitoAnnotations;
 
 import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
 import static org.opensearch.remote.metadata.common.CommonValue.TENANT_ID_FIELD_KEY;
-import static org.junit.Assert.assertNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -163,7 +162,7 @@ public class LocalClusterIndicesClientTests {
         requestCaptor = ArgumentCaptor.forClass(IndexRequest.class);
         verify(mockedClient, times(2)).index(requestCaptor.capture(), any());
         assertEquals(TEST_INDEX, requestCaptor.getValue().index());
-        assertNull(TEST_ID, requestCaptor.getValue().id());
+        assertNull(requestCaptor.getValue().id());
         assertEquals(OpType.CREATE, requestCaptor.getValue().opType());
 
         // Test empty id
