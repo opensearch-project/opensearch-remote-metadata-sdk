@@ -17,6 +17,7 @@ import org.opensearch.action.bulk.BulkRequest;
 import org.opensearch.action.delete.DeleteRequest;
 import org.opensearch.action.get.GetRequest;
 import org.opensearch.action.index.IndexRequest;
+import org.opensearch.action.index.IndexResponse;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.update.UpdateRequest;
 import org.opensearch.common.xcontent.XContentFactory;
@@ -95,7 +96,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         return doPrivileged(() -> {
             try {
                 log.info("Indexing data object in {}", request.index());
-                IndexRequest indexRequest = createIndexRequest(request).setRefreshPolicy(IMMEDIATE);
+                IndexRequest indexRequest = createIndexRequest(request);
                 client.index(indexRequest, ActionListener.wrap(indexResponse -> {
                     log.info("Creation status for id {}: {}", indexResponse.getId(), indexResponse.getResult());
                     future.complete(new PutDataObjectResponse(indexResponse));
@@ -128,6 +129,18 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
             ).source(putDataObjectRequest.dataObject().toXContent(sourceBuilder, EMPTY_PARAMS));
             if (shouldUseId(putDataObjectRequest.id())) {
                 indexRequest.id(putDataObjectRequest.id());
+            }
+            if (putDataObjectRequest.ifSeqNo() != null) {
+                indexRequest.setIfSeqNo(putDataObjectRequest.ifSeqNo());
+            }
+            if (putDataObjectRequest.ifPrimaryTerm() != null) {
+                indexRequest.setIfPrimaryTerm(putDataObjectRequest.ifPrimaryTerm());
+            }
+            if (putDataObjectRequest.timeout() != null) {
+                indexRequest.timeout(putDataObjectRequest.timeout());
+            }
+            if (putDataObjectRequest.refreshPolicy() != null) {
+                indexRequest.setRefreshPolicy(putDataObjectRequest.refreshPolicy());
             }
             return indexRequest;
         }
