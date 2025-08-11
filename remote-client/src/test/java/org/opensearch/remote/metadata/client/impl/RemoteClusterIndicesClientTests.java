@@ -999,6 +999,126 @@ public class RemoteClusterIndicesClientTests {
     }
 
     @Test
+    public void testBulkDataObject_WithSeqNoAndPrimaryTerm() throws IOException {
+        // Test index operation with seqNo/primaryTerm
+        PutDataObjectRequest putRequest = PutDataObjectRequest.builder()
+            .id(TEST_ID + "1")
+            .tenantId(TEST_TENANT_ID)
+            .dataObject(testDataObject)
+            .ifSeqNo(1L)
+            .ifPrimaryTerm(2L)
+            .build();
+
+        BulkDataObjectRequest bulkRequest = BulkDataObjectRequest.builder().globalIndex(TEST_INDEX).build().add(putRequest);
+
+        BulkResponse bulkResponse = new BulkResponse.Builder().took(100L)
+            .items(
+                Arrays.asList(
+                    new BulkResponseItem.Builder().id(TEST_ID + "1")
+                        .index(TEST_INDEX)
+                        .operationType(OperationType.Index)
+                        .result(Result.Updated.jsonValue())
+                        .seqNo(1L)
+                        .primaryTerm(2L)
+                        .status(RestStatus.OK.getStatus())
+                        .build()
+                )
+            )
+            .errors(false)
+            .build();
+
+        ArgumentCaptor<BulkRequest> bulkRequestCaptor = ArgumentCaptor.forClass(BulkRequest.class);
+        when(mockedOpenSearchAsyncClient.bulk(bulkRequestCaptor.capture())).thenReturn(CompletableFuture.completedFuture(bulkResponse));
+
+        sdkClient.bulkDataObjectAsync(bulkRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join();
+
+        // Verify the captured request contains seqNo and primaryTerm
+        BulkRequest capturedRequest = bulkRequestCaptor.getValue();
+        assertEquals(1, capturedRequest.operations().size());
+        assertTrue(capturedRequest.operations().get(0).isIndex());
+        assertEquals(1L, capturedRequest.operations().get(0).index().ifSeqNo());
+        assertEquals(2L, capturedRequest.operations().get(0).index().ifPrimaryTerm());
+    }
+
+    @Test
+    public void testBulkDataObject_CreateOperation() throws IOException {
+        // Test create operation (overwriteIfExists = false)
+        PutDataObjectRequest putRequest = PutDataObjectRequest.builder()
+            .id(TEST_ID + "1")
+            .tenantId(TEST_TENANT_ID)
+            .dataObject(testDataObject)
+            .overwriteIfExists(false)
+            .build();
+
+        BulkDataObjectRequest bulkRequest = BulkDataObjectRequest.builder().globalIndex(TEST_INDEX).build().add(putRequest);
+
+        BulkResponse bulkResponse = new BulkResponse.Builder().took(100L)
+            .items(
+                Arrays.asList(
+                    new BulkResponseItem.Builder().id(TEST_ID + "1")
+                        .index(TEST_INDEX)
+                        .operationType(OperationType.Create)
+                        .result(Result.Created.jsonValue())
+                        .status(RestStatus.CREATED.getStatus())
+                        .build()
+                )
+            )
+            .errors(false)
+            .build();
+
+        ArgumentCaptor<BulkRequest> bulkRequestCaptor = ArgumentCaptor.forClass(BulkRequest.class);
+        when(mockedOpenSearchAsyncClient.bulk(bulkRequestCaptor.capture())).thenReturn(CompletableFuture.completedFuture(bulkResponse));
+
+        sdkClient.bulkDataObjectAsync(bulkRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join();
+
+        // Verify the captured request uses create operation
+        BulkRequest capturedRequest = bulkRequestCaptor.getValue();
+        assertEquals(1, capturedRequest.operations().size());
+        assertTrue(capturedRequest.operations().get(0).isCreate());
+    }
+
+    @Test
+    public void testBulkDataObject_DeleteWithSeqNoAndPrimaryTerm() throws IOException {
+        // Test delete operation with seqNo/primaryTerm
+        DeleteDataObjectRequest deleteRequest = DeleteDataObjectRequest.builder()
+            .id(TEST_ID + "1")
+            .tenantId(TEST_TENANT_ID)
+            .ifSeqNo(1L)
+            .ifPrimaryTerm(2L)
+            .build();
+
+        BulkDataObjectRequest bulkRequest = BulkDataObjectRequest.builder().globalIndex(TEST_INDEX).build().add(deleteRequest);
+
+        BulkResponse bulkResponse = new BulkResponse.Builder().took(100L)
+            .items(
+                Arrays.asList(
+                    new BulkResponseItem.Builder().id(TEST_ID + "1")
+                        .index(TEST_INDEX)
+                        .operationType(OperationType.Delete)
+                        .result(Result.Deleted.jsonValue())
+                        .seqNo(1L)
+                        .primaryTerm(2L)
+                        .status(RestStatus.OK.getStatus())
+                        .build()
+                )
+            )
+            .errors(false)
+            .build();
+
+        ArgumentCaptor<BulkRequest> bulkRequestCaptor = ArgumentCaptor.forClass(BulkRequest.class);
+        when(mockedOpenSearchAsyncClient.bulk(bulkRequestCaptor.capture())).thenReturn(CompletableFuture.completedFuture(bulkResponse));
+
+        sdkClient.bulkDataObjectAsync(bulkRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join();
+
+        // Verify the captured request contains seqNo and primaryTerm for delete operation
+        BulkRequest capturedRequest = bulkRequestCaptor.getValue();
+        assertEquals(1, capturedRequest.operations().size());
+        assertTrue(capturedRequest.operations().get(0).isDelete());
+        assertEquals(1L, capturedRequest.operations().get(0).delete().ifSeqNo());
+        assertEquals(2L, capturedRequest.operations().get(0).delete().ifPrimaryTerm());
+    }
+
+    @Test
     @SuppressWarnings({ "unchecked", "rawtypes" })
     public void testSearchDataObject() throws IOException {
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();

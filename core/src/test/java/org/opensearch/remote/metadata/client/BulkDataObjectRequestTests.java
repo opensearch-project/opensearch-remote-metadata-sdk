@@ -82,14 +82,16 @@ public class BulkDataObjectRequestTests {
         assertEquals(testTenantId, r1.tenantId());
     }
 
-    @SuppressWarnings("deprecation")
+    @SuppressWarnings("removal")
     @Test
     public void testBulkDataObjectRequest_Exceptions() {
         PutDataObjectRequest nullIndexRequest = PutDataObjectRequest.builder().build();
+        // Remove in 4.0.0 when add(DataObjectRequest) method is removed
         GetDataObjectRequest badTypeRequest = GetDataObjectRequest.builder().index(testIndex).build();
 
         BulkDataObjectRequest bulkRequest = BulkDataObjectRequest.builder().build();
         assertThrows(IllegalArgumentException.class, () -> bulkRequest.add(nullIndexRequest));
+        // Remove in 4.0.0 when add(DataObjectRequest) method is removed
         assertThrows(IllegalArgumentException.class, () -> bulkRequest.add(badTypeRequest));
     }
 }

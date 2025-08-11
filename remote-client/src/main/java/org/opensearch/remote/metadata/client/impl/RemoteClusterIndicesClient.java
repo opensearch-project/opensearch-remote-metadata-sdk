@@ -458,19 +458,13 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 return i;
             })));
         } else {
-            // Use create operation
+            // Use create operation (no seqNo or primary term)
             operations.add(BulkOperation.of(op -> op.create(c -> {
                 c.index(putRequest.index())
                     .document(putRequest.dataObject())
                     .tDocumentSerializer(new JsonTransformer.XContentObjectJsonpSerializer());
                 if (!Strings.isNullOrEmpty(putRequest.id())) {
                     c.id(putRequest.id());
-                }
-                if (putRequest.ifSeqNo() != null) {
-                    c.ifSeqNo(putRequest.ifSeqNo());
-                }
-                if (putRequest.ifPrimaryTerm() != null) {
-                    c.ifPrimaryTerm(putRequest.ifPrimaryTerm());
                 }
                 return c;
             })));

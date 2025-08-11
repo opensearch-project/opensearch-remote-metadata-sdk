@@ -60,7 +60,7 @@ public class BulkDataObjectRequest {
      * @return the updated request object
      * @deprecated Use {@link #addWriteRequest(WriteDataObjectRequest)} instead for type safety
      */
-    @Deprecated
+    @Deprecated(since = "3.3.0", forRemoval = true)
     public BulkDataObjectRequest add(DataObjectRequest request) {
         if (!(request instanceof WriteDataObjectRequest)) {
             throw new IllegalArgumentException("No support for request [" + request.getClass().getName() + "]");
