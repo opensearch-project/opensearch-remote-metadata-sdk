@@ -166,6 +166,7 @@ public class RemoteClusterIndicesClientTests {
     public void testPutDataObject() throws IOException {
         PutDataObjectRequest putRequest = PutDataObjectRequest.builder()
             .index(TEST_INDEX)
+            .id(TEST_ID)
             .tenantId(TEST_TENANT_ID)
             .dataObject(testDataObject)
             .build();
@@ -185,8 +186,10 @@ public class RemoteClusterIndicesClientTests {
         PutDataObjectResponse response = sdkClient.putDataObjectAsync(putRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
             .join();
+        verify(mockedOpenSearchAsyncClient, times(1)).index(indexRequestCaptor.capture());
 
         assertEquals(TEST_INDEX, indexRequestCaptor.getValue().index());
+        assertEquals(TEST_ID, indexRequestCaptor.getValue().id());
         assertEquals(TEST_ID, response.id());
 
         org.opensearch.action.index.IndexResponse indexActionResponse = org.opensearch.action.index.IndexResponse.fromXContent(
@@ -197,6 +200,35 @@ public class RemoteClusterIndicesClientTests {
         assertEquals(0, indexActionResponse.getShardInfo().getFailed());
         assertEquals(1, indexActionResponse.getShardInfo().getSuccessful());
         assertEquals(1, indexActionResponse.getShardInfo().getTotal());
+
+        // Test null id
+        putRequest = PutDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .tenantId(TEST_TENANT_ID)
+            .overwriteIfExists(false)
+            .dataObject(testDataObject)
+            .build();
+
+        response = sdkClient.putDataObjectAsync(putRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join();
+        verify(mockedOpenSearchAsyncClient, times(2)).index(indexRequestCaptor.capture());
+
+        assertEquals(TEST_INDEX, indexRequestCaptor.getValue().index());
+        assertNull(indexRequestCaptor.getValue().id());
+
+        // Test empty id
+        final PutDataObjectRequest putRequestEmptyId = PutDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id("")
+            .tenantId(TEST_TENANT_ID)
+            .overwriteIfExists(false)
+            .dataObject(testDataObject)
+            .build();
+
+        IllegalArgumentException ex = assertThrows(
+            IllegalArgumentException.class,
+            () -> sdkClient.putDataObjectAsync(putRequestEmptyId, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join()
+        );
+        assertEquals("if _id is specified it must not be empty", ex.getMessage());
     }
 
     @Test

@@ -154,7 +154,7 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                     .opType(request.overwriteIfExists() ? OpType.Index : OpType.Create)
                     .document(request.dataObject())
                     .tDocumentSerializer(new JsonTransformer.XContentObjectJsonpSerializer());
-                if (!Strings.isNullOrEmpty(request.id())) {
+                if (shouldUseId(request.id())) {
                     builder.id(request.id());
                 }
                 IndexRequest<?> indexRequest = builder.build();
