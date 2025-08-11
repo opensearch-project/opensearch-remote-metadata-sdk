@@ -53,4 +53,17 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
     protected <T> CompletionStage<T> executePrivilegedAsync(PrivilegedAction<T> action, Executor executor) {
         return CompletableFuture.supplyAsync(() -> doPrivileged(action), executor);
     }
+
+    /**
+     * Determine if we should use the user-provided document id
+     * @param id the document id
+     * @return true if the id is not null
+     * @throws IllegalArgumentException if the id is an empty string
+     */
+    protected boolean shouldUseId(String id) {
+        if ("".equals(id)) {
+            throw new IllegalArgumentException("if _id is specified it must not be empty");
+        }
+        return id != null;
+    }
 }
