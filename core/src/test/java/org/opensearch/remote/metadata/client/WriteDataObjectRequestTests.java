@@ -10,6 +10,9 @@ package org.opensearch.remote.metadata.client;
 
 import org.junit.jupiter.api.Test;
 
+import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_PRIMARY_TERM;
+import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
+import static org.opensearch.remote.metadata.client.WriteDataObjectRequest.validateSeqNoAndPrimaryTerm;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -96,18 +99,30 @@ public class WriteDataObjectRequestTests {
     public void testCreateOperationValidation() {
         assertThrows(
             IllegalArgumentException.class,
-            () -> WriteDataObjectRequest.validateSeqNoAndPrimaryTerm(1L, 1L, true),
+            () -> validateSeqNoAndPrimaryTerm(1L, 1L, true),
             "Should throw when using seqNo/primaryTerm with create operation"
         );
 
         // Should not throw
-        WriteDataObjectRequest.validateSeqNoAndPrimaryTerm(null, null, true);
-        WriteDataObjectRequest.validateSeqNoAndPrimaryTerm(1L, 1L, false);
+        validateSeqNoAndPrimaryTerm(null, null, true);
+        validateSeqNoAndPrimaryTerm(1L, 1L, false);
     }
 
     @Test
     public void testIsWriteRequest() {
         TestWriteRequest request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, null);
         assertTrue(request.isWriteRequest());
+    }
+
+    @Test
+    public void testUnassignedValues() {
+        // Test combinations of null and UNASSIGNED values
+        validateSeqNoAndPrimaryTerm(UNASSIGNED_SEQ_NO, UNASSIGNED_PRIMARY_TERM, false);
+        validateSeqNoAndPrimaryTerm(null, UNASSIGNED_PRIMARY_TERM, false);
+        validateSeqNoAndPrimaryTerm(UNASSIGNED_SEQ_NO, null, false);
+
+        // Should fail when mixing unassigned and assigned values
+        assertThrows(IllegalArgumentException.class, () -> validateSeqNoAndPrimaryTerm(UNASSIGNED_SEQ_NO, 1L, false));
+        assertThrows(IllegalArgumentException.class, () -> validateSeqNoAndPrimaryTerm(1L, UNASSIGNED_PRIMARY_TERM, false));
     }
 }

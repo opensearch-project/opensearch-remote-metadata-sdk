@@ -8,6 +8,7 @@
  */
 package org.opensearch.remote.metadata.client;
 
+import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_PRIMARY_TERM;
 import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
 
 /**
@@ -107,11 +108,22 @@ public abstract class WriteDataObjectRequest extends DataObjectRequest {
      * @throws IllegalArgumentException if validation fails
      */
     protected static void validateSeqNoAndPrimaryTerm(Long ifSeqNo, Long ifPrimaryTerm, boolean createOperation) {
-        if (createOperation && (ifSeqNo != null || ifPrimaryTerm != null)) {
-            throw new IllegalArgumentException("create operations (overwriteIfExists=false) do not support SeqNo and PrimaryTerm.");
+        if (createOperation && !(isUnassignedSeqNo(ifSeqNo) && isUnassignedPrimaryTerm(ifPrimaryTerm))) {
+            throw new IllegalArgumentException(
+                "create operations (overwriteIfExists=false) do not support compare and set with seqNo and primaryTerm."
+            );
         }
-        if ((ifSeqNo == null) != (ifPrimaryTerm == null)) {
-            throw new IllegalArgumentException("Either ifSeqNo and ifPrimaryTerm must both be null or both must be non-null.");
+        if (isUnassignedSeqNo(ifSeqNo) != isUnassignedPrimaryTerm(ifPrimaryTerm)) {
+            throw new IllegalArgumentException("Both ifSeqNo and ifPrimaryTerm must be set or unassigned.");
         }
     }
+
+    private static boolean isUnassignedSeqNo(Long seqNo) {
+        return seqNo == null || seqNo == UNASSIGNED_SEQ_NO;
+    }
+
+    private static boolean isUnassignedPrimaryTerm(Long primaryTerm) {
+        return primaryTerm == null || primaryTerm == UNASSIGNED_PRIMARY_TERM;
+    }
+
 }
