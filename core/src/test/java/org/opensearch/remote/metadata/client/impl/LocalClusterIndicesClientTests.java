@@ -77,6 +77,7 @@ import org.mockito.MockitoAnnotations;
 
 import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
 import static org.opensearch.remote.metadata.common.CommonValue.TENANT_ID_FIELD_KEY;
+import static org.junit.Assert.assertNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -147,6 +148,37 @@ public class LocalClusterIndicesClientTests {
         IndexResponse indexActionResponse = IndexResponse.fromXContent(response.parser());
         assertEquals(TEST_ID, indexActionResponse.getId());
         assertEquals(DocWriteResponse.Result.CREATED, indexActionResponse.getResult());
+
+        // Test null id
+        putRequest = PutDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .tenantId(TEST_TENANT_ID)
+            .overwriteIfExists(false)
+            .dataObject(testDataObject)
+            .build();
+
+        response = sdkClient.putDataObjectAsync(putRequest).toCompletableFuture().join();
+
+        requestCaptor = ArgumentCaptor.forClass(IndexRequest.class);
+        verify(mockedClient, times(2)).index(requestCaptor.capture(), any());
+        assertEquals(TEST_INDEX, requestCaptor.getValue().index());
+        assertNull(TEST_ID, requestCaptor.getValue().id());
+        assertEquals(OpType.CREATE, requestCaptor.getValue().opType());
+
+        // Test empty id
+        final PutDataObjectRequest putRequestEmptyId = PutDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id("")
+            .tenantId(TEST_TENANT_ID)
+            .overwriteIfExists(false)
+            .dataObject(testDataObject)
+            .build();
+
+        IllegalArgumentException ex = assertThrows(
+            IllegalArgumentException.class,
+            () -> sdkClient.putDataObjectAsync(putRequestEmptyId).toCompletableFuture().join()
+        );
+        assertEquals("if _id is specified it must not be empty", ex.getMessage());
     }
 
     @Test

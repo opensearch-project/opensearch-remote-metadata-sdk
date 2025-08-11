@@ -164,7 +164,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        final String id = request.id() != null ? request.id() : UUID.randomUUID().toString();
+        final String id = shouldUseId(request.id()) ? request.id() : UUID.randomUUID().toString();
         // Validate parameters and data object body
         try (XContentBuilder sourceBuilder = XContentFactory.jsonBuilder()) {
             IndexRequest indexRequest = new IndexRequest(request.index()).opType(request.overwriteIfExists() ? OpType.INDEX : OpType.CREATE)

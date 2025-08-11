@@ -89,6 +89,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -170,7 +171,7 @@ public class DDBOpenSearchClientTests {
         PutDataObjectResponse response = sdkClient.putDataObjectAsync(putRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
             .join();
-        verify(dynamoDbAsyncClient).putItem(putItemRequestArgumentCaptor.capture());
+        verify(dynamoDbAsyncClient, times(1)).putItem(putItemRequestArgumentCaptor.capture());
         assertEquals(TEST_ID, response.id());
 
         IndexResponse indexActionResponse = IndexResponse.fromXContent(response.parser());
@@ -184,6 +185,37 @@ public class DDBOpenSearchClientTests {
         assertEquals(TENANT_ID, putItemRequest.item().get(HASH_KEY).s());
         assertEquals("0", putItemRequest.item().get(SEQ_NUM).n());
         assertEquals("foo", putItemRequest.item().get(SOURCE).m().get("data").s());
+
+        // Test null id
+        putRequest = PutDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .tenantId(TENANT_ID)
+            .overwriteIfExists(false)
+            .dataObject(testDataObject)
+            .build();
+
+        assertNull(putRequest.id());
+        response = sdkClient.putDataObjectAsync(putRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join();
+        verify(dynamoDbAsyncClient, times(2)).putItem(putItemRequestArgumentCaptor.capture());
+
+        assertEquals(TEST_INDEX, putItemRequestArgumentCaptor.getValue().tableName());
+        // Should be a UUID
+        assertEquals(5, putItemRequestArgumentCaptor.getValue().item().get(RANGE_KEY).s().split("-").length);
+
+        // Test empty id
+        final PutDataObjectRequest putRequestEmptyId = PutDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id("")
+            .tenantId(TENANT_ID)
+            .overwriteIfExists(false)
+            .dataObject(testDataObject)
+            .build();
+
+        IllegalArgumentException ex = assertThrows(
+            IllegalArgumentException.class,
+            () -> sdkClient.putDataObjectAsync(putRequestEmptyId, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join()
+        );
+        assertEquals("if _id is specified it must not be empty", ex.getMessage());
     }
 
     @Test

@@ -126,7 +126,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
             IndexRequest indexRequest = new IndexRequest(putDataObjectRequest.index()).opType(
                 putDataObjectRequest.overwriteIfExists() ? OpType.INDEX : OpType.CREATE
             ).source(putDataObjectRequest.dataObject().toXContent(sourceBuilder, EMPTY_PARAMS));
-            if (!Strings.isNullOrEmpty(putDataObjectRequest.id())) {
+            if (shouldUseId(putDataObjectRequest.id())) {
                 indexRequest.id(putDataObjectRequest.id());
             }
             return indexRequest;
