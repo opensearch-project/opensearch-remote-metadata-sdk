@@ -8,7 +8,7 @@ import org.opensearch.gradle.VersionProperties
 buildscript {
     ext {
         opensearch_group = "org.opensearch"
-        opensearch_version = System.getProperty("opensearch.version", "3.2.0-SNAPSHOT")
+        opensearch_version = System.getProperty("opensearch.version", "3.3.0-SNAPSHOT")
         is_snapshot = "true" == System.getProperty("build.snapshot", "true")
         build_version_qualifier = System.getProperty("build.version_qualifier", "")
 
@@ -21,7 +21,7 @@ buildscript {
             opensearch_build += "-SNAPSHOT"
         }
 
-        opensearch_java_version = '3.2.0'
+        opensearch_java_version = '3.3.0'
         aws_sdk_version = '2.30.18'
         junit_version = '5.13.4' // version catalog is 4.x
         junit_platform_version = '1.13.4' // version catalog brings in earlier
