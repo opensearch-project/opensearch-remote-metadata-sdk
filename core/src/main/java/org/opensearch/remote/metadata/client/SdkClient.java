@@ -268,6 +268,16 @@ public class SdkClient {
     }
 
     /**
+     * This method is to
+     * @param index
+     * @param id
+     * @return
+     */
+    public boolean isGlobalResource(String index, String id) {
+        return delegate.isGlobalResource(index, id);
+    }
+
+    /**
      * Throw exception if tenantId is null and multitenancy is enabled
      * @param tenantId The tenantId from the request
      */
