@@ -49,16 +49,19 @@ public class BulkDataObjectRequestTests {
         assertTrue(r0 instanceof PutDataObjectRequest);
         assertEquals(testIndex, r0.index());
         assertNull(r0.tenantId());
+        assertEquals(RefreshPolicy.NONE, ((WriteDataObjectRequest) r0).getRefreshPolicy());
 
         DataObjectRequest r1 = request.requests().get(1);
         assertTrue(r1 instanceof UpdateDataObjectRequest);
         assertEquals(testGlobalIndex, r1.index());
         assertNull(r1.tenantId());
+        assertEquals(RefreshPolicy.NONE, ((WriteDataObjectRequest) r1).getRefreshPolicy());
 
         DataObjectRequest r2 = request.requests().get(2);
         assertTrue(r2 instanceof DeleteDataObjectRequest);
         assertEquals(testIndex, r2.index());
         assertEquals(testTenantId, r2.tenantId());
+        assertEquals(RefreshPolicy.NONE, ((WriteDataObjectRequest) r2).getRefreshPolicy());
     }
 
     @Test
@@ -75,11 +78,13 @@ public class BulkDataObjectRequestTests {
         assertTrue(r0 instanceof PutDataObjectRequest);
         assertEquals(testIndex, r0.index());
         assertEquals(testTenantId, r0.tenantId());
+        assertEquals(RefreshPolicy.NONE, ((WriteDataObjectRequest) r0).getRefreshPolicy());
 
         DataObjectRequest r1 = request.requests().get(1);
         assertTrue(r1 instanceof DeleteDataObjectRequest);
         assertEquals(testIndex, r1.index());
         assertEquals(testTenantId, r1.tenantId());
+        assertEquals(RefreshPolicy.NONE, ((WriteDataObjectRequest) r1).getRefreshPolicy());
     }
 
     @SuppressWarnings("removal")

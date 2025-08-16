@@ -25,7 +25,7 @@ public class BulkDataObjectRequest {
 
     private final List<DataObjectRequest> requests = new ArrayList<>();
     private final Set<String> indices = new HashSet<>();
-    private RefreshPolicy refreshPolicy = RefreshPolicy.NONE;
+    private RefreshPolicy refreshPolicy = RefreshPolicy.IMMEDIATE;
     private String globalIndex;
 
     /**
@@ -86,6 +86,8 @@ public class BulkDataObjectRequest {
         } else {
             indices.add(request.index());
         }
+        // Bulk Requests require this on individual requests
+        request.setRefreshPolicy(RefreshPolicy.NONE);
         requests.add(request);
         return this;
     }
@@ -93,6 +95,7 @@ public class BulkDataObjectRequest {
     /**
      * Should this request trigger a refresh ({@linkplain RefreshPolicy#IMMEDIATE}), wait for a refresh (
      * {@linkplain RefreshPolicy#WAIT_UNTIL}), or proceed ignore refreshes entirely ({@linkplain RefreshPolicy#NONE}, the default).
+     * Note this applies to the combined Bulk Request itself, the individual requests all use {@linkplain RefreshPolicy#NONE}.
      * @param refreshPolicy the refresh policy
      * @return the updated request
      */
@@ -104,6 +107,7 @@ public class BulkDataObjectRequest {
     /**
      * Should this request trigger a refresh ({@linkplain RefreshPolicy#IMMEDIATE}), wait for a refresh (
      * {@linkplain RefreshPolicy#WAIT_UNTIL}), or proceed ignore refreshes entirely ({@linkplain RefreshPolicy#NONE}, the default).
+     * Note this applies to the combined Bulk Request itself, the individual requests all use {@linkplain RefreshPolicy#NONE}.
      * @return the refresh policy
      */
     public RefreshPolicy getRefreshPolicy() {
