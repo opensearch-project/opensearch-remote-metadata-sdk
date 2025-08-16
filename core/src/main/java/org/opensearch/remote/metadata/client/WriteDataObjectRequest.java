@@ -8,6 +8,8 @@
  */
 package org.opensearch.remote.metadata.client;
 
+import org.opensearch.action.support.WriteRequest.RefreshPolicy;
+
 import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_PRIMARY_TERM;
 import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
 
@@ -17,6 +19,7 @@ import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
 public abstract class WriteDataObjectRequest extends DataObjectRequest {
     protected final Long ifSeqNo;
     protected final Long ifPrimaryTerm;
+    protected RefreshPolicy refreshPolicy = RefreshPolicy.IMMEDIATE;
 
     /**
      * Instantiate this request with an index, id, and concurrency information.
@@ -27,6 +30,7 @@ public abstract class WriteDataObjectRequest extends DataObjectRequest {
      * @param tenantId the tenant id
      * @param ifSeqNo the sequence number to match or null if not required
      * @param ifPrimaryTerm the primary term to match or null if not required
+     * @param refreshPolicy when should the written data be refreshed. May not be applicable on all clients.
      * @param isCreateOperation whether this can only create a new document and not overwrite one
      */
     protected WriteDataObjectRequest(
@@ -35,12 +39,16 @@ public abstract class WriteDataObjectRequest extends DataObjectRequest {
         String tenantId,
         Long ifSeqNo,
         Long ifPrimaryTerm,
+        RefreshPolicy refreshPolicy,
         boolean isCreateOperation
     ) {
         super(index, id, tenantId);
         validateSeqNoAndPrimaryTerm(ifSeqNo, ifPrimaryTerm, isCreateOperation);
         this.ifSeqNo = ifSeqNo;
         this.ifPrimaryTerm = ifPrimaryTerm;
+        if (refreshPolicy != null) {
+            this.refreshPolicy = refreshPolicy;
+        }
     }
 
     /**
@@ -59,6 +67,22 @@ public abstract class WriteDataObjectRequest extends DataObjectRequest {
         return ifPrimaryTerm;
     }
 
+    /**
+     * Returns the refresh policy.
+     * @return the refresh policy.
+     */
+    public RefreshPolicy getRefreshPolicy() {
+        return refreshPolicy;
+    }
+
+    /**
+     * Sets the refresh policy.
+     * @param refreshPolicy The policy to set
+     */
+    public void setRefreshPolicy(RefreshPolicy refreshPolicy) {
+        this.refreshPolicy = refreshPolicy;
+    }
+
     @Override
     public boolean isWriteRequest() {
         return true;
@@ -70,6 +94,7 @@ public abstract class WriteDataObjectRequest extends DataObjectRequest {
     public static abstract class Builder<T extends Builder<T>> extends DataObjectRequest.Builder<T> {
         protected Long ifSeqNo = null;
         protected Long ifPrimaryTerm = null;
+        protected RefreshPolicy refreshPolicy = RefreshPolicy.IMMEDIATE;
 
         /**
          * Only perform this request if the document's modification was assigned the given
@@ -96,6 +121,11 @@ public abstract class WriteDataObjectRequest extends DataObjectRequest {
                 throw new IllegalArgumentException("primary term must be non negative. got [" + term + "]");
             }
             this.ifPrimaryTerm = term;
+            return self();
+        }
+
+        public T refreshPolicy(RefreshPolicy refreshPolicy) {
+            this.refreshPolicy = refreshPolicy;
             return self();
         }
     }

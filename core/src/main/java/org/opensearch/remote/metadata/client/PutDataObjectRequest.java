@@ -8,6 +8,7 @@
  */
 package org.opensearch.remote.metadata.client;
 
+import org.opensearch.action.support.WriteRequest.RefreshPolicy;
 import org.opensearch.core.xcontent.ToXContentObject;
 
 import java.util.Map;
@@ -29,6 +30,7 @@ public class PutDataObjectRequest extends WriteDataObjectRequest {
      * @param tenantId the tenant id
      * @param ifSeqNo the sequence number to match or null if not required
      * @param ifPrimaryTerm the primary term to match or null if not required
+     * @param refreshPolicy when should the written data be refreshed. May not be applicable on all clients.
      * @param overwriteIfExists whether to overwrite the document if it exists (update)
      * @param dataObject the data object
      */
@@ -38,10 +40,11 @@ public class PutDataObjectRequest extends WriteDataObjectRequest {
         String tenantId,
         Long ifSeqNo,
         Long ifPrimaryTerm,
+        RefreshPolicy refreshPolicy,
         boolean overwriteIfExists,
         ToXContentObject dataObject
     ) {
-        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, !overwriteIfExists);
+        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, !overwriteIfExists);
         this.overwriteIfExists = overwriteIfExists;
         this.dataObject = dataObject;
     }
@@ -124,6 +127,7 @@ public class PutDataObjectRequest extends WriteDataObjectRequest {
                 this.tenantId,
                 this.ifSeqNo,
                 this.ifPrimaryTerm,
+                this.refreshPolicy,
                 this.overwriteIfExists,
                 this.dataObject
             );

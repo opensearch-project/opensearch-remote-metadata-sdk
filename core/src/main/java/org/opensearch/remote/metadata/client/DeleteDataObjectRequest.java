@@ -8,6 +8,8 @@
  */
 package org.opensearch.remote.metadata.client;
 
+import org.opensearch.action.support.WriteRequest.RefreshPolicy;
+
 /**
  * A class abstracting an OpenSearch DeleteRequest
  */
@@ -22,9 +24,17 @@ public class DeleteDataObjectRequest extends WriteDataObjectRequest {
      * @param tenantId the tenant id
      * @param ifSeqNo the sequence number to match or null if not required
      * @param ifPrimaryTerm the primary term to match or null if not required
+     * @param refreshPolicy when should the written data be refreshed. May not be applicable on all clients.
      */
-    public DeleteDataObjectRequest(String index, String id, String tenantId, Long ifSeqNo, Long ifPrimaryTerm) {
-        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, false);
+    public DeleteDataObjectRequest(
+        String index,
+        String id,
+        String tenantId,
+        Long ifSeqNo,
+        Long ifPrimaryTerm,
+        RefreshPolicy refreshPolicy
+    ) {
+        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, false);
     }
 
     /**
@@ -46,7 +56,7 @@ public class DeleteDataObjectRequest extends WriteDataObjectRequest {
          */
         public DeleteDataObjectRequest build() {
             WriteDataObjectRequest.validateSeqNoAndPrimaryTerm(this.ifSeqNo, this.ifPrimaryTerm, false);
-            return new DeleteDataObjectRequest(this.index, this.id, this.tenantId, this.ifSeqNo, this.ifPrimaryTerm);
+            return new DeleteDataObjectRequest(this.index, this.id, this.tenantId, this.ifSeqNo, this.ifPrimaryTerm, this.refreshPolicy);
         }
     }
 }

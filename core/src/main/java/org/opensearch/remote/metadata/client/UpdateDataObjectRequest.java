@@ -8,6 +8,7 @@
  */
 package org.opensearch.remote.metadata.client;
 
+import org.opensearch.action.support.WriteRequest.RefreshPolicy;
 import org.opensearch.core.xcontent.ToXContentObject;
 import org.opensearch.core.xcontent.XContentBuilder;
 
@@ -31,6 +32,7 @@ public class UpdateDataObjectRequest extends WriteDataObjectRequest {
      * @param tenantId the tenant id
      * @param ifSeqNo the sequence number to match or null if not required
      * @param ifPrimaryTerm the primary term to match or null if not required
+     * @param refreshPolicy when should the written data be refreshed. May not be applicable on all clients.
      * @param retryOnConflict number of times to retry an update if a version conflict exists
      * @param dataObject the data object
      */
@@ -40,10 +42,11 @@ public class UpdateDataObjectRequest extends WriteDataObjectRequest {
         String tenantId,
         Long ifSeqNo,
         Long ifPrimaryTerm,
+        RefreshPolicy refreshPolicy,
         int retryOnConflict,
         ToXContentObject dataObject
     ) {
-        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, false);
+        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, false);
         this.retryOnConflict = retryOnConflict;
         this.dataObject = dataObject;
     }
@@ -131,6 +134,7 @@ public class UpdateDataObjectRequest extends WriteDataObjectRequest {
                 this.tenantId,
                 this.ifSeqNo,
                 this.ifPrimaryTerm,
+                this.refreshPolicy,
                 this.retryOnConflict,
                 this.dataObject
             );

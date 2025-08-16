@@ -8,6 +8,7 @@
  */
 package org.opensearch.remote.metadata.client;
 
+import org.opensearch.action.support.WriteRequest.RefreshPolicy;
 import org.junit.jupiter.api.Test;
 
 import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_PRIMARY_TERM;
@@ -26,14 +27,14 @@ public class WriteDataObjectRequestTests {
 
     // Concrete implementation for testing
     private static class TestWriteRequest extends WriteDataObjectRequest {
-        TestWriteRequest(String index, String id, String tenantId, Long ifSeqNo, Long ifPrimaryTerm) {
-            super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, false);
+        TestWriteRequest(String index, String id, String tenantId, Long ifSeqNo, Long ifPrimaryTerm, RefreshPolicy refreshPolicy) {
+            super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, false);
         }
 
         public static class Builder extends WriteDataObjectRequest.Builder<Builder> {
             public TestWriteRequest build() {
                 validateSeqNoAndPrimaryTerm(this.ifSeqNo, this.ifPrimaryTerm, false);
-                return new TestWriteRequest(index, id, tenantId, ifSeqNo, ifPrimaryTerm);
+                return new TestWriteRequest(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy);
             }
         }
 
@@ -45,24 +46,24 @@ public class WriteDataObjectRequestTests {
     @Test
     public void testConstructorValidation() {
         // Valid cases
-        TestWriteRequest request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, null);
+        TestWriteRequest request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, null, null);
         assertNull(request.ifSeqNo());
         assertNull(request.ifPrimaryTerm());
 
-        request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, 1L, 1L);
+        request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, 1L, 1L, null);
         assertEquals(1L, request.ifSeqNo());
         assertEquals(1L, request.ifPrimaryTerm());
 
         // Invalid cases
         assertThrows(
             IllegalArgumentException.class,
-            () -> new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, 1L, null),
+            () -> new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, 1L, null, null),
             "Should throw when only seqNo is provided"
         );
 
         assertThrows(
             IllegalArgumentException.class,
-            () -> new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, 1L),
+            () -> new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, 1L, null),
             "Should throw when only primaryTerm is provided"
         );
     }
@@ -110,7 +111,7 @@ public class WriteDataObjectRequestTests {
 
     @Test
     public void testIsWriteRequest() {
-        TestWriteRequest request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, null);
+        TestWriteRequest request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, null, null);
         assertTrue(request.isWriteRequest());
     }
 
@@ -125,4 +126,20 @@ public class WriteDataObjectRequestTests {
         assertThrows(IllegalArgumentException.class, () -> validateSeqNoAndPrimaryTerm(UNASSIGNED_SEQ_NO, 1L, false));
         assertThrows(IllegalArgumentException.class, () -> validateSeqNoAndPrimaryTerm(1L, UNASSIGNED_PRIMARY_TERM, false));
     }
+
+    @Test
+    public void testRefreshPolicyDefault() {
+        TestWriteRequest request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, null, null);
+        assertEquals(RefreshPolicy.IMMEDIATE, request.getRefreshPolicy());
+    }
+
+    @Test
+    public void testRefreshPolicyExplicit() {
+        TestWriteRequest request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, null, RefreshPolicy.NONE);
+        assertEquals(RefreshPolicy.NONE, request.getRefreshPolicy());
+
+        request.setRefreshPolicy(RefreshPolicy.WAIT_UNTIL);
+        assertEquals(RefreshPolicy.WAIT_UNTIL, request.getRefreshPolicy());
+    }
+
 }
