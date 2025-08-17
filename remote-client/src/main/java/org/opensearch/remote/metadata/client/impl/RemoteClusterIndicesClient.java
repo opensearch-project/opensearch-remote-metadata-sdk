@@ -28,6 +28,7 @@ import org.apache.hc.core5.ssl.SSLContextBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.opensearch.OpenSearchStatusException;
+import org.opensearch.action.support.WriteRequest.RefreshPolicy;
 import org.opensearch.client.json.JsonpMapper;
 import org.opensearch.client.json.JsonpSerializable;
 import org.opensearch.client.json.jackson.JacksonJsonpMapper;
@@ -172,7 +173,7 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 if (request.ifPrimaryTerm() != null) {
                     builder.ifPrimaryTerm(request.ifPrimaryTerm());
                 }
-
+                builder.refresh(convertRefreshPolicyToRefresh(request.getRefreshPolicy()));
                 IndexRequest<?> indexRequest = builder.build();
                 log.info("Indexing data object in {}", request.index());
 
@@ -213,6 +214,18 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 );
             }
         });
+    }
+
+    private Refresh convertRefreshPolicyToRefresh(RefreshPolicy refreshPolicy) {
+        switch (refreshPolicy) {
+            case NONE:
+                return Refresh.False;
+            case WAIT_UNTIL:
+                return Refresh.WaitFor;
+            case IMMEDIATE:
+            default:
+                return Refresh.True;
+        }
     }
 
     @Override
@@ -312,6 +325,7 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 if (request.retryOnConflict() > 0) {
                     updateRequestBuilder.retryOnConflict(request.retryOnConflict());
                 }
+                updateRequestBuilder.refresh(convertRefreshPolicyToRefresh(request.getRefreshPolicy()));
                 UpdateRequest<Map<String, Object>, ?> updateRequest = updateRequestBuilder.build();
                 log.info("Updating {} in {}", request.id(), request.index());
                 return openSearchAsyncClient.update(updateRequest, MAP_DOCTYPE).thenApply(updateResponse -> {
@@ -372,7 +386,7 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 if (request.ifPrimaryTerm() != null) {
                     builder.ifPrimaryTerm(request.ifPrimaryTerm());
                 }
-
+                builder.refresh(convertRefreshPolicyToRefresh(request.getRefreshPolicy()));
                 DeleteRequest deleteRequest = builder.build();
                 log.info("Deleting {} from {}", request.id(), request.index());
 
@@ -429,7 +443,9 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 for (DataObjectRequest dataObjectRequest : request.requests()) {
                     addBulkOperation(dataObjectRequest, operations);
                 }
-                BulkRequest bulkRequest = new BulkRequest.Builder().operations(operations).refresh(Refresh.True).build();
+                BulkRequest bulkRequest = new BulkRequest.Builder().operations(operations)
+                    .refresh(convertRefreshPolicyToRefresh(request.getRefreshPolicy()))
+                    .build();
                 return openSearchAsyncClient.bulk(bulkRequest).thenApply(bulkResponse -> {
                     log.info(
                         "Bulk action complete for {} items: {}",

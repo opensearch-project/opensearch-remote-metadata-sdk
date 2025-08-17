@@ -18,6 +18,7 @@ import org.opensearch.OpenSearchStatusException;
 import org.opensearch.action.DocWriteResponse;
 import org.opensearch.action.search.SearchPhaseExecutionException;
 import org.opensearch.action.search.ShardSearchFailure;
+import org.opensearch.action.support.WriteRequest.RefreshPolicy;
 import org.opensearch.client.json.JsonData;
 import org.opensearch.client.json.jackson.JacksonJsonpMapper;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
@@ -25,6 +26,7 @@ import org.opensearch.client.opensearch._types.ErrorCause;
 import org.opensearch.client.opensearch._types.ErrorResponse;
 import org.opensearch.client.opensearch._types.OpType;
 import org.opensearch.client.opensearch._types.OpenSearchException;
+import org.opensearch.client.opensearch._types.Refresh;
 import org.opensearch.client.opensearch._types.Result;
 import org.opensearch.client.opensearch._types.ShardStatistics;
 import org.opensearch.client.opensearch._types.query_dsl.Query;
@@ -198,6 +200,7 @@ public class RemoteClusterIndicesClientTests {
 
         assertEquals(TEST_INDEX, indexRequestCaptor.getValue().index());
         assertEquals(TEST_ID, indexRequestCaptor.getValue().id());
+        assertEquals(Refresh.True, indexRequestCaptor.getValue().refresh());
         assertEquals(TEST_ID, response.id());
 
         org.opensearch.action.index.IndexResponse indexActionResponse = org.opensearch.action.index.IndexResponse.fromXContent(
@@ -213,6 +216,7 @@ public class RemoteClusterIndicesClientTests {
         putRequest = PutDataObjectRequest.builder()
             .index(TEST_INDEX)
             .tenantId(TEST_TENANT_ID)
+            .refreshPolicy(RefreshPolicy.WAIT_UNTIL)
             .overwriteIfExists(false)
             .dataObject(testDataObject)
             .build();
@@ -221,6 +225,7 @@ public class RemoteClusterIndicesClientTests {
         verify(mockedOpenSearchAsyncClient, times(2)).index(indexRequestCaptor.capture());
 
         assertEquals(TEST_INDEX, indexRequestCaptor.getValue().index());
+        assertEquals(Refresh.WaitFor, indexRequestCaptor.getValue().refresh());
         assertNull(indexRequestCaptor.getValue().id());
 
         // Test empty id
@@ -481,6 +486,7 @@ public class RemoteClusterIndicesClientTests {
 
         assertEquals(TEST_INDEX, updateRequestCaptor.getValue().index());
         assertNull(updateRequestCaptor.getValue().retryOnConflict());
+        assertEquals(Refresh.True, updateRequestCaptor.getValue().refresh());
         assertEquals(TEST_ID, response.id());
 
         org.opensearch.action.update.UpdateResponse updateActionResponse = org.opensearch.action.update.UpdateResponse.fromXContent(
@@ -500,6 +506,7 @@ public class RemoteClusterIndicesClientTests {
             .id(TEST_ID)
             .tenantId(TEST_TENANT_ID)
             .retryOnConflict(3)
+            .refreshPolicy(RefreshPolicy.NONE)
             .dataObject(Map.of("foo", "bar"))
             .build();
 
@@ -523,6 +530,7 @@ public class RemoteClusterIndicesClientTests {
         assertEquals(TEST_INDEX, updateRequestCaptor.getValue().index());
         assertEquals(3, updateRequestCaptor.getValue().retryOnConflict().intValue());
         assertEquals(TEST_ID, updateRequestCaptor.getValue().id());
+        assertEquals(Refresh.False, updateRequestCaptor.getValue().refresh());
         @SuppressWarnings("unchecked")
         Map<String, Object> docMap = (Map<String, Object>) updateRequestCaptor.getValue().doc();
         assertEquals("bar", docMap.get("foo"));
@@ -697,6 +705,7 @@ public class RemoteClusterIndicesClientTests {
             .join();
 
         assertEquals(TEST_INDEX, deleteRequestCaptor.getValue().index());
+        assertEquals(Refresh.True, deleteRequestCaptor.getValue().refresh());
         assertEquals(TEST_ID, response.id());
 
         org.opensearch.action.delete.DeleteResponse deleteActionResponse = org.opensearch.action.delete.DeleteResponse.fromXContent(
@@ -715,6 +724,7 @@ public class RemoteClusterIndicesClientTests {
             .index(TEST_INDEX)
             .id(TEST_ID)
             .tenantId(TEST_TENANT_ID)
+            .refreshPolicy(RefreshPolicy.NONE)
             .build();
 
         DeleteResponse deleteResponse = new DeleteResponse.Builder().id(TEST_ID)
@@ -739,6 +749,7 @@ public class RemoteClusterIndicesClientTests {
             response.parser()
         );
         assertEquals(TEST_ID, deleteActionResponse.getId());
+        assertEquals(Refresh.False, deleteRequestCaptor.getValue().refresh());
         assertEquals(DocWriteResponse.Result.NOT_FOUND, deleteActionResponse.getResult());
         assertEquals(0, deleteActionResponse.getShardInfo().getFailed());
         assertEquals(2, deleteActionResponse.getShardInfo().getSuccessful());
@@ -894,6 +905,7 @@ public class RemoteClusterIndicesClientTests {
             .toCompletableFuture()
             .join();
 
+        assertEquals(Refresh.True, bulkRequestCaptor.getValue().refresh());
         assertEquals(3, bulkRequestCaptor.getValue().operations().size());
         assertEquals(3, response.getResponses().length);
         assertEquals(100L, response.getTookInMillis());
