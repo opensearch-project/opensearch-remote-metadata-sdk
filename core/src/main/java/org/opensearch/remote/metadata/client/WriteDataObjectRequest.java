@@ -124,6 +124,12 @@ public abstract class WriteDataObjectRequest extends DataObjectRequest {
             return self();
         }
 
+        /**
+         * Should this request trigger a refresh ({@linkplain RefreshPolicy#IMMEDIATE}), wait for a refresh (
+         * {@linkplain RefreshPolicy#WAIT_UNTIL}), or proceed ignore refreshes entirely ({@linkplain RefreshPolicy#NONE}, the default).
+         * @param refreshPolicy the policy to set
+         * @return the updated builder
+         */
         public T refreshPolicy(RefreshPolicy refreshPolicy) {
             this.refreshPolicy = refreshPolicy;
             return self();
