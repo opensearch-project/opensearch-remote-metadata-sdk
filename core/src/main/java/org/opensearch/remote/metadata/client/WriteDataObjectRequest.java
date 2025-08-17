@@ -16,7 +16,7 @@ import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
 /**
  * An abstract class for write operations that support sequence numbers and primary terms
  */
-public abstract class WriteDataObjectRequest extends DataObjectRequest {
+public abstract class WriteDataObjectRequest<R extends WriteDataObjectRequest<R>> extends DataObjectRequest {
     protected final Long ifSeqNo;
     protected final Long ifPrimaryTerm;
     protected RefreshPolicy refreshPolicy = RefreshPolicy.IMMEDIATE;
@@ -30,7 +30,7 @@ public abstract class WriteDataObjectRequest extends DataObjectRequest {
      * @param tenantId the tenant id
      * @param ifSeqNo the sequence number to match or null if not required
      * @param ifPrimaryTerm the primary term to match or null if not required
-     * @param refreshPolicy when should the written data be refreshed. May not be applicable on all clients.
+     * @param refreshPolicy when should the written data be refreshed. May not be applicable on all clients. Defaults to {@code IMMEDIATE}.
      * @param isCreateOperation whether this can only create a new document and not overwrite one
      */
     protected WriteDataObjectRequest(
@@ -78,9 +78,12 @@ public abstract class WriteDataObjectRequest extends DataObjectRequest {
     /**
      * Sets the refresh policy.
      * @param refreshPolicy The policy to set
+     * @return a copy of the object after updating
      */
-    public void setRefreshPolicy(RefreshPolicy refreshPolicy) {
+    @SuppressWarnings("unchecked")
+    public R setRefreshPolicy(RefreshPolicy refreshPolicy) {
         this.refreshPolicy = refreshPolicy;
+        return (R) this;
     }
 
     @Override

@@ -13,7 +13,7 @@ import org.opensearch.action.support.WriteRequest.RefreshPolicy;
 /**
  * A class abstracting an OpenSearch DeleteRequest
  */
-public class DeleteDataObjectRequest extends WriteDataObjectRequest {
+public class DeleteDataObjectRequest extends WriteDataObjectRequest<DeleteDataObjectRequest> {
 
     /**
      * Instantiate this request with an index and id.
