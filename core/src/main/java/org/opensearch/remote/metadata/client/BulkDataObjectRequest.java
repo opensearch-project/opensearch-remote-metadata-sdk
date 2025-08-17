@@ -71,10 +71,11 @@ public class BulkDataObjectRequest {
 
     /**
      * Add the given request to the {@link BulkDataObjectRequest}
+     * @param <R> The specific type of WriteDataObjectRequest
      * @param request The request to add
      * @return the updated request object
      */
-    public BulkDataObjectRequest add(WriteDataObjectRequest request) {
+    public <R extends WriteDataObjectRequest<R>> BulkDataObjectRequest add(R request) {
         if (Strings.isNullOrEmpty(request.index())) {
             if (Strings.isNullOrEmpty(globalIndex)) {
                 throw new IllegalArgumentException(

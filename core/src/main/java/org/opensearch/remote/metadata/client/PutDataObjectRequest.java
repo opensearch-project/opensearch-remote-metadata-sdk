@@ -16,7 +16,7 @@ import java.util.Map;
 /**
  * A class abstracting an OpenSearch IndexRequest
  */
-public class PutDataObjectRequest extends WriteDataObjectRequest {
+public class PutDataObjectRequest extends WriteDataObjectRequest<PutDataObjectRequest> {
 
     private final boolean overwriteIfExists;
     private final ToXContentObject dataObject;

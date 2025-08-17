@@ -26,7 +26,7 @@ public class WriteDataObjectRequestTests {
     private static final String TEST_TENANT_ID = "test-tenant";
 
     // Concrete implementation for testing
-    private static class TestWriteRequest extends WriteDataObjectRequest {
+    private static class TestWriteRequest extends WriteDataObjectRequest<TestWriteRequest> {
         TestWriteRequest(String index, String id, String tenantId, Long ifSeqNo, Long ifPrimaryTerm, RefreshPolicy refreshPolicy) {
             super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, false);
         }
@@ -134,12 +134,27 @@ public class WriteDataObjectRequestTests {
     }
 
     @Test
+    public void testRefreshPolicyBuilderDefault() {
+        TestWriteRequest request = TestWriteRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build();
+        assertEquals(RefreshPolicy.IMMEDIATE, request.getRefreshPolicy());
+
+        request = TestWriteRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .refreshPolicy(RefreshPolicy.NONE)
+            .build();
+        assertEquals(RefreshPolicy.NONE, request.getRefreshPolicy());
+    }
+
+    @Test
     public void testRefreshPolicyExplicit() {
         TestWriteRequest request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, null, RefreshPolicy.NONE);
         assertEquals(RefreshPolicy.NONE, request.getRefreshPolicy());
 
         request.setRefreshPolicy(RefreshPolicy.WAIT_UNTIL);
         assertEquals(RefreshPolicy.WAIT_UNTIL, request.getRefreshPolicy());
-    }
 
+        assertEquals(RefreshPolicy.IMMEDIATE, request.setRefreshPolicy(RefreshPolicy.IMMEDIATE).getRefreshPolicy());
+    }
 }

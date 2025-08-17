@@ -148,7 +148,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         }
     }
 
-    private <T extends DocWriteRequest<T>> T setSeqNoAndPrimaryTerm(T request, WriteDataObjectRequest writeRequest) {
+    private <T extends DocWriteRequest<T>, R extends WriteDataObjectRequest<R>> T setSeqNoAndPrimaryTerm(T request, R writeRequest) {
         if (writeRequest.ifSeqNo() != null) {
             request.setIfSeqNo(writeRequest.ifSeqNo());
         }
