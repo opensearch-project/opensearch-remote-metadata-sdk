@@ -8,6 +8,8 @@
  */
 package org.opensearch.remote.metadata.client;
 
+import org.opensearch.action.support.WriteRequest.RefreshPolicy;
+import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.common.xcontent.json.JsonXContent;
@@ -60,6 +62,8 @@ public class UpdateDataObjectRequestTests {
         assertEquals(testDataObject, request.dataObject());
         assertNull(request.ifSeqNo());
         assertNull(request.ifPrimaryTerm());
+        assertEquals(RefreshPolicy.IMMEDIATE, request.getRefreshPolicy());
+        assertEquals(TimeValue.timeValueMinutes(1L), request.timeout());
         assertEquals(0, request.retryOnConflict());
     }
 
@@ -70,6 +74,8 @@ public class UpdateDataObjectRequestTests {
             .id(testId)
             .tenantId(testTenantId)
             .dataObject(testDataObjectMap)
+            .refreshPolicy(RefreshPolicy.NONE)
+            .timeout("30s")
             .build();
 
         assertEquals(testIndex, request.index());
@@ -79,6 +85,8 @@ public class UpdateDataObjectRequestTests {
             testDataObjectMap,
             XContentHelper.convertToMap(JsonXContent.jsonXContent, Strings.toString(XContentType.JSON, request.dataObject()), false)
         );
+        assertEquals(RefreshPolicy.NONE, request.getRefreshPolicy());
+        assertEquals(TimeValue.timeValueSeconds(30L), request.timeout());
     }
 
     @Test

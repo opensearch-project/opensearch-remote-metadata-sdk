@@ -8,6 +8,8 @@
  */
 package org.opensearch.remote.metadata.client;
 
+import org.opensearch.action.support.WriteRequest.RefreshPolicy;
+import org.opensearch.common.unit.TimeValue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -40,6 +42,8 @@ public class DeleteDataObjectRequestTests {
         assertEquals(testTenantId, request.tenantId());
         assertNull(request.ifSeqNo());
         assertNull(request.ifPrimaryTerm());
+        assertEquals(RefreshPolicy.IMMEDIATE, request.getRefreshPolicy());
+        assertEquals(TimeValue.timeValueMinutes(1L), request.timeout());
     }
 
     @Test
@@ -50,6 +54,8 @@ public class DeleteDataObjectRequestTests {
             .tenantId(testTenantId)
             .ifSeqNo(testSeqNo)
             .ifPrimaryTerm(testPrimaryTerm)
+            .refreshPolicy(RefreshPolicy.NONE)
+            .timeout("30s")
             .build();
 
         assertEquals(testIndex, request.index());
@@ -57,6 +63,8 @@ public class DeleteDataObjectRequestTests {
         assertEquals(testTenantId, request.tenantId());
         assertEquals(testSeqNo, request.ifSeqNo());
         assertEquals(testPrimaryTerm, request.ifPrimaryTerm());
+        assertEquals(RefreshPolicy.NONE, request.getRefreshPolicy());
+        assertEquals(TimeValue.timeValueSeconds(30L), request.timeout());
 
         final DeleteDataObjectRequest.Builder badSeqNoBuilder = DeleteDataObjectRequest.builder();
         assertThrows(IllegalArgumentException.class, () -> badSeqNoBuilder.ifSeqNo(-99));

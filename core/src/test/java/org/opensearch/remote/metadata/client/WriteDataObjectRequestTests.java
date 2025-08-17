@@ -9,6 +9,7 @@
 package org.opensearch.remote.metadata.client;
 
 import org.opensearch.action.support.WriteRequest.RefreshPolicy;
+import org.opensearch.common.unit.TimeValue;
 import org.junit.jupiter.api.Test;
 
 import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_PRIMARY_TERM;
@@ -27,14 +28,22 @@ public class WriteDataObjectRequestTests {
 
     // Concrete implementation for testing
     private static class TestWriteRequest extends WriteDataObjectRequest<TestWriteRequest> {
-        TestWriteRequest(String index, String id, String tenantId, Long ifSeqNo, Long ifPrimaryTerm, RefreshPolicy refreshPolicy) {
-            super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, false);
+        TestWriteRequest(
+            String index,
+            String id,
+            String tenantId,
+            Long ifSeqNo,
+            Long ifPrimaryTerm,
+            RefreshPolicy refreshPolicy,
+            TimeValue timeout
+        ) {
+            super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, false);
         }
 
         public static class Builder extends WriteDataObjectRequest.Builder<Builder> {
             public TestWriteRequest build() {
                 validateSeqNoAndPrimaryTerm(this.ifSeqNo, this.ifPrimaryTerm, false);
-                return new TestWriteRequest(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy);
+                return new TestWriteRequest(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout);
             }
         }
 
@@ -46,24 +55,24 @@ public class WriteDataObjectRequestTests {
     @Test
     public void testConstructorValidation() {
         // Valid cases
-        TestWriteRequest request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, null, null);
+        TestWriteRequest request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, null, null, null);
         assertNull(request.ifSeqNo());
         assertNull(request.ifPrimaryTerm());
 
-        request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, 1L, 1L, null);
+        request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, 1L, 1L, null, null);
         assertEquals(1L, request.ifSeqNo());
         assertEquals(1L, request.ifPrimaryTerm());
 
         // Invalid cases
         assertThrows(
             IllegalArgumentException.class,
-            () -> new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, 1L, null, null),
+            () -> new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, 1L, null, null, null),
             "Should throw when only seqNo is provided"
         );
 
         assertThrows(
             IllegalArgumentException.class,
-            () -> new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, 1L, null),
+            () -> new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, 1L, null, null),
             "Should throw when only primaryTerm is provided"
         );
     }
@@ -111,7 +120,7 @@ public class WriteDataObjectRequestTests {
 
     @Test
     public void testIsWriteRequest() {
-        TestWriteRequest request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, null, null);
+        TestWriteRequest request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, null, null, null);
         assertTrue(request.isWriteRequest());
     }
 
@@ -129,7 +138,7 @@ public class WriteDataObjectRequestTests {
 
     @Test
     public void testRefreshPolicyDefault() {
-        TestWriteRequest request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, null, null);
+        TestWriteRequest request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, null, null, null);
         assertEquals(RefreshPolicy.IMMEDIATE, request.getRefreshPolicy());
     }
 
@@ -149,12 +158,55 @@ public class WriteDataObjectRequestTests {
 
     @Test
     public void testRefreshPolicyExplicit() {
-        TestWriteRequest request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, null, RefreshPolicy.NONE);
+        TestWriteRequest request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, null, RefreshPolicy.NONE, null);
         assertEquals(RefreshPolicy.NONE, request.getRefreshPolicy());
 
         request.setRefreshPolicy(RefreshPolicy.WAIT_UNTIL);
         assertEquals(RefreshPolicy.WAIT_UNTIL, request.getRefreshPolicy());
 
         assertEquals(RefreshPolicy.IMMEDIATE, request.setRefreshPolicy(RefreshPolicy.IMMEDIATE).getRefreshPolicy());
+    }
+
+    @Test
+    public void testTimeoutDefault() {
+        TestWriteRequest request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, null, null, null);
+        assertEquals(TimeValue.timeValueMinutes(1L), request.timeout());
+    }
+
+    @Test
+    public void testTimeoutExplicit() {
+        TimeValue customTimeout = TimeValue.timeValueSeconds(30);
+        TestWriteRequest request = new TestWriteRequest(TEST_INDEX, TEST_ID, TEST_TENANT_ID, null, null, null, customTimeout);
+        assertEquals(customTimeout, request.timeout());
+
+        // Test setter with TimeValue
+        TimeValue newTimeout = TimeValue.timeValueSeconds(45);
+        assertEquals(newTimeout, request.timeout(newTimeout).timeout());
+
+        // Test setter with String
+        assertEquals(TimeValue.timeValueMinutes(2), request.timeout("2m").timeout());
+    }
+
+    @Test
+    public void testTimeoutBuilder() {
+        // Test default
+        TestWriteRequest request = TestWriteRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build();
+        assertEquals(TimeValue.timeValueMinutes(1L), request.timeout());
+
+        // Test explicit TimeValue
+        TimeValue customTimeout = TimeValue.timeValueSeconds(30);
+        request = TestWriteRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).timeout(customTimeout).build();
+        assertEquals(customTimeout, request.timeout());
+
+        // Test String timeout
+        request = TestWriteRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).timeout("45s").build();
+        assertEquals(TimeValue.timeValueSeconds(45), request.timeout());
+    }
+
+    @Test
+    public void testTimeoutInvalidString() {
+        TestWriteRequest.Builder builder = TestWriteRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID);
+
+        assertThrows(IllegalArgumentException.class, () -> builder.timeout("invalid"));
     }
 }
