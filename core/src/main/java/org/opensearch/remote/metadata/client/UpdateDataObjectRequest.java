@@ -18,7 +18,7 @@ import java.util.Map;
 /**
  * A class abstracting an OpenSearch UpdateRequest
  */
-public class UpdateDataObjectRequest extends WriteDataObjectRequest {
+public class UpdateDataObjectRequest extends WriteDataObjectRequest<UpdateDataObjectRequest> {
 
     private final int retryOnConflict;
     private final ToXContentObject dataObject;
