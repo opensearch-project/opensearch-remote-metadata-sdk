@@ -17,7 +17,7 @@ jobs:
     if: github.repository == 'opensearch-project/opensearch-remote-metadata-sdk'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-java@v4
         with:
           java-version: 21
@@ -28,7 +28,7 @@ jobs:
     if: github.repository == 'opensearch-project/opensearch-remote-metadata-sdk'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-java@v4
         with:
           java-version: 21
@@ -56,7 +56,7 @@ jobs:
     steps:
     - name: Run start commands
       run: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-command }}
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: Set up JDK ${{ matrix.java }}
       uses: actions/setup-java@v4
       with:
@@ -82,7 +82,7 @@ jobs:
     steps:
       # The checkout step should not be necessary but adding to work around CodeCov upload issue
       # see: https://github.com/codecov/codecov-action/issues/1801
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Download Coverage Report Artifact
         uses: actions/download-artifact@v5
         with:
@@ -110,7 +110,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: Set up JDK ${{ matrix.java }}
       uses: actions/setup-java@v4
       with:
