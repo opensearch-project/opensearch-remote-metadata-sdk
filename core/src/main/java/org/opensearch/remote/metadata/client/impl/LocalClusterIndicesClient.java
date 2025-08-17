@@ -97,7 +97,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         return doPrivileged(() -> {
             try {
                 log.info("Indexing data object in {}", request.index());
-                IndexRequest indexRequest = createIndexRequest(request).setRefreshPolicy(IMMEDIATE);
+                IndexRequest indexRequest = createIndexRequest(request);
                 client.index(indexRequest, ActionListener.wrap(indexResponse -> {
                     log.info("Creation status for id {}: {}", indexResponse.getId(), indexResponse.getResult());
                     future.complete(new PutDataObjectResponse(indexResponse));
@@ -143,6 +143,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
             if (shouldUseId(putDataObjectRequest.id())) {
                 indexRequest.id(putDataObjectRequest.id());
             }
+            indexRequest.setRefreshPolicy(putDataObjectRequest.getRefreshPolicy());
             return setSeqNoAndPrimaryTerm(indexRequest, putDataObjectRequest);
         }
     }
@@ -276,6 +277,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
             if (updateDataObjectRequest.retryOnConflict() > 0) {
                 updateRequest.retryOnConflict(updateDataObjectRequest.retryOnConflict());
             }
+            updateRequest.setRefreshPolicy(updateDataObjectRequest.getRefreshPolicy());
             return setSeqNoAndPrimaryTerm(updateRequest, updateDataObjectRequest);
         }
     }
@@ -289,7 +291,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         CompletableFuture<DeleteDataObjectResponse> future = new CompletableFuture<>();
         return doPrivileged(() -> {
             log.info("Deleting {} from {}", request.id(), request.index());
-            DeleteRequest deleteRequest = createDeleteRequest(request).setRefreshPolicy(IMMEDIATE);
+            DeleteRequest deleteRequest = createDeleteRequest(request);
             client.delete(deleteRequest, ActionListener.wrap(deleteResponse -> {
                 log.info("Deletion status for id {}: {}", deleteResponse.getId(), deleteResponse.getResult());
                 future.complete(new DeleteDataObjectResponse(deleteResponse));
@@ -320,6 +322,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
 
     private DeleteRequest createDeleteRequest(DeleteDataObjectRequest deleteDataObjectRequest) {
         DeleteRequest deleteRequest = new DeleteRequest(deleteDataObjectRequest.index(), deleteDataObjectRequest.id());
+        deleteRequest.setRefreshPolicy(deleteDataObjectRequest.getRefreshPolicy());
         return setSeqNoAndPrimaryTerm(deleteRequest, deleteDataObjectRequest);
     }
 
@@ -334,7 +337,6 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
             try {
                 log.info("Performing {} bulk actions on indices {}", request.requests().size(), request.getIndices());
                 BulkRequest bulkRequest = new BulkRequest();
-
                 for (DataObjectRequest dataObjectRequest : request.requests()) {
                     if (dataObjectRequest instanceof PutDataObjectRequest) {
                         bulkRequest.add(createIndexRequest((PutDataObjectRequest) dataObjectRequest));
@@ -344,13 +346,16 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
                         bulkRequest.add(createDeleteRequest((DeleteDataObjectRequest) dataObjectRequest));
                     }
                 }
-                client.bulk(bulkRequest.setRefreshPolicy(IMMEDIATE), ActionListener.wrap(bulkResponse -> {
-                    future.complete(new BulkDataObjectResponse(bulkResponse));
-                },
-                    e -> future.completeExceptionally(
-                        new OpenSearchStatusException("Failed to execute bulk request", RestStatus.INTERNAL_SERVER_ERROR, e)
+                bulkRequest.setRefreshPolicy(request.getRefreshPolicy());
+                client.bulk(
+                    bulkRequest,
+                    ActionListener.wrap(
+                        bulkResponse -> { future.complete(new BulkDataObjectResponse(bulkResponse)); },
+                        e -> future.completeExceptionally(
+                            new OpenSearchStatusException("Failed to execute bulk request", RestStatus.INTERNAL_SERVER_ERROR, e)
+                        )
                     )
-                ));
+                );
             } catch (IOException e) {
                 future.completeExceptionally(new OpenSearchStatusException("Failed to create bulk request", RestStatus.BAD_REQUEST, e));
             }
