@@ -10,6 +10,7 @@ package org.opensearch.remote.metadata.client;
 
 import org.opensearch.action.support.WriteRequest.RefreshPolicy;
 import org.opensearch.common.Nullable;
+import org.opensearch.common.unit.TimeValue;
 import org.opensearch.core.common.Strings;
 
 import java.util.ArrayList;
@@ -26,6 +27,7 @@ public class BulkDataObjectRequest {
     private final List<DataObjectRequest> requests = new ArrayList<>();
     private final Set<String> indices = new HashSet<>();
     private RefreshPolicy refreshPolicy = RefreshPolicy.IMMEDIATE;
+    private TimeValue timeout = TimeValue.timeValueMinutes(1L);
     private String globalIndex;
 
     /**
@@ -97,6 +99,7 @@ public class BulkDataObjectRequest {
      * Should this request trigger a refresh ({@linkplain RefreshPolicy#IMMEDIATE}), wait for a refresh (
      * {@linkplain RefreshPolicy#WAIT_UNTIL}), or proceed ignore refreshes entirely ({@linkplain RefreshPolicy#NONE}, the default).
      * Note this applies to the combined Bulk Request itself, the individual requests all use {@linkplain RefreshPolicy#NONE}.
+     * May not be applicable on all clients. Defaults to {@code IMMEDIATE}.
      * @param refreshPolicy the refresh policy
      * @return the updated request
      */
@@ -109,10 +112,38 @@ public class BulkDataObjectRequest {
      * Should this request trigger a refresh ({@linkplain RefreshPolicy#IMMEDIATE}), wait for a refresh (
      * {@linkplain RefreshPolicy#WAIT_UNTIL}), or proceed ignore refreshes entirely ({@linkplain RefreshPolicy#NONE}, the default).
      * Note this applies to the combined Bulk Request itself, the individual requests all use {@linkplain RefreshPolicy#NONE}.
+     * May not be applicable on all clients. Defaults to {@code IMMEDIATE}.
      * @return the refresh policy
      */
     public RefreshPolicy getRefreshPolicy() {
         return refreshPolicy;
+    }
+
+    /**
+     * A timeout to wait if the index operation can't be performed immediately. May not be applicable on all clients. Defaults to {@code 1m}.
+     * @param timeout The timeout to set
+     * @return the request after updating the timeout
+     */
+    public final BulkDataObjectRequest timeout(TimeValue timeout) {
+        this.timeout = timeout;
+        return this;
+    }
+
+    /**
+     * A timeout to wait if the index operation can't be performed immediately. May not be applicable on all clients. Defaults to {@code 1m}.
+     * @param timeout The timeout to set
+     * @return the request after updating the timeout
+     */
+    public final BulkDataObjectRequest timeout(String timeout) {
+        return timeout(TimeValue.parseTimeValue(timeout, null, getClass().getSimpleName() + ".timeout"));
+    }
+
+    /**
+     * A timeout to wait if the index operation can't be performed immediately. May not be applicable on all clients. Defaults to {@code 1m}.
+     * @return the timeout
+     */
+    public TimeValue timeout() {
+        return timeout;
     }
 
     /**
