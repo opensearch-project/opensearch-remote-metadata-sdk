@@ -58,7 +58,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 
-import static org.opensearch.action.support.WriteRequest.RefreshPolicy.IMMEDIATE;
 import static org.opensearch.core.xcontent.ToXContent.EMPTY_PARAMS;
 import static org.opensearch.secure_sm.AccessController.doPrivileged;
 
