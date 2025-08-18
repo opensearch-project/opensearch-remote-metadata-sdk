@@ -138,11 +138,13 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         try (XContentBuilder sourceBuilder = XContentFactory.jsonBuilder()) {
             IndexRequest indexRequest = new IndexRequest(putDataObjectRequest.index()).opType(
                 putDataObjectRequest.overwriteIfExists() ? OpType.INDEX : OpType.CREATE
-            ).source(putDataObjectRequest.dataObject().toXContent(sourceBuilder, EMPTY_PARAMS));
+            )
+                .source(putDataObjectRequest.dataObject().toXContent(sourceBuilder, EMPTY_PARAMS))
+                .setRefreshPolicy(putDataObjectRequest.getRefreshPolicy())
+                .timeout(putDataObjectRequest.timeout());
             if (shouldUseId(putDataObjectRequest.id())) {
                 indexRequest.id(putDataObjectRequest.id());
             }
-            indexRequest.setRefreshPolicy(putDataObjectRequest.getRefreshPolicy());
             return setSeqNoAndPrimaryTerm(indexRequest, putDataObjectRequest);
         }
     }
@@ -272,11 +274,10 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         try (XContentBuilder sourceBuilder = XContentFactory.jsonBuilder()) {
             UpdateRequest updateRequest = new UpdateRequest(updateDataObjectRequest.index(), updateDataObjectRequest.id()).doc(
                 updateDataObjectRequest.dataObject().toXContent(sourceBuilder, EMPTY_PARAMS)
-            );
+            ).setRefreshPolicy(updateDataObjectRequest.getRefreshPolicy()).timeout(updateDataObjectRequest.timeout());
             if (updateDataObjectRequest.retryOnConflict() > 0) {
                 updateRequest.retryOnConflict(updateDataObjectRequest.retryOnConflict());
             }
-            updateRequest.setRefreshPolicy(updateDataObjectRequest.getRefreshPolicy());
             return setSeqNoAndPrimaryTerm(updateRequest, updateDataObjectRequest);
         }
     }
@@ -320,8 +321,9 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
     }
 
     private DeleteRequest createDeleteRequest(DeleteDataObjectRequest deleteDataObjectRequest) {
-        DeleteRequest deleteRequest = new DeleteRequest(deleteDataObjectRequest.index(), deleteDataObjectRequest.id());
-        deleteRequest.setRefreshPolicy(deleteDataObjectRequest.getRefreshPolicy());
+        DeleteRequest deleteRequest = new DeleteRequest(deleteDataObjectRequest.index(), deleteDataObjectRequest.id()).setRefreshPolicy(
+            deleteDataObjectRequest.getRefreshPolicy()
+        ).timeout(deleteDataObjectRequest.timeout());
         return setSeqNoAndPrimaryTerm(deleteRequest, deleteDataObjectRequest);
     }
 
@@ -345,7 +347,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
                         bulkRequest.add(createDeleteRequest((DeleteDataObjectRequest) dataObjectRequest));
                     }
                 }
-                bulkRequest.setRefreshPolicy(request.getRefreshPolicy());
+                bulkRequest.setRefreshPolicy(request.getRefreshPolicy()).timeout(request.timeout());
                 client.bulk(
                     bulkRequest,
                     ActionListener.wrap(
