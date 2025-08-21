@@ -9,6 +9,7 @@
 package org.opensearch.remote.metadata.client;
 
 import org.opensearch.action.support.WriteRequest.RefreshPolicy;
+import org.opensearch.common.unit.TimeValue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -39,34 +40,42 @@ public class BulkDataObjectRequestTests {
             .add(PutDataObjectRequest.builder().index(testIndex).build())
             .add(UpdateDataObjectRequest.builder().build())
             .add(DeleteDataObjectRequest.builder().index(testIndex).tenantId(testTenantId).build())
-            .setRefreshPolicy(RefreshPolicy.IMMEDIATE);
+            .setRefreshPolicy(RefreshPolicy.IMMEDIATE)
+            .timeout("30s");
 
         assertEquals(Set.of(testIndex, testGlobalIndex), request.getIndices());
         assertEquals(3, request.requests().size());
         assertEquals(RefreshPolicy.IMMEDIATE, request.getRefreshPolicy());
+        assertEquals(TimeValue.timeValueSeconds(30L), request.timeout());
 
         DataObjectRequest r0 = request.requests().get(0);
         assertTrue(r0 instanceof PutDataObjectRequest);
         assertEquals(testIndex, r0.index());
         assertNull(r0.tenantId());
+        assertEquals(RefreshPolicy.NONE, ((WriteDataObjectRequest<?>) r0).getRefreshPolicy());
+        assertEquals(TimeValue.timeValueMinutes(1L), ((WriteDataObjectRequest<?>) r0).timeout());
 
         DataObjectRequest r1 = request.requests().get(1);
         assertTrue(r1 instanceof UpdateDataObjectRequest);
         assertEquals(testGlobalIndex, r1.index());
         assertNull(r1.tenantId());
+        assertEquals(RefreshPolicy.NONE, ((WriteDataObjectRequest<?>) r1).getRefreshPolicy());
+        assertEquals(TimeValue.timeValueMinutes(1L), ((WriteDataObjectRequest<?>) r1).timeout());
 
         DataObjectRequest r2 = request.requests().get(2);
         assertTrue(r2 instanceof DeleteDataObjectRequest);
         assertEquals(testIndex, r2.index());
         assertEquals(testTenantId, r2.tenantId());
+        assertEquals(RefreshPolicy.NONE, ((WriteDataObjectRequest<?>) r2).getRefreshPolicy());
+        assertEquals(TimeValue.timeValueMinutes(1L), ((WriteDataObjectRequest<?>) r2).timeout());
     }
 
     @Test
     public void testBulkDataObjectRequest_Tenant() {
         BulkDataObjectRequest request = BulkDataObjectRequest.builder()
             .build()
-            .add(PutDataObjectRequest.builder().index(testIndex).tenantId(testTenantId).build())
-            .add(DeleteDataObjectRequest.builder().index(testIndex).tenantId(testTenantId).build());
+            .add(PutDataObjectRequest.builder().index(testIndex).tenantId(testTenantId).timeout(TimeValue.timeValueSeconds(45)).build())
+            .add(DeleteDataObjectRequest.builder().index(testIndex).tenantId(testTenantId).timeout("30s").build());
 
         assertEquals(Set.of(testIndex), request.getIndices());
         assertEquals(2, request.requests().size());
@@ -75,11 +84,15 @@ public class BulkDataObjectRequestTests {
         assertTrue(r0 instanceof PutDataObjectRequest);
         assertEquals(testIndex, r0.index());
         assertEquals(testTenantId, r0.tenantId());
+        assertEquals(RefreshPolicy.NONE, ((PutDataObjectRequest) r0).getRefreshPolicy());
+        assertEquals(TimeValue.timeValueSeconds(45L), ((PutDataObjectRequest) r0).timeout());
 
         DataObjectRequest r1 = request.requests().get(1);
         assertTrue(r1 instanceof DeleteDataObjectRequest);
         assertEquals(testIndex, r1.index());
         assertEquals(testTenantId, r1.tenantId());
+        assertEquals(RefreshPolicy.NONE, ((DeleteDataObjectRequest) r1).getRefreshPolicy());
+        assertEquals(TimeValue.timeValueSeconds(30L), ((DeleteDataObjectRequest) r1).timeout());
     }
 
     @SuppressWarnings("removal")

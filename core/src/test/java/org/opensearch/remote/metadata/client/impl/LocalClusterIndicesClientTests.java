@@ -9,6 +9,7 @@
 package org.opensearch.remote.metadata.client.impl;
 
 import org.opensearch.OpenSearchStatusException;
+import org.opensearch.action.DocWriteRequest;
 import org.opensearch.action.DocWriteRequest.OpType;
 import org.opensearch.action.DocWriteResponse;
 import org.opensearch.action.DocWriteResponse.Result;
@@ -25,9 +26,12 @@ import org.opensearch.action.search.SearchPhaseName;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.ShardSearchFailure;
+import org.opensearch.action.support.WriteRequest;
+import org.opensearch.action.support.WriteRequest.RefreshPolicy;
 import org.opensearch.action.support.replication.ReplicationResponse.ShardInfo;
 import org.opensearch.action.update.UpdateRequest;
 import org.opensearch.action.update.UpdateResponse;
+import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
@@ -126,6 +130,8 @@ public class LocalClusterIndicesClientTests {
             .tenantId(TEST_TENANT_ID)
             .overwriteIfExists(false)
             .dataObject(testDataObject)
+            .refreshPolicy(RefreshPolicy.WAIT_UNTIL)
+            .timeout("30s")
             .build();
 
         IndexResponse indexResponse = new IndexResponse(new ShardId(TEST_INDEX, "_na_", 0), TEST_ID, 1, 0, 2, true);
@@ -142,6 +148,8 @@ public class LocalClusterIndicesClientTests {
         assertEquals(TEST_INDEX, requestCaptor.getValue().index());
         assertEquals(TEST_ID, requestCaptor.getValue().id());
         assertEquals(OpType.CREATE, requestCaptor.getValue().opType());
+        assertEquals(RefreshPolicy.WAIT_UNTIL, requestCaptor.getValue().getRefreshPolicy());
+        assertEquals(TimeValue.timeValueSeconds(30L), requestCaptor.getValue().timeout());
 
         assertEquals(TEST_ID, response.id());
 
@@ -164,6 +172,8 @@ public class LocalClusterIndicesClientTests {
         assertEquals(TEST_INDEX, requestCaptor.getValue().index());
         assertNull(TEST_ID, requestCaptor.getValue().id());
         assertEquals(OpType.CREATE, requestCaptor.getValue().opType());
+        assertEquals(RefreshPolicy.IMMEDIATE, requestCaptor.getValue().getRefreshPolicy());
+        assertEquals(TimeValue.timeValueMinutes(1L), requestCaptor.getValue().timeout());
 
         // Test empty id
         final PutDataObjectRequest putRequestEmptyId = PutDataObjectRequest.builder()
@@ -234,6 +244,7 @@ public class LocalClusterIndicesClientTests {
             .dataObject(testDataObject)
             .ifSeqNo(5L)
             .ifPrimaryTerm(2L)
+            .refreshPolicy(RefreshPolicy.WAIT_UNTIL)
             .build();
 
         IndexResponse indexResponse = new IndexResponse(new ShardId(TEST_INDEX, "_na_", 0), TEST_ID, 1, 0, 2, true);
@@ -249,8 +260,11 @@ public class LocalClusterIndicesClientTests {
         verify(mockedClient, times(1)).index(requestCaptor.capture(), any());
         assertEquals(TEST_INDEX, requestCaptor.getValue().index());
         assertEquals(TEST_ID, requestCaptor.getValue().id());
+        assertEquals(TEST_ID, response.id());
         assertEquals(5L, requestCaptor.getValue().ifSeqNo());
         assertEquals(2L, requestCaptor.getValue().ifPrimaryTerm());
+        assertEquals(RefreshPolicy.WAIT_UNTIL, requestCaptor.getValue().getRefreshPolicy());
+        assertEquals(TimeValue.timeValueMinutes(1L), requestCaptor.getValue().timeout());
     }
 
     @Test
@@ -355,6 +369,8 @@ public class LocalClusterIndicesClientTests {
             .tenantId(TEST_TENANT_ID)
             .retryOnConflict(3)
             .dataObject(testDataObject)
+            .refreshPolicy(RefreshPolicy.NONE)
+            .timeout("30s")
             .build();
 
         UpdateResponse updateResponse = new UpdateResponse(
@@ -377,8 +393,11 @@ public class LocalClusterIndicesClientTests {
         ArgumentCaptor<UpdateRequest> requestCaptor = ArgumentCaptor.forClass(UpdateRequest.class);
         verify(mockedClient, times(1)).update(requestCaptor.capture(), any());
         assertEquals(TEST_INDEX, requestCaptor.getValue().index());
-        assertEquals(3, requestCaptor.getValue().retryOnConflict());
+        assertEquals(TEST_ID, requestCaptor.getValue().id());
         assertEquals(TEST_ID, response.id());
+        assertEquals(3, requestCaptor.getValue().retryOnConflict());
+        assertEquals(RefreshPolicy.NONE, requestCaptor.getValue().getRefreshPolicy());
+        assertEquals(TimeValue.timeValueSeconds(30L), requestCaptor.getValue().timeout());
 
         UpdateResponse updateActionResponse = UpdateResponse.fromXContent(response.parser());
         assertEquals(TEST_ID, updateActionResponse.getId());
@@ -395,6 +414,8 @@ public class LocalClusterIndicesClientTests {
             .id(TEST_ID)
             .tenantId(TEST_TENANT_ID)
             .dataObject(Map.of("foo", "bar"))
+            .refreshPolicy(RefreshPolicy.NONE)
+            .timeout("45s")
             .build();
 
         UpdateResponse updateResponse = new UpdateResponse(
@@ -419,6 +440,8 @@ public class LocalClusterIndicesClientTests {
         verify(mockedClient, times(1)).update(requestCaptor.capture(), any());
         assertEquals(TEST_INDEX, requestCaptor.getValue().index());
         assertEquals(TEST_ID, requestCaptor.getValue().id());
+        assertEquals(RefreshPolicy.NONE, requestCaptor.getValue().getRefreshPolicy());
+        assertEquals(TimeValue.timeValueSeconds(45L), requestCaptor.getValue().timeout());
         UpdateResponse updateActionResponse = UpdateResponse.fromXContent(response.parser());
         assertEquals(TEST_ID, updateActionResponse.getId());
         assertEquals(DocWriteResponse.Result.UPDATED, updateActionResponse.getResult());
@@ -455,6 +478,8 @@ public class LocalClusterIndicesClientTests {
         verify(mockedClient, times(1)).update(requestCaptor.capture(), any());
         assertEquals(TEST_INDEX, requestCaptor.getValue().index());
         assertEquals(TEST_ID, response.id());
+        assertEquals(RefreshPolicy.IMMEDIATE, requestCaptor.getValue().getRefreshPolicy());
+        assertEquals(TimeValue.timeValueMinutes(1L), requestCaptor.getValue().timeout());
 
         UpdateResponse updateActionResponse = UpdateResponse.fromXContent(response.parser());
         assertEquals(TEST_ID, updateActionResponse.getId());
@@ -560,6 +585,8 @@ public class LocalClusterIndicesClientTests {
         ArgumentCaptor<DeleteRequest> requestCaptor = ArgumentCaptor.forClass(DeleteRequest.class);
         verify(mockedClient, times(1)).delete(requestCaptor.capture(), any());
         assertEquals(TEST_INDEX, requestCaptor.getValue().index());
+        assertEquals(RefreshPolicy.IMMEDIATE, requestCaptor.getValue().getRefreshPolicy());
+        assertEquals(TimeValue.timeValueMinutes(1L), requestCaptor.getValue().timeout());
         assertEquals(TEST_ID, response.id());
 
         DeleteResponse deleteActionResponse = DeleteResponse.fromXContent(response.parser());
@@ -597,6 +624,8 @@ public class LocalClusterIndicesClientTests {
             .tenantId(TEST_TENANT_ID)
             .ifSeqNo(5L)
             .ifPrimaryTerm(2L)
+            .refreshPolicy(RefreshPolicy.WAIT_UNTIL)
+            .timeout("30s")
             .build();
 
         DeleteResponse deleteResponse = new DeleteResponse(new ShardId(TEST_INDEX, "_na_", 0), TEST_ID, 1, 0, 2, true);
@@ -615,6 +644,9 @@ public class LocalClusterIndicesClientTests {
         assertEquals(TEST_ID, requestCaptor.getValue().id());
         assertEquals(5L, requestCaptor.getValue().ifSeqNo());
         assertEquals(2L, requestCaptor.getValue().ifPrimaryTerm());
+        assertEquals(RefreshPolicy.WAIT_UNTIL, requestCaptor.getValue().getRefreshPolicy());
+        assertEquals(TimeValue.timeValueSeconds(30L), requestCaptor.getValue().timeout());
+        assertEquals(TEST_ID, response.id());
     }
 
     @Test
@@ -647,17 +679,25 @@ public class LocalClusterIndicesClientTests {
             .id(TEST_ID + "1")
             .tenantId(TEST_TENANT_ID)
             .dataObject(testDataObject)
+            .timeout("10s")
             .build();
         UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
             .id(TEST_ID + "2")
             .tenantId(TEST_TENANT_ID)
             .dataObject(testDataObject)
+            .timeout("20s")
             .build();
-        DeleteDataObjectRequest deleteRequest = DeleteDataObjectRequest.builder().id(TEST_ID + "3").tenantId(TEST_TENANT_ID).build();
+        DeleteDataObjectRequest deleteRequest = DeleteDataObjectRequest.builder()
+            .id(TEST_ID + "3")
+            .tenantId(TEST_TENANT_ID)
+            .timeout("30s")
+            .build();
 
         BulkDataObjectRequest bulkRequest = BulkDataObjectRequest.builder()
             .globalIndex(TEST_INDEX)
             .build()
+            .setRefreshPolicy(RefreshPolicy.WAIT_UNTIL)
+            .timeout("45s")
             .add(putRequest)
             .add(updateRequest)
             .add(deleteRequest);
@@ -693,6 +733,18 @@ public class LocalClusterIndicesClientTests {
         ArgumentCaptor<BulkRequest> requestCaptor = ArgumentCaptor.forClass(BulkRequest.class);
         verify(mockedClient, times(1)).bulk(requestCaptor.capture(), any());
         assertEquals(3, requestCaptor.getValue().numberOfActions());
+        for (DocWriteRequest<?> request : requestCaptor.getValue().requests()) {
+            assertEquals(RefreshPolicy.NONE, ((WriteRequest<?>) request).getRefreshPolicy());
+            if (request instanceof IndexRequest) {
+                assertEquals(TimeValue.timeValueSeconds(10L), ((IndexRequest) request).timeout());
+            } else if (request instanceof UpdateRequest) {
+                assertEquals(TimeValue.timeValueSeconds(20L), ((UpdateRequest) request).timeout());
+            } else if (request instanceof DeleteRequest) {
+                assertEquals(TimeValue.timeValueSeconds(30L), ((DeleteRequest) request).timeout());
+            }
+        }
+        assertEquals(RefreshPolicy.WAIT_UNTIL, requestCaptor.getValue().getRefreshPolicy());
+        assertEquals(TimeValue.timeValueSeconds(45L), requestCaptor.getValue().timeout());
 
         assertEquals(3, response.getResponses().length);
         assertEquals(100L, response.getTookInMillis());
