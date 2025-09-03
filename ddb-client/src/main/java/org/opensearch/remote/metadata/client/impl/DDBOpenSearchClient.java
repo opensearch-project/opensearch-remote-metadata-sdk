@@ -134,10 +134,12 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
     private AOSOpenSearchClient aosOpenSearchClient;
     private Scheduler.Cancellable globalResourcesCacheScheduler;
 
-    public static String GLOBAL_TENANT_ID;
+    public static String globalTenantId;
     private static final Map<String, Map<String, AttributeValue>> GLOBAL_RESOURCES_CACHE = new ConcurrentHashMap<>();
     private static TimeValue CACHE_REFRESH_INTERVAL;
-    private static final long DEFAULT_REFRESH_MINUTES = 5;
+    private static final TimeValue DEFAULT_CACHE_REFRESH_INTERVAL = TimeValue.timeValueMinutes(5);
+    private static final TimeValue MIN_CACHE_REFRESH_INTERVAL = TimeValue.timeValueMinutes(1);
+
 
     @Override
     public boolean supportsMetadataType(String metadataType) {
@@ -152,17 +154,16 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         this.dynamoDbAsyncClient = createDynamoDbAsyncClient(region);
         this.aosOpenSearchClient = new AOSOpenSearchClient();
         this.aosOpenSearchClient.initialize(metadataSettings);
-        GLOBAL_TENANT_ID = metadataSettings.get(REMOTE_METADATA_GLOBAL_TENANT_ID_KEY);
-        CACHE_REFRESH_INTERVAL = Optional.ofNullable(metadataSettings.get(REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_REFRESH_INTERVAL_KEY)).map(value -> {
-            try {
-                return TimeValue.timeValueMinutes(Long.parseLong(value));
-            } catch (NumberFormatException e) {
-                return TimeValue.timeValueMinutes(DEFAULT_REFRESH_MINUTES);
-            }
-        }).orElse(TimeValue.timeValueMinutes(DEFAULT_REFRESH_MINUTES));
-        if (GLOBAL_TENANT_ID != null) {
+        globalTenantId = metadataSettings.get(REMOTE_METADATA_GLOBAL_TENANT_ID_KEY);
+        CACHE_REFRESH_INTERVAL = parseCacheRefreshInterval(
+                metadataSettings.get(REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_REFRESH_INTERVAL_KEY)
+        );
+        if (globalTenantId != null) {
             cacheGlobalResources();
-            startGlobalResourcesCacheScheduler();
+            // Only start scheduler if not disabled
+            if (!TimeValue.MINUS_ONE.equals(CACHE_REFRESH_INTERVAL)) {
+                startGlobalResourcesCacheScheduler();
+            }
         }
     }
 
@@ -172,8 +173,35 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
      * @param id The resource id.
      * @return If the resource global one.
      */
-    public boolean isGlobalResource(String index, String id) {
-        return GLOBAL_RESOURCES_CACHE.containsKey(buildGlobalCacheKey(index, id));
+    @Override
+    public CompletionStage<Boolean> isGlobalResource(String index, String id) {
+        if (globalTenantId == null) {
+            return CompletableFuture.completedFuture(false);
+        }
+        
+        GetItemRequest getItemRequest = GetItemRequest.builder()
+            .tableName(index)
+            .key(Map.of(
+                HASH_KEY, AttributeValue.builder().s(globalTenantId).build(),
+                RANGE_KEY, AttributeValue.builder().s(id).build()
+            ))
+            .consistentRead(true)
+            .build();
+            
+        return doPrivileged(() -> dynamoDbAsyncClient.getItem(getItemRequest)
+            .thenApply(getItemResponse -> {
+                if (getItemResponse == null || getItemResponse.item() == null || getItemResponse.item().isEmpty()) {
+                    return false;
+                }
+                
+                AttributeValue tenantIdAttr = getItemResponse.item().get(HASH_KEY);
+                return tenantIdAttr != null && globalTenantId.equals(tenantIdAttr.s());
+            })
+            .exceptionally(e -> {
+                log.error("Error checking if resource is global for index: {} id: {}", index, id, e);
+                return false;
+            })
+        );
     }
 
     /**
@@ -269,7 +297,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
     }
 
     private CompletableFuture<QueryResponse> fetchGlobalResources(String tableName) {
-        Map<String, AttributeValue> attributeValueMap = ImmutableMap.of(":hash_key", AttributeValue.builder().s(GLOBAL_TENANT_ID).build());
+        Map<String, AttributeValue> attributeValueMap = ImmutableMap.of(":hash_key", AttributeValue.builder().s(globalTenantId).build());
         QueryRequest request = QueryRequest.builder()
             .tableName(tableName)
             .keyConditionExpression("#tid = " + ":hash_key")
@@ -306,12 +334,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
             throw new OpenSearchStatusException("Request body validation failed.", RestStatus.BAD_REQUEST, e);
         }
         final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
-        if (GLOBAL_TENANT_ID != null && GLOBAL_TENANT_ID.equals(tenantId)) {
-            throw new OpenSearchStatusException(
-                "Global tenant id is reserved for internal use, do not accept passing it from request!",
-                RestStatus.BAD_REQUEST
-            );
-        }
+        validateGlobalTenantId(globalTenantId, tenantId);
         final String tableName = request.index();
         final GetItemRequest getItemRequest = buildGetItemRequest(tenantId, id, request.index());
 
@@ -397,7 +420,10 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        if (GLOBAL_TENANT_ID != null) {
+        if (globalTenantId == null) {
+            final GetItemRequest getItemRequest = buildGetItemRequest(request.tenantId(), request.id(), request.index());
+            return fetchDataFromDynamoDB(getItemRequest, request);
+        } else {
             CompletionStage<GetDataObjectResponse> getDataObjectFromCache = getGlobalResourceDataFromCache(request);
             if (getDataObjectFromCache != null) {
                 return getDataObjectFromCache;
@@ -412,12 +438,9 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 }
 
                 // If we don't have valid data, proceed with the global tenant request
-                final GetItemRequest getGlobalItemRequest = buildGetItemRequest(GLOBAL_TENANT_ID, request.id(), request.index());
+                final GetItemRequest getGlobalItemRequest = buildGetItemRequest(globalTenantId, request.id(), request.index());
                 return fetchDataFromDynamoDB(getGlobalItemRequest, request);
             });
-        } else {
-            final GetItemRequest getItemRequest = buildGetItemRequest(request.tenantId(), request.id(), request.index());
-            return fetchDataFromDynamoDB(getItemRequest, request);
         }
     }
 
@@ -562,9 +585,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
             throw new OpenSearchStatusException("Request body validation failed.", RestStatus.BAD_REQUEST, e);
         }
         final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
-        if (GLOBAL_TENANT_ID != null && GLOBAL_TENANT_ID.equals(tenantId)) {
-            throw new OpenSearchStatusException("Global tenant id is reserved for internal use.", RestStatus.INTERNAL_SERVER_ERROR);
-        }
+        validateGlobalTenantId(globalTenantId, tenantId);
         return doPrivileged(() -> {
             try {
                 String source = Strings.toString(MediaTypeRegistry.JSON, request.dataObject());
@@ -686,12 +707,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         Boolean isMultiTenancyEnabled
     ) {
         final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
-        if (GLOBAL_TENANT_ID != null && GLOBAL_TENANT_ID.equals(tenantId)) {
-            throw new OpenSearchStatusException(
-                "Global tenant id is reserved for internal use, do not accept passing it from request!",
-                RestStatus.BAD_REQUEST
-            );
-        }
+        validateGlobalTenantId(globalTenantId, tenantId);
         DeleteItemRequest.Builder builder = DeleteItemRequest.builder()
             .tableName(request.index())
             .key(
@@ -986,13 +1002,15 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
     }
 
     private void startGlobalResourcesCacheScheduler() {
-        if (threadPool != null) {
+        if (threadPool != null && !TimeValue.MINUS_ONE.equals(CACHE_REFRESH_INTERVAL)) {
             log.info("Starting global resources cache scheduler with interval: {}", CACHE_REFRESH_INTERVAL);
             globalResourcesCacheScheduler = threadPool.scheduleWithFixedDelay(
-                this::cacheGlobalResources,
-                CACHE_REFRESH_INTERVAL,
-                ThreadPool.Names.GENERIC
+                    this::cacheGlobalResources,
+                    CACHE_REFRESH_INTERVAL,
+                    ThreadPool.Names.GENERIC
             );
+        } else if (TimeValue.MINUS_ONE.equals(CACHE_REFRESH_INTERVAL)) {
+            log.info("Global resources cache refresh is disabled");
         } else {
             log.warn("ThreadPool not available, global resources cache scheduler not started");
         }
@@ -1013,6 +1031,32 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         }
         if (aosOpenSearchClient != null) {
             aosOpenSearchClient.close();
+        }
+    }
+
+    private static TimeValue parseCacheRefreshInterval(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return DEFAULT_CACHE_REFRESH_INTERVAL;
+        }
+
+        try {
+            TimeValue parsed = TimeValue.parseTimeValue(value, "cache_refresh_interval");
+
+            // Allow MINUS_ONE to disable cache refresh
+            if (TimeValue.MINUS_ONE.equals(parsed)) {
+                return TimeValue.MINUS_ONE;
+            }
+
+            // Enforce minimum interval to prevent abuse
+            if (parsed.compareTo(MIN_CACHE_REFRESH_INTERVAL) < 0) {
+                log.warn("Cache refresh interval {} is below minimum {}, using minimum", parsed, MIN_CACHE_REFRESH_INTERVAL);
+                return MIN_CACHE_REFRESH_INTERVAL;
+            }
+
+            return parsed;
+        } catch (Exception e) {
+            log.warn("Invalid cache refresh interval '{}', using default {}: {}", value, DEFAULT_CACHE_REFRESH_INTERVAL, e.getMessage());
+            return DEFAULT_CACHE_REFRESH_INTERVAL;
         }
     }
 }

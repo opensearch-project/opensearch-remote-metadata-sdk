@@ -8,8 +8,8 @@ dependencies {
     testImplementation testFixtures(project(':opensearch-remote-metadata-sdk-core'))
     implementation project(':opensearch-remote-metadata-sdk-remote-client')
     implementation project(':opensearch-remote-metadata-sdk-aos-client')
-    implementation group: 'software.amazon.awssdk', name: 'netty-nio-client', version: "2.30.18"
 
     implementation(platform("software.amazon.awssdk:bom:${versions.aws}"))
     implementation "software.amazon.awssdk:dynamodb"
+    implementation group: 'software.amazon.awssdk', name: 'netty-nio-client', version: "2.30.18"
 }

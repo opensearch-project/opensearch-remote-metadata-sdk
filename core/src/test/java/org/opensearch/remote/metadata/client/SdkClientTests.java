@@ -146,6 +146,11 @@ public class SdkClientTests {
 
             @Override
             public void close() throws Exception {}
+
+            @Override
+            public boolean isGlobalResource(String index, String id) {
+                return false;
+            }
         });
         sdkClient = new SdkClient(sdkClientImpl, true);
         testException = new OpenSearchStatusException("Test", RestStatus.BAD_REQUEST);

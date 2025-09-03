@@ -72,7 +72,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
     private static final Logger log = LogManager.getLogger(LocalClusterIndicesClient.class);
 
     private final Client client;
-    private final String GLOBAL_TENANT_ID;
+    private final String globalTenantId;
     private static final String DEFAULT_TENANT = "DEFAULT_TENANT";
 
     @Override
@@ -88,7 +88,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
      */
     public LocalClusterIndicesClient(Client client, NamedXContentRegistry xContentRegistry, Map<String, String> metadataSettings) {
         super.initialize(metadataSettings);
-        GLOBAL_TENANT_ID = metadataSettings.get(CommonValue.REMOTE_METADATA_GLOBAL_TENANT_ID_KEY);
+        globalTenantId = metadataSettings.get(CommonValue.REMOTE_METADATA_GLOBAL_TENANT_ID_KEY);
         this.client = client;
     }
 
@@ -99,12 +99,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Boolean isMultiTenancyEnabled
     ) {
         final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
-        if (GLOBAL_TENANT_ID != null && GLOBAL_TENANT_ID.equals(tenantId)) {
-            throw new OpenSearchStatusException(
-                "Global tenant id is reserved for internal use, do not accept passing it from request!",
-                RestStatus.BAD_REQUEST
-            );
-        }
+        validateGlobalTenantId(globalTenantId, tenantId);
         CompletableFuture<PutDataObjectResponse> future = new CompletableFuture<>();
         return doPrivileged(() -> {
             try {
@@ -205,7 +200,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         if (sourceMap != null && sourceMap.containsKey(tenantIdField)) {
             Object responseTenantId = sourceMap.get(tenantIdField);
             // Replace global tenant ID in place with user tenant ID if it matches
-            if (GLOBAL_TENANT_ID.equals(responseTenantId)) {
+            if (globalTenantId.equals(responseTenantId)) {
                 sourceMap.put(tenantIdField, userTenantId);
             }
         }
@@ -223,12 +218,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Boolean isMultiTenancyEnabled
     ) {
         final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
-        if (GLOBAL_TENANT_ID != null && GLOBAL_TENANT_ID.equals(tenantId)) {
-            throw new OpenSearchStatusException(
-                "Global tenant id is reserved for internal use, do not accept passing it from request!",
-                RestStatus.BAD_REQUEST
-            );
-        }
+        validateGlobalTenantId(globalTenantId, tenantId);
         CompletableFuture<UpdateDataObjectResponse> future = new CompletableFuture<>();
         return doPrivileged(() -> {
             try {
@@ -295,12 +285,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Boolean isMultiTenancyEnabled
     ) {
         final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
-        if (GLOBAL_TENANT_ID != null && GLOBAL_TENANT_ID.equals(tenantId)) {
-            throw new OpenSearchStatusException(
-                "Global tenant id is reserved for internal use, do not accept passing it from request!",
-                RestStatus.BAD_REQUEST
-            );
-        }
+        validateGlobalTenantId(globalTenantId, tenantId);
         CompletableFuture<DeleteDataObjectResponse> future = new CompletableFuture<>();
         return doPrivileged(() -> {
             log.info("Deleting {} from {}", request.id(), request.index());
@@ -400,7 +385,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
                 boolQuery.filter(tenantIdTermQuery);
                 searchSource.query(boolQuery);
             }
-            log.debug("Adding tenant id {} to search query", Arrays.toString(request.indices()));
+            log.debug("Adding indices {} to search query", Arrays.toString(request.indices()));
         }
         log.info("Searching {}", Arrays.toString(request.indices()));
         return doPrivileged(() -> {
@@ -427,7 +412,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
     }
 
     @Override
-    public boolean isGlobalResource(String index, String id) {
+    public CompletionStage<Boolean> isGlobalResource(String index, String id) {
         // Check whether the tenant id in the document matches global tenant ID
         CompletableFuture<Boolean> future = new CompletableFuture<>();
         return doPrivileged(() -> {
@@ -435,7 +420,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
             client.get(getRequest, ActionListener.wrap(getResponse -> {
                 if (getResponse.isExists() && getResponse.getSourceAsMap().containsKey(tenantIdField)) {
                     Object tenantId = getResponse.getSourceAsMap().get(tenantIdField);
-                    future.complete(GLOBAL_TENANT_ID.equals(tenantId));
+                    future.complete(globalTenantId.equals(tenantId));
                 } else {
                     future.complete(false);
                 }
@@ -443,7 +428,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
                 log.error("Error checking if resource is global for index: {} id: {}", index, id, e);
                 future.complete(false);
             }));
-            return future.join();
+            return future;
         });
     }
 }

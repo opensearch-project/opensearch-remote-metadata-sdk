@@ -53,6 +53,19 @@ public class GetDataObjectRequest extends DataObjectRequest {
     }
 
     /**
+     * Instantiate a builder initialized with an existing request
+     * @param request the existing request to copy from
+     * @return a builder instance initialized with the existing request
+     */
+    public static Builder builder(GetDataObjectRequest request) {
+        return new Builder()
+            .index(request.index())
+            .id(request.id())
+            .tenantId(request.tenantId())
+            .fetchSourceContext(request.fetchSourceContext());
+    }
+
+    /**
      * Class for constructing a Builder for this Request Object
      */
     public static class Builder extends DataObjectRequest.Builder<Builder> {

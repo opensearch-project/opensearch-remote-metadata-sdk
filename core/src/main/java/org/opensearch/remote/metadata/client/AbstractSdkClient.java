@@ -8,6 +8,8 @@
  */
 package org.opensearch.remote.metadata.client;
 
+import org.opensearch.OpenSearchStatusException;
+import org.opensearch.core.rest.RestStatus;
 import org.opensearch.threadpool.ThreadPool;
 
 import java.security.PrivilegedAction;
@@ -79,5 +81,19 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
 
     public String buildGlobalCacheKey(String index, String id) {
         return index + ":" + id;
+    }
+
+    /**
+     * Throw exception if tenantId is the global tenant id
+     * @param globalTenantId The global tenant id
+     * @param tenantId The tenantId from the request
+     */
+    protected void validateGlobalTenantId(String globalTenantId, String tenantId) {
+        if (globalTenantId != null && globalTenantId.equals(tenantId)) {
+            throw new OpenSearchStatusException(
+                "Global tenant id is reserved for internal use, please do not pass in the same tenantId in request!",
+                RestStatus.BAD_REQUEST
+            );
+        }
     }
 }

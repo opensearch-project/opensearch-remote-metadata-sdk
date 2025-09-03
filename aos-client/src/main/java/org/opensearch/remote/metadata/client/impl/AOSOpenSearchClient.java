@@ -10,6 +10,8 @@ package org.opensearch.remote.metadata.client.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import org.opensearch.client.opensearch.core.GetRequest;
+import org.opensearch.core.action.ActionListener;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProviderChain;
 import software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider;
@@ -36,8 +38,10 @@ import org.opensearch.remote.metadata.common.SdkClientUtils;
 import org.opensearch.threadpool.Scheduler;
 import org.opensearch.threadpool.ThreadPool;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
@@ -57,7 +61,7 @@ public class AOSOpenSearchClient extends RemoteClusterIndicesClient {
     private static final Logger log = LogManager.getLogger(AOSOpenSearchClient.class);
 
     private Scheduler.Cancellable globalResourcesCacheScheduler;
-    public static String GLOBAL_TENANT_ID;
+    public static String globalTenantId;
     private static final Map<String, Map<String, Object>> GLOBAL_RESOURCES_CACHE = new ConcurrentHashMap<>();
     private static final TimeValue CACHE_REFRESH_INTERVAL = TimeValue.timeValueMinutes(5);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -72,8 +76,8 @@ public class AOSOpenSearchClient extends RemoteClusterIndicesClient {
         super.initialize(metadataSettings);
         this.openSearchAsyncClient = createOpenSearchAsyncClient();
         this.mapper = openSearchAsyncClient._transport().jsonpMapper();
-        GLOBAL_TENANT_ID = metadataSettings.get(REMOTE_METADATA_GLOBAL_TENANT_ID_KEY);
-        if (GLOBAL_TENANT_ID != null) {
+        globalTenantId = metadataSettings.get(REMOTE_METADATA_GLOBAL_TENANT_ID_KEY);
+        if (globalTenantId != null) {
             cacheGlobalResources();
             startGlobalResourcesCacheScheduler();
         }
@@ -85,13 +89,34 @@ public class AOSOpenSearchClient extends RemoteClusterIndicesClient {
     public AOSOpenSearchClient() {}
 
     @Override
-    public boolean isGlobalResource(String index, String id) {
-        return GLOBAL_RESOURCES_CACHE.containsKey(buildGlobalCacheKey(index, id));
+    public CompletionStage<Boolean> isGlobalResource(String index, String id) {
+        if (globalTenantId == null) {
+            return CompletableFuture.completedFuture(false);
+        }
+        
+        return doPrivileged(() -> {
+            GetRequest getRequest = new GetRequest.Builder().index(index).id(id).build();
+            try{
+                return openSearchAsyncClient.get(getRequest, MAP_DOCTYPE).thenApply(getResponse -> {
+                    if (getResponse.found() && getResponse.source() != null && getResponse.source().containsKey(tenantIdField)) {
+                        Object tenantId = getResponse.source().get(tenantIdField);
+                        return globalTenantId.equals(tenantId);
+                    } else {
+                        return false;
+                    }
+                }).exceptionally(e -> {
+                    log.error("Error checking if resource is global for index: {} id: {}", index, id, e);
+                    return false;
+                });
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
 
     private void cacheGlobalResources() {
         // Search for all documents with global tenant ID across all indices
-        TermQuery globalTenantQuery = new TermQuery.Builder().field(this.tenantIdField).value(FieldValue.of(GLOBAL_TENANT_ID)).build();
+        TermQuery globalTenantQuery = new TermQuery.Builder().field(this.tenantIdField).value(FieldValue.of(globalTenantId)).build();
 
         SearchRequest searchRequest = new SearchRequest.Builder().index("*")
             .query(globalTenantQuery.toQuery())
@@ -181,11 +206,14 @@ public class AOSOpenSearchClient extends RemoteClusterIndicesClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        if (GLOBAL_TENANT_ID != null) {
+        if (globalTenantId == null) {
+            // No global tenant support, use parent implementation
+            return super.getDataObjectAsync(request, executor, isMultiTenancyEnabled);
+        } else {
             // First check cache for global resource
-            CompletionStage<GetDataObjectResponse> cachedResponse = getGlobalResourceDataFromCache(request);
+            GetDataObjectResponse cachedResponse = getGlobalResourceDataFromCache(request);
             if (cachedResponse != null) {
-                return cachedResponse;
+                return CompletableFuture.completedFuture(cachedResponse);
             }
 
             // Try with user tenant ID first
@@ -196,20 +224,15 @@ public class AOSOpenSearchClient extends RemoteClusterIndicesClient {
                 }
 
                 // If not found, try with global tenant ID
-                GetDataObjectRequest globalRequest = GetDataObjectRequest.builder()
-                    .index(request.index())
-                    .id(request.id())
-                    .tenantId(GLOBAL_TENANT_ID)
+                GetDataObjectRequest globalRequest = GetDataObjectRequest.builder(request)
+                    .tenantId(globalTenantId)
                     .build();
                 return super.getDataObjectAsync(globalRequest, executor, isMultiTenancyEnabled);
             });
-        } else {
-            // No global tenant support, use parent implementation
-            return super.getDataObjectAsync(request, executor, isMultiTenancyEnabled);
         }
     }
 
-    private CompletionStage<GetDataObjectResponse> getGlobalResourceDataFromCache(GetDataObjectRequest request) {
+    private GetDataObjectResponse getGlobalResourceDataFromCache(GetDataObjectRequest request) {
         String cacheKey = buildGlobalCacheKey(request.index(), request.id());
         if (GLOBAL_RESOURCES_CACHE.containsKey(cacheKey)) {
             Map<String, Object> cachedSource = GLOBAL_RESOURCES_CACHE.get(cacheKey);
@@ -226,13 +249,11 @@ public class AOSOpenSearchClient extends RemoteClusterIndicesClient {
                     OBJECT_MAPPER.writeValueAsString(modifiedSource)
                 );
 
-                return CompletableFuture.completedFuture(
-                    GetDataObjectResponse.builder()
-                        .id(request.id())
-                        .parser(SdkClientUtils.createParser(responseJson))
-                        .source(modifiedSource)
-                        .build()
-                );
+                return GetDataObjectResponse.builder()
+                    .id(request.id())
+                    .parser(SdkClientUtils.createParser(responseJson))
+                    .source(modifiedSource)
+                    .build();
             } catch (Exception e) {
                 log.error("Failed to create response from cached global resource", e);
                 return null;

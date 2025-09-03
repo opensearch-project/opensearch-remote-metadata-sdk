@@ -11,6 +11,7 @@ package org.opensearch.remote.metadata.client;
 import org.opensearch.remote.metadata.common.CommonValue;
 
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 
@@ -124,7 +125,7 @@ public interface SdkClientDelegate extends AutoCloseable {
      * @param id The resource id.
      * @return If the resource is global or not.
      */
-    default boolean isGlobalResource(String index, String id) {
-        return false;
+    default CompletionStage<Boolean> isGlobalResource(String index, String id) {
+        return CompletableFuture.completedFuture(false);
     }
 }

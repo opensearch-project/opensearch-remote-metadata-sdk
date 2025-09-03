@@ -10,7 +10,9 @@ package org.opensearch.remote.metadata.client;
 
 import org.opensearch.ExceptionsHelper;
 import org.opensearch.OpenSearchException;
+import org.opensearch.OpenSearchStatusException;
 import org.opensearch.core.common.Strings;
+import org.opensearch.core.rest.RestStatus;
 
 import java.util.List;
 import java.util.concurrent.CompletionException;
@@ -288,4 +290,15 @@ public class SdkClient {
         }
     }
 
+    /**
+     * This method is to check if a given resource index and id is global resource or not.
+     * This is useful for invokers in case they need perform different operations based on
+     * resource type. It delegates to the underlying implementation.
+     * @param index The index/table name.
+     * @param id The resource id.
+     * @return If the resource is global or not.
+     */
+    public CompletionStage<Boolean> isGlobalResource(String index, String id) {
+        return delegate.isGlobalResource(index, id);
+    }
 }
