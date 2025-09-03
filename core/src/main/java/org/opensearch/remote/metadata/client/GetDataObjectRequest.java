@@ -58,8 +58,7 @@ public class GetDataObjectRequest extends DataObjectRequest {
      * @return a builder instance initialized with the existing request
      */
     public static Builder builder(GetDataObjectRequest request) {
-        return new Builder()
-            .index(request.index())
+        return new Builder().index(request.index())
             .id(request.id())
             .tenantId(request.tenantId())
             .fetchSourceContext(request.fetchSourceContext());

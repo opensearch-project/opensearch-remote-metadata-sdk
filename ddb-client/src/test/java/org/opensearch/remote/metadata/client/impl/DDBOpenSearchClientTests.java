@@ -1172,9 +1172,9 @@ public class DDBOpenSearchClientTests {
     public void testIsGlobalResource_WithoutGlobalTenantId() {
         ddbClient = new DDBOpenSearchClient(dynamoDbAsyncClient, aosOpenSearchClient, TENANT_ID_FIELD);
 
-        // Test when no global resources cached
-        assertFalse(ddbClient.isGlobalResource(TEST_INDEX, TEST_ID));
-        assertFalse(ddbClient.isGlobalResource("other_index", "other_id"));
+        // Test when no global tenant ID is set
+        assertFalse(ddbClient.isGlobalResource(TEST_INDEX, TEST_ID).toCompletableFuture().join());
+        assertFalse(ddbClient.isGlobalResource("other_index", "other_id").toCompletableFuture().join());
     }
 
     @Test

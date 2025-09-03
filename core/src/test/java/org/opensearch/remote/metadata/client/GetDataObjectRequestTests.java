@@ -54,9 +54,7 @@ public class GetDataObjectRequestTests {
             .fetchSourceContext(testFetchSourceContext)
             .build();
 
-        GetDataObjectRequest copiedRequest = GetDataObjectRequest.builder(originalRequest)
-            .tenantId("new-tenant-id")
-            .build();
+        GetDataObjectRequest copiedRequest = GetDataObjectRequest.builder(originalRequest).tenantId("new-tenant-id").build();
 
         assertEquals(testIndex, copiedRequest.index());
         assertEquals(testId, copiedRequest.id());

@@ -10,8 +10,6 @@ package org.opensearch.remote.metadata.client.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import org.opensearch.client.opensearch.core.GetRequest;
-import org.opensearch.core.action.ActionListener;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProviderChain;
 import software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider;
@@ -26,6 +24,7 @@ import org.apache.logging.log4j.Logger;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.opensearch._types.FieldValue;
 import org.opensearch.client.opensearch._types.query_dsl.TermQuery;
+import org.opensearch.client.opensearch.core.GetRequest;
 import org.opensearch.client.opensearch.core.SearchRequest;
 import org.opensearch.client.transport.aws.AwsSdk2Transport;
 import org.opensearch.client.transport.aws.AwsSdk2TransportOptions;
@@ -41,7 +40,6 @@ import org.opensearch.threadpool.ThreadPool;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
@@ -93,10 +91,10 @@ public class AOSOpenSearchClient extends RemoteClusterIndicesClient {
         if (globalTenantId == null) {
             return CompletableFuture.completedFuture(false);
         }
-        
+
         return doPrivileged(() -> {
             GetRequest getRequest = new GetRequest.Builder().index(index).id(id).build();
-            try{
+            try {
                 return openSearchAsyncClient.get(getRequest, MAP_DOCTYPE).thenApply(getResponse -> {
                     if (getResponse.found() && getResponse.source() != null && getResponse.source().containsKey(tenantIdField)) {
                         Object tenantId = getResponse.source().get(tenantIdField);
@@ -224,9 +222,7 @@ public class AOSOpenSearchClient extends RemoteClusterIndicesClient {
                 }
 
                 // If not found, try with global tenant ID
-                GetDataObjectRequest globalRequest = GetDataObjectRequest.builder(request)
-                    .tenantId(globalTenantId)
-                    .build();
+                GetDataObjectRequest globalRequest = GetDataObjectRequest.builder(request).tenantId(globalTenantId).build();
                 return super.getDataObjectAsync(globalRequest, executor, isMultiTenancyEnabled);
             });
         }

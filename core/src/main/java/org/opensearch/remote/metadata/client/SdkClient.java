@@ -10,9 +10,7 @@ package org.opensearch.remote.metadata.client;
 
 import org.opensearch.ExceptionsHelper;
 import org.opensearch.OpenSearchException;
-import org.opensearch.OpenSearchStatusException;
 import org.opensearch.core.common.Strings;
-import org.opensearch.core.rest.RestStatus;
 
 import java.util.List;
 import java.util.concurrent.CompletionException;

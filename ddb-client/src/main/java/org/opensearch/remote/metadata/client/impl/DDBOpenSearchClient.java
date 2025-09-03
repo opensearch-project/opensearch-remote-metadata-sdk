@@ -140,7 +140,6 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
     private static final TimeValue DEFAULT_CACHE_REFRESH_INTERVAL = TimeValue.timeValueMinutes(5);
     private static final TimeValue MIN_CACHE_REFRESH_INTERVAL = TimeValue.timeValueMinutes(1);
 
-
     @Override
     public boolean supportsMetadataType(String metadataType) {
         return AWS_DYNAMO_DB.equals(metadataType);
@@ -156,7 +155,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         this.aosOpenSearchClient.initialize(metadataSettings);
         globalTenantId = metadataSettings.get(REMOTE_METADATA_GLOBAL_TENANT_ID_KEY);
         CACHE_REFRESH_INTERVAL = parseCacheRefreshInterval(
-                metadataSettings.get(REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_REFRESH_INTERVAL_KEY)
+            metadataSettings.get(REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_REFRESH_INTERVAL_KEY)
         );
         if (globalTenantId != null) {
             cacheGlobalResources();
@@ -178,30 +177,24 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         if (globalTenantId == null) {
             return CompletableFuture.completedFuture(false);
         }
-        
+
         GetItemRequest getItemRequest = GetItemRequest.builder()
             .tableName(index)
-            .key(Map.of(
-                HASH_KEY, AttributeValue.builder().s(globalTenantId).build(),
-                RANGE_KEY, AttributeValue.builder().s(id).build()
-            ))
+            .key(Map.of(HASH_KEY, AttributeValue.builder().s(globalTenantId).build(), RANGE_KEY, AttributeValue.builder().s(id).build()))
             .consistentRead(true)
             .build();
-            
-        return doPrivileged(() -> dynamoDbAsyncClient.getItem(getItemRequest)
-            .thenApply(getItemResponse -> {
-                if (getItemResponse == null || getItemResponse.item() == null || getItemResponse.item().isEmpty()) {
-                    return false;
-                }
-                
-                AttributeValue tenantIdAttr = getItemResponse.item().get(HASH_KEY);
-                return tenantIdAttr != null && globalTenantId.equals(tenantIdAttr.s());
-            })
-            .exceptionally(e -> {
-                log.error("Error checking if resource is global for index: {} id: {}", index, id, e);
+
+        return doPrivileged(() -> dynamoDbAsyncClient.getItem(getItemRequest).thenApply(getItemResponse -> {
+            if (getItemResponse == null || getItemResponse.item() == null || getItemResponse.item().isEmpty()) {
                 return false;
-            })
-        );
+            }
+
+            AttributeValue tenantIdAttr = getItemResponse.item().get(HASH_KEY);
+            return tenantIdAttr != null && globalTenantId.equals(tenantIdAttr.s());
+        }).exceptionally(e -> {
+            log.error("Error checking if resource is global for index: {} id: {}", index, id, e);
+            return false;
+        }));
     }
 
     /**
@@ -239,61 +232,57 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
     }
 
     private void cacheGlobalResources() {
-        this.dynamoDbAsyncClient.listTables().thenAccept(tables -> {
-            Map<String, CompletableFuture<DescribeTableResponse>> describeTableCompletableFutureMap = getDescribeTableCompletableFutureMap(
-                tables
-            );
-            CompletableFuture.allOf(describeTableCompletableFutureMap.values().toArray(new CompletableFuture[0])).exceptionally(ex -> {
+        this.dynamoDbAsyncClient.listTables().thenCompose(tables -> {
+            Map<String, CompletableFuture<DescribeTableResponse>> describeTableFutures = createDescribeTableFutures(tables);
+            return CompletableFuture.allOf(describeTableFutures.values().toArray(new CompletableFuture[0])).exceptionally(ex -> {
                 log.error("Failed to describe DDB tables", ex);
                 return null;
-            }).thenAccept(y -> {
-                List<String> potentialGlobalResourceTables = new ArrayList<>();
-                for (Map.Entry<String, CompletableFuture<DescribeTableResponse>> responseFuture : describeTableCompletableFutureMap
-                    .entrySet()) {
-                    DescribeTableResponse describeTableResponse = responseFuture.getValue().join();
-                    if (describeTableResponse.table().hasKeySchema()
-                        && describeTableResponse.table().keySchema().stream().anyMatch(kse -> HASH_KEY.equals(kse.attributeName()))) {
-                        potentialGlobalResourceTables.add(describeTableResponse.table().tableName());
-                    }
-                }
-                if (!potentialGlobalResourceTables.isEmpty()) {
-                    log.info("Found potential global resource tables: {}", potentialGlobalResourceTables);
-                    Map<String, CompletableFuture<QueryResponse>> fetchGlobalResourcesCompletableFutureMap = potentialGlobalResourceTables
-                        .stream()
-                        .collect(Collectors.toMap(Function.identity(), this::fetchGlobalResources));
-                    CompletableFuture.allOf(fetchGlobalResourcesCompletableFutureMap.values().toArray(new CompletableFuture[0]))
-                        .exceptionally(ex -> {
-                            log.error("Failed to execute DDB query", ex);
-                            return null;
-                        })
-                        .thenAccept(z -> {
-                            for (Map.Entry<
-                                String,
-                                CompletableFuture<QueryResponse>> responseFuture : fetchGlobalResourcesCompletableFutureMap.entrySet()) {
-                                QueryResponse queryResponse = responseFuture.getValue().join();
-                                queryResponse.items().forEach(item -> {
-                                    String id = item.get(RANGE_KEY).s();
-                                    GLOBAL_RESOURCES_CACHE.put(buildGlobalCacheKey(responseFuture.getKey(), id), item);
-                                });
-                            }
-                        });
-                }
-            });
-        }).exceptionally((throwable -> {
+            }).thenApply(ignored -> describeTableFutures);
+        }).thenApply(this::filterPotentialGlobalResourceTables).thenCompose(potentialTables -> {
+            if (potentialTables.isEmpty()) {
+                return CompletableFuture.completedFuture(Map.<String, CompletableFuture<QueryResponse>>of());
+            }
+            log.info("Found potential global resource tables: {}", potentialTables);
+            Map<String, CompletableFuture<QueryResponse>> queryFutures = potentialTables.stream()
+                .collect(Collectors.toMap(Function.identity(), this::fetchGlobalResources));
+            return CompletableFuture.allOf(queryFutures.values().toArray(new CompletableFuture[0])).exceptionally(ex -> {
+                log.error("Failed to execute DDB query", ex);
+                return null;
+            }).thenApply(ignored -> queryFutures);
+        }).thenAccept(this::cacheQueryResults).exceptionally(throwable -> {
             log.error("Failed to list tables!", throwable);
             return null;
-        }));
+        });
     }
 
-    private Map<String, CompletableFuture<DescribeTableResponse>> getDescribeTableCompletableFutureMap(ListTablesResponse x) {
-        List<String> tableNames = x.tableNames();
-        // Build all tables describe table query
-        Map<String, CompletableFuture<DescribeTableResponse>> completableFutures = new HashMap<>();
-        tableNames.forEach(y -> {
-            DescribeTableRequest describeTableRequest = DescribeTableRequest.builder().tableName(y).build();
-            completableFutures.put(y, dynamoDbAsyncClient.describeTable(describeTableRequest));
+    private Map<String, CompletableFuture<DescribeTableResponse>> createDescribeTableFutures(ListTablesResponse tablesResponse) {
+        return tablesResponse.tableNames()
+            .stream()
+            .collect(
+                Collectors.toMap(
+                    Function.identity(),
+                    tableName -> dynamoDbAsyncClient.describeTable(DescribeTableRequest.builder().tableName(tableName).build())
+                )
+            );
+    }
+
+    private List<String> filterPotentialGlobalResourceTables(Map<String, CompletableFuture<DescribeTableResponse>> describeTableFutures) {
+        return describeTableFutures.entrySet().stream().filter(entry -> {
+            DescribeTableResponse response = entry.getValue().join();
+            return response.table().hasKeySchema()
+                && response.table().keySchema().stream().anyMatch(kse -> HASH_KEY.equals(kse.attributeName()));
+        }).map(Map.Entry::getKey).collect(Collectors.toList());
+    }
+
+    private void cacheQueryResults(Map<String, CompletableFuture<QueryResponse>> queryFutures) {
+        queryFutures.entrySet().forEach(entry -> {
+            String tableName = entry.getKey();
+            QueryResponse queryResponse = entry.getValue().join();
+            queryResponse.items().forEach(item -> {
+                String resourceId = item.get(RANGE_KEY).s();
+                GLOBAL_RESOURCES_CACHE.put(buildGlobalCacheKey(tableName, resourceId), item);
+            });
         });
-        return completableFutures;
     }
 
     private CompletableFuture<QueryResponse> fetchGlobalResources(String tableName) {
@@ -1005,9 +994,9 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         if (threadPool != null && !TimeValue.MINUS_ONE.equals(CACHE_REFRESH_INTERVAL)) {
             log.info("Starting global resources cache scheduler with interval: {}", CACHE_REFRESH_INTERVAL);
             globalResourcesCacheScheduler = threadPool.scheduleWithFixedDelay(
-                    this::cacheGlobalResources,
-                    CACHE_REFRESH_INTERVAL,
-                    ThreadPool.Names.GENERIC
+                this::cacheGlobalResources,
+                CACHE_REFRESH_INTERVAL,
+                ThreadPool.Names.GENERIC
             );
         } else if (TimeValue.MINUS_ONE.equals(CACHE_REFRESH_INTERVAL)) {
             log.info("Global resources cache refresh is disabled");
