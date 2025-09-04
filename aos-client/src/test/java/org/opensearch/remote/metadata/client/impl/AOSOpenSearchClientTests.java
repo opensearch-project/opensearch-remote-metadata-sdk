@@ -62,7 +62,7 @@ class AOSOpenSearchClientTests {
     private static final String TEST_ID = "test_id";
     private static final String TEST_TENANT_ID = "test_tenant";
     private static final String TEST_GLOBAL_TENANT_ID = "test_global_tenant";
-    private static final TimeValue TEST_GLOBAL_RESOURCE_CACHE_TTL = TimeValue.timeValueMillis(10 * 60 * 1000);
+    private static final TimeValue TEST_GLOBAL_RESOURCE_CACHE_TTL = TimeValue.timeValueMillis(5 * 60 * 1000);
 
     @Mock
     private OpenSearchAsyncClient mockOpenSearchAsyncClient;

@@ -113,7 +113,7 @@ public class DDBOpenSearchClientTests {
     private static final String TEST_THREAD_POOL = "test_pool";
     private static final String GLOBAL_TENANT_ID = "_global_tenant_id";
     private static final String TEST_TENANT_ID = "test_tenant_id";
-    private static final TimeValue TEST_GLOBAL_RESOURCE_CACHE_TTL = TimeValue.timeValueMillis(10 * 60 * 1000);
+    private static final TimeValue TEST_GLOBAL_RESOURCE_CACHE_TTL = TimeValue.timeValueMillis(5 * 60 * 1000);
     private SdkClient sdkClient;
 
     @Mock
