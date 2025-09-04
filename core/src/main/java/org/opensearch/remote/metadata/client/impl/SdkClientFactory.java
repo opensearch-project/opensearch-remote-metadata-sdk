@@ -12,10 +12,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.opensearch.core.common.Strings;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.remote.metadata.client.AbstractSdkClient;
 import org.opensearch.remote.metadata.client.SdkClient;
 import org.opensearch.remote.metadata.client.SdkClientDelegate;
-import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.transport.client.Client;
 
 import java.util.Iterator;
@@ -24,6 +22,7 @@ import java.util.ServiceLoader;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ForkJoinPool;
 
+import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_GLOBAL_TENANT_ID_KEY;
 import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_TYPE_KEY;
 import static org.opensearch.remote.metadata.common.CommonValue.TENANT_AWARE_KEY;
 
@@ -41,7 +40,7 @@ public class SdkClientFactory {
      * @return An instance of SdkClient which delegates to an implementation based on Remote Metadata Type. The {@link ForkJoinPool#commonPool()} will be used by default for async execution.
      */
     public static SdkClient createSdkClient(Client client, NamedXContentRegistry xContentRegistry, Map<String, String> metadataSettings) {
-        return createSdkClient(client, xContentRegistry, metadataSettings, ForkJoinPool.commonPool(), null);
+        return createSdkClient(client, xContentRegistry, metadataSettings, ForkJoinPool.commonPool());
     }
 
     /**
@@ -58,27 +57,9 @@ public class SdkClientFactory {
         Map<String, String> metadataSettings,
         Executor defaultExecutor
     ) {
-        return createSdkClient(client, xContentRegistry, metadataSettings, defaultExecutor, null);
-    }
-
-    /**
-     * Create a new SdkClient with implementation determined by the value of the Remote Metadata Type setting
-     * @param client The OpenSearch node client used as the default implementation
-     * @param xContentRegistry The OpenSearch XContentRegistry
-     * @param metadataSettings A map defining the remote metadata type and configuration
-     * @param defaultExecutor The default executor to use if another one is not specified
-     * @param threadPool The ThreadPool to use for scheduling tasks
-     * @return An instance of SdkClient which delegates to an implementation based on Remote Metadata Type
-     */
-    public static SdkClient createSdkClient(
-        Client client,
-        NamedXContentRegistry xContentRegistry,
-        Map<String, String> metadataSettings,
-        Executor defaultExecutor,
-        ThreadPool threadPool
-    ) {
         String remoteMetadataType = metadataSettings.get(REMOTE_METADATA_TYPE_KEY);
         Boolean multiTenancy = Boolean.parseBoolean(metadataSettings.get(TENANT_AWARE_KEY));
+        String globalTenantId = metadataSettings.get(REMOTE_METADATA_GLOBAL_TENANT_ID_KEY);
 
         ServiceLoader<SdkClientDelegate> loader = ServiceLoader.load(SdkClientDelegate.class, SdkClientDelegate.class.getClassLoader());
         Iterator<SdkClientDelegate> iterator = loader.iterator();
@@ -86,25 +67,22 @@ public class SdkClientFactory {
         if (Strings.isNullOrEmpty(remoteMetadataType)) {
             // Default client does not use SPI
             log.info("Using local opensearch cluster as metadata store.", remoteMetadataType);
-            return createDefaultClient(client, xContentRegistry, metadataSettings, defaultExecutor, multiTenancy);
+            return createDefaultClient(client, xContentRegistry, metadataSettings, defaultExecutor, multiTenancy, globalTenantId);
         } else {
             // Use SPI to find the correct client
             while (iterator.hasNext()) {
                 SdkClientDelegate delegate = iterator.next();
                 if (delegate.supportsMetadataType(remoteMetadataType)) {
                     log.info("Using {} as metadata store.", remoteMetadataType);
-                    if (threadPool != null && delegate instanceof AbstractSdkClient) {
-                        ((AbstractSdkClient) delegate).setThreadPool(threadPool);
-                    }
                     delegate.initialize(metadataSettings);
-                    return new SdkClient(delegate, defaultExecutor, multiTenancy);
+                    return new SdkClient(delegate, defaultExecutor, multiTenancy, globalTenantId);
                 }
             }
         }
 
         // If no suitable implementation is found, use the default
         log.warn("Unable to find {} client implementation. Using local opensearch cluster as metadata store.", remoteMetadataType);
-        return createDefaultClient(client, xContentRegistry, metadataSettings, defaultExecutor, multiTenancy);
+        return createDefaultClient(client, xContentRegistry, metadataSettings, defaultExecutor, multiTenancy, globalTenantId);
     }
 
     private static SdkClient createDefaultClient(
@@ -112,14 +90,15 @@ public class SdkClientFactory {
         NamedXContentRegistry xContentRegistry,
         Map<String, String> metadataSettings,
         Executor defaultExecutor,
-        Boolean multiTenancy
+        Boolean multiTenancy,
+        String globalTenantId
     ) {
         LocalClusterIndicesClient defaultclient = new LocalClusterIndicesClient(client, xContentRegistry, metadataSettings);
-        return new SdkClient(defaultclient, defaultExecutor, multiTenancy);
+        return new SdkClient(defaultclient, defaultExecutor, multiTenancy, globalTenantId);
     }
 
     // Package private for testing
-    static SdkClient wrapSdkClientDelegate(SdkClientDelegate delegate, Boolean multiTenancy) {
-        return new SdkClient(delegate, multiTenancy);
+    static SdkClient wrapSdkClientDelegate(SdkClientDelegate delegate, Boolean multiTenancy, String globalTenantId) {
+        return new SdkClient(delegate, multiTenancy, globalTenantId);
     }
 }

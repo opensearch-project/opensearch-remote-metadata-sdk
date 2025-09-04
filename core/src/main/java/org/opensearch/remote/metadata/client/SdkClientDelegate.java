@@ -123,9 +123,11 @@ public interface SdkClientDelegate extends AutoCloseable {
      * otherwise.
      * @param index The index/table name.
      * @param id The resource id.
+     * @param executor the executor to use for asynchronous execution
+     * @param isMultiTenancyEnabled whether multitenancy is enabled
      * @return If the resource is global or not.
      */
-    default CompletionStage<Boolean> isGlobalResource(String index, String id) {
+    default CompletionStage<Boolean> isGlobalResource(String index, String id, Executor executor, Boolean isMultiTenancyEnabled) {
         return CompletableFuture.completedFuture(false);
     }
 }

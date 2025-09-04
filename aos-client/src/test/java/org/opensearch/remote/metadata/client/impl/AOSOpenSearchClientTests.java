@@ -4,9 +4,12 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 
+import software.amazon.awssdk.utils.ImmutableMap;
+
 import org.opensearch.OpenSearchException;
 import org.opensearch.client.json.jackson.JacksonJsonpMapper;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
+import org.opensearch.client.opensearch.core.GetRequest;
 import org.opensearch.client.opensearch.core.GetResponse;
 import org.opensearch.client.transport.OpenSearchTransport;
 import org.opensearch.client.transport.aws.AwsSdk2Transport;
@@ -24,7 +27,6 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -40,7 +42,6 @@ import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_
 import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_TYPE_KEY;
 import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_OPENSEARCH;
 import static org.opensearch.remote.metadata.common.CommonValue.TENANT_ID_FIELD_KEY;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -60,7 +61,8 @@ class AOSOpenSearchClientTests {
     private static final String TEST_INDEX = "test_index";
     private static final String TEST_ID = "test_id";
     private static final String TEST_TENANT_ID = "test_tenant";
-    private static final String GLOBAL_TENANT_ID = "global_tenant";
+    private static final String TEST_GLOBAL_TENANT_ID = "test_global_tenant";
+    private static final TimeValue TEST_GLOBAL_RESOURCE_CACHE_TTL = TimeValue.timeValueMillis(10 * 60 * 1000);
 
     @Mock
     private OpenSearchAsyncClient mockOpenSearchAsyncClient;
@@ -86,7 +88,6 @@ class AOSOpenSearchClientTests {
 
     @BeforeEach
     void setUp() {
-        AOSOpenSearchClient.GLOBAL_TENANT_ID = null;
         MockitoAnnotations.openMocks(this);
         aosOpenSearchClient = new AOSOpenSearchClient();
         when(mockOpenSearchAsyncClient._transport()).thenReturn(transport);
@@ -112,7 +113,7 @@ class AOSOpenSearchClientTests {
         metadataSettings.put(REMOTE_METADATA_ENDPOINT_KEY, "https://example.amazonaws.com");
         metadataSettings.put(REMOTE_METADATA_REGION_KEY, "us-west-2");
         metadataSettings.put(REMOTE_METADATA_SERVICE_NAME_KEY, "es");
-
+        metadataSettings.put(REMOTE_METADATA_GLOBAL_TENANT_ID_KEY, TEST_GLOBAL_TENANT_ID);
         assertDoesNotThrow(() -> aosOpenSearchClient.initialize(metadataSettings));
     }
 
@@ -151,137 +152,141 @@ class AOSOpenSearchClientTests {
     }
 
     @Test
-    void testInitializeWithGlobalTenantId() {
-        aosOpenSearchClient.setThreadPool(testThreadPool);
-
-        Map<String, String> metadataSettings = new HashMap<>();
-        metadataSettings.put(REMOTE_METADATA_TYPE_KEY, AWS_OPENSEARCH_SERVICE);
-        metadataSettings.put(REMOTE_METADATA_ENDPOINT_KEY, "https://example.amazonaws.com");
-        metadataSettings.put(REMOTE_METADATA_REGION_KEY, "us-west-2");
-        metadataSettings.put(REMOTE_METADATA_SERVICE_NAME_KEY, "es");
-        metadataSettings.put(TENANT_ID_FIELD_KEY, "tenant_id");
-        metadataSettings.put(REMOTE_METADATA_GLOBAL_TENANT_ID_KEY, GLOBAL_TENANT_ID);
-        aosOpenSearchClient.initialize(metadataSettings);
-        assertEquals(GLOBAL_TENANT_ID, AOSOpenSearchClient.GLOBAL_TENANT_ID);
-    }
-
-    @Test
-    void testBuildGlobalCacheKey() {
-        // Test buildGlobalCacheKey indirectly through isGlobalResource
-        assertEquals(
-            String.format(Locale.ROOT, "%s:%s", TEST_INDEX, TEST_ID),
-            aosOpenSearchClient.buildGlobalCacheKey(TEST_INDEX, TEST_ID)
-        );
-        assertNotEquals(String.format(Locale.ROOT, "%s:%s", "foo", "far"), aosOpenSearchClient.buildGlobalCacheKey(TEST_INDEX, TEST_ID));
-    }
-
-    @Test
-    void testGetDataObjectWithoutGlobalTenant() throws IOException {
+    void testGetDataObjectWithUserTenantId() throws IOException {
+        testInitialize();
         aosOpenSearchClient.openSearchAsyncClient = mockOpenSearchAsyncClient;
         GetDataObjectRequest request = mock(GetDataObjectRequest.class);
         when(request.index()).thenReturn(TEST_INDEX);
         when(request.id()).thenReturn(TEST_ID);
         when(request.tenantId()).thenReturn(TEST_TENANT_ID);
 
-        GetDataObjectResponse mockResponse = GetDataObjectResponse.builder()
-            .index(TEST_INDEX)
-            .id(TEST_ID)
-            .source(Map.of("test", "data", "tenant_id", TEST_TENANT_ID))
+        GetResponse<Map<String, Object>> getResponse = new GetResponse.Builder<Map<String, Object>>().index(TEST_INDEX)
+            .id("mockId")
+            .found(true)
+            .source(ImmutableMap.of(TENANT_ID_FIELD_KEY, TEST_TENANT_ID))
             .build();
-        when(mockOpenSearchAsyncClient.get(any(org.opensearch.client.opensearch.core.GetRequest.class), any(Class.class))).thenReturn(
-            CompletableFuture.completedFuture(mockResponse)
-        );
-
-        CompletableFuture<GetDataObjectResponse> result = aosOpenSearchClient.getDataObjectAsync(
-            request,
-            testThreadPool.executor(TEST_THREAD_POOL),
-            true
-        ).toCompletableFuture();
-
-        assertNotNull(result);
-        // Should only call get once since no global tenant fallback logic
-        verify(mockOpenSearchAsyncClient, times(1)).get(any(org.opensearch.client.opensearch.core.GetRequest.class), any(Class.class));
-    }
-
-    @Test
-    void testCacheGlobalResourcesWithNullClient() {
-        // Should not throw exception when client is null
-        assertDoesNotThrow(() -> {
-            AOSOpenSearchClient client = new AOSOpenSearchClient();
-            // Trigger caching through initialize without global tenant
-            Map<String, String> settings = new HashMap<>();
-            settings.put(REMOTE_METADATA_TYPE_KEY, AWS_OPENSEARCH_SERVICE);
-            settings.put(REMOTE_METADATA_ENDPOINT_KEY, "https://example.amazonaws.com");
-            settings.put(REMOTE_METADATA_REGION_KEY, "us-west-2");
-            settings.put(REMOTE_METADATA_SERVICE_NAME_KEY, "es");
-            client.initialize(settings);
-        });
-    }
-
-    @Test
-    void testGetDataObjectWithGlobalTenantUserDataFound() throws IOException {
-        AOSOpenSearchClient.GLOBAL_TENANT_ID = GLOBAL_TENANT_ID;
-        aosOpenSearchClient.openSearchAsyncClient = mockOpenSearchAsyncClient;
-
-        GetDataObjectRequest request = GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build();
-
-        GetDataObjectResponse userResponse = GetDataObjectResponse.builder()
-            .index(TEST_INDEX)
-            .id(TEST_ID)
-            .source(Map.of("user", "data"))
-            .build();
-        when(mockOpenSearchAsyncClient.get(any(org.opensearch.client.opensearch.core.GetRequest.class), any(Class.class))).thenReturn(
-            CompletableFuture.completedFuture(userResponse)
-        );
-
-        CompletableFuture<GetDataObjectResponse> result = aosOpenSearchClient.getDataObjectAsync(
-            request,
-            testThreadPool.executor(TEST_THREAD_POOL),
-            true
-        ).toCompletableFuture();
-
-        assertNotNull(result);
-        verify(mockOpenSearchAsyncClient, times(1)).get(any(org.opensearch.client.opensearch.core.GetRequest.class), any(Class.class));
-    }
-
-    @Test
-    void testGetDataObjectWithGlobalTenantDataNotFound() throws IOException {
-        AOSOpenSearchClient.GLOBAL_TENANT_ID = GLOBAL_TENANT_ID;
-        aosOpenSearchClient.openSearchAsyncClient = mockOpenSearchAsyncClient;
-
-        // Mock transport and mapper to avoid null pointer
-        OpenSearchTransport mockTransport = mock(OpenSearchTransport.class);
-        JacksonJsonpMapper mapper = new JacksonJsonpMapper(
-            new ObjectMapper().setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
-                .setSerializationInclusion(JsonInclude.Include.NON_NULL)
-        );
-        when(mockOpenSearchAsyncClient._transport()).thenReturn(mockTransport);
-        when(mockTransport.jsonpMapper()).thenReturn(mapper);
-        aosOpenSearchClient.mapper = mapper;
-
-        GetDataObjectRequest request = GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build();
-
-        GetResponse<?> getResponse = new GetResponse.Builder<>().index(TEST_INDEX).id(TEST_ID).found(false).build();
-
-        when(mockOpenSearchAsyncClient.get(any(org.opensearch.client.opensearch.core.GetRequest.class), any(Class.class))).thenReturn(
+        when(mockOpenSearchAsyncClient.get(any(GetRequest.class), any(Class.class))).thenReturn(
             CompletableFuture.completedFuture(getResponse)
-        ).thenReturn(CompletableFuture.completedFuture(getResponse));
+        );
 
-        CompletableFuture<GetDataObjectResponse> result = aosOpenSearchClient.getDataObjectAsync(
-            request,
-            testThreadPool.executor(TEST_THREAD_POOL),
-            true
-        ).toCompletableFuture();
+        GetDataObjectResponse result = aosOpenSearchClient.getDataObjectAsync(request, testThreadPool.executor(TEST_THREAD_POOL), true)
+            .toCompletableFuture()
+            .join();
 
         assertNotNull(result);
-        verify(mockOpenSearchAsyncClient, times(2)).get(any(org.opensearch.client.opensearch.core.GetRequest.class), any(Class.class));
+        assertEquals(TEST_TENANT_ID, result.source().get(TENANT_ID_FIELD_KEY));
     }
 
     @Test
-    void testStartAndStopGlobalResourcesCacheScheduler() {
-        AOSOpenSearchClient client = new AOSOpenSearchClient();
-        client.setThreadPool(testThreadPool);
+    void test_getDataObject_withGlobalTenantId_resourceFound() throws IOException {
+        testInitialize();
+        aosOpenSearchClient.openSearchAsyncClient = mockOpenSearchAsyncClient;
+        aosOpenSearchClient.setGlobalTenantId(TEST_GLOBAL_TENANT_ID);
+        aosOpenSearchClient.setGlobalResourceCacheTTL(TEST_GLOBAL_RESOURCE_CACHE_TTL);
+        GetDataObjectRequest request = mock(GetDataObjectRequest.class);
+        when(request.index()).thenReturn(TEST_INDEX);
+        when(request.id()).thenReturn(TEST_ID);
+        when(request.tenantId()).thenReturn(TEST_TENANT_ID);
+        Map<String, Object> source = new HashMap<>();
+        source.put(TENANT_ID_FIELD_KEY, TEST_GLOBAL_TENANT_ID);
+        GetResponse<Map<String, Object>> getResponse = new GetResponse.Builder<Map<String, Object>>().index(TEST_INDEX)
+            .id("mockId")
+            .found(true)
+            .source(source)
+            .build();
+        when(mockOpenSearchAsyncClient.get(any(GetRequest.class), any(Class.class))).thenReturn(
+            CompletableFuture.completedFuture(getResponse)
+        );
 
-        assertDoesNotThrow(() -> client.close());
+        GetDataObjectResponse result = aosOpenSearchClient.getDataObjectAsync(request, testThreadPool.executor(TEST_THREAD_POOL), true)
+            .toCompletableFuture()
+            .join();
+        assertEquals(TEST_TENANT_ID, result.source().get(TENANT_ID_FIELD_KEY));
+    }
+
+    @Test
+    void test_getDataObject_withGlobalTenantId_resourceFound_readAgainFromCache() throws IOException {
+        testInitialize();
+        aosOpenSearchClient.openSearchAsyncClient = mockOpenSearchAsyncClient;
+        aosOpenSearchClient.setGlobalTenantId(TEST_GLOBAL_TENANT_ID);
+        aosOpenSearchClient.setGlobalResourceCacheTTL(TEST_GLOBAL_RESOURCE_CACHE_TTL);
+        GetDataObjectRequest request = mock(GetDataObjectRequest.class);
+        when(request.index()).thenReturn(TEST_INDEX);
+        when(request.id()).thenReturn(TEST_ID);
+        when(request.tenantId()).thenReturn(TEST_TENANT_ID);
+        Map<String, Object> source = new HashMap<>();
+        source.put(TENANT_ID_FIELD_KEY, TEST_GLOBAL_TENANT_ID);
+        GetResponse<Map<String, Object>> getResponse = new GetResponse.Builder<Map<String, Object>>().index(TEST_INDEX)
+            .id("mockId")
+            .found(true)
+            .source(source)
+            .build();
+        when(mockOpenSearchAsyncClient.get(any(GetRequest.class), any(Class.class))).thenReturn(
+            CompletableFuture.completedFuture(getResponse)
+        );
+
+        GetDataObjectResponse result = aosOpenSearchClient.getDataObjectAsync(request, testThreadPool.executor(TEST_THREAD_POOL), true)
+            .toCompletableFuture()
+            .join();
+        assertEquals(TEST_TENANT_ID, result.source().get(TENANT_ID_FIELD_KEY));
+
+        GetDataObjectResponse resultFromCache = aosOpenSearchClient.getDataObjectAsync(
+            request,
+            testThreadPool.executor(TEST_THREAD_POOL),
+            true
+        ).toCompletableFuture().join();
+        assertEquals(TEST_TENANT_ID, resultFromCache.source().get(TENANT_ID_FIELD_KEY));
+    }
+
+    @Test
+    void test_isGlobalResource_whenGlobalResourceEnabled() throws IOException {
+        testInitialize();
+        aosOpenSearchClient.openSearchAsyncClient = mockOpenSearchAsyncClient;
+        aosOpenSearchClient.setGlobalTenantId(TEST_GLOBAL_TENANT_ID);
+        aosOpenSearchClient.setGlobalResourceCacheTTL(TEST_GLOBAL_RESOURCE_CACHE_TTL);
+        GetDataObjectRequest request = mock(GetDataObjectRequest.class);
+        when(request.index()).thenReturn(TEST_INDEX);
+        when(request.id()).thenReturn(TEST_ID);
+        when(request.tenantId()).thenReturn(TEST_TENANT_ID);
+        Map<String, Object> source = new HashMap<>();
+        source.put(TENANT_ID_FIELD_KEY, TEST_GLOBAL_TENANT_ID);
+        GetResponse<Map<String, Object>> getResponse = new GetResponse.Builder<Map<String, Object>>().index(TEST_INDEX)
+            .id("mockId")
+            .found(true)
+            .source(source)
+            .build();
+        when(mockOpenSearchAsyncClient.get(any(GetRequest.class), any(Class.class))).thenReturn(
+            CompletableFuture.completedFuture(getResponse)
+        );
+
+        boolean result = aosOpenSearchClient.isGlobalResource(TEST_INDEX, TEST_ID, testThreadPool.executor(TEST_THREAD_POOL), true)
+            .toCompletableFuture()
+            .join();
+        assertTrue(result);
+    }
+
+    @Test
+    void test_isGlobalResource_whenGlobalResourceDisabled() throws IOException {
+        testInitialize();
+        aosOpenSearchClient.openSearchAsyncClient = mockOpenSearchAsyncClient;
+        GetDataObjectRequest request = mock(GetDataObjectRequest.class);
+        when(request.index()).thenReturn(TEST_INDEX);
+        when(request.id()).thenReturn(TEST_ID);
+        when(request.tenantId()).thenReturn(TEST_TENANT_ID);
+        Map<String, Object> source = new HashMap<>();
+        source.put(TENANT_ID_FIELD_KEY, TEST_TENANT_ID);
+        GetResponse<Map<String, Object>> getResponse = new GetResponse.Builder<Map<String, Object>>().index(TEST_INDEX)
+            .id("mockId")
+            .found(true)
+            .source(source)
+            .build();
+        when(mockOpenSearchAsyncClient.get(any(GetRequest.class), any(Class.class))).thenReturn(
+            CompletableFuture.completedFuture(getResponse)
+        );
+
+        boolean result = aosOpenSearchClient.isGlobalResource(TEST_INDEX, TEST_ID, testThreadPool.executor(TEST_THREAD_POOL), true)
+            .toCompletableFuture()
+            .join();
+        assertFalse(result);
     }
 }

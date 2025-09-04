@@ -10,7 +10,9 @@ package org.opensearch.remote.metadata.client;
 
 import org.opensearch.ExceptionsHelper;
 import org.opensearch.OpenSearchException;
+import org.opensearch.OpenSearchStatusException;
 import org.opensearch.core.common.Strings;
+import org.opensearch.core.rest.RestStatus;
 
 import java.util.List;
 import java.util.concurrent.CompletionException;
@@ -28,14 +30,18 @@ public class SdkClient {
     private final SdkClientDelegate delegate;
     private final Executor defaultExecutor;
     private final Boolean isMultiTenancyEnabled;
+    private final String globalTenantId;
+    private static final String NO_PERMISSION_TO_OPERATE_GLOBAL_RESOURCE =
+        "The tenant id in request is not correct, or you don't have permission to operate on this resource!";
 
     /**
      * Instantiate this client with the {@link ForkJoinPool#commonPool()} as the default executor
      * @param delegate The client implementation to delegate calls to
      * @param multiTenancy whether multiTenancy is enabled
+     * @param globalTenantId global tenant id initialized in cluster setting.
      */
-    public SdkClient(SdkClientDelegate delegate, Boolean multiTenancy) {
-        this(delegate, ForkJoinPool.commonPool(), multiTenancy);
+    public SdkClient(SdkClientDelegate delegate, Boolean multiTenancy, String globalTenantId) {
+        this(delegate, ForkJoinPool.commonPool(), multiTenancy, globalTenantId);
     }
 
     /**
@@ -43,11 +49,13 @@ public class SdkClient {
      * @param delegate The client implementation to delegate calls to
      * @param defaultExecutor A default executor to use for asynchronous execution unless otherwise specified
      * @param multiTenancy whether multiTenancy is enabled
+     * @param globalTenantId global tenant id for global resource.
      */
-    public SdkClient(SdkClientDelegate delegate, Executor defaultExecutor, Boolean multiTenancy) {
+    public SdkClient(SdkClientDelegate delegate, Executor defaultExecutor, Boolean multiTenancy, String globalTenantId) {
         this.delegate = delegate;
         this.defaultExecutor = defaultExecutor;
         this.isMultiTenancyEnabled = multiTenancy;
+        this.globalTenantId = globalTenantId;
     }
 
     /**
@@ -272,8 +280,12 @@ public class SdkClient {
      * @param tenantId The tenantId from the request
      */
     private void validateTenantId(String tenantId) {
-        if (Boolean.TRUE.equals(isMultiTenancyEnabled) && Strings.isNullOrEmpty(tenantId)) {
-            throw new IllegalArgumentException("A tenant ID is required when multitenancy is enabled.");
+        if (Boolean.TRUE.equals(isMultiTenancyEnabled)) {
+            if (Strings.isNullOrEmpty(tenantId)) {
+                throw new IllegalArgumentException("A tenant ID is required when multitenancy is enabled.");
+            } else if (tenantId.equals(globalTenantId)) {
+                throw new OpenSearchStatusException(NO_PERMISSION_TO_OPERATE_GLOBAL_RESOURCE, RestStatus.FORBIDDEN);
+            }
         }
     }
 
@@ -297,6 +309,6 @@ public class SdkClient {
      * @return If the resource is global or not.
      */
     public CompletionStage<Boolean> isGlobalResource(String index, String id) {
-        return delegate.isGlobalResource(index, id);
+        return delegate.isGlobalResource(index, id, defaultExecutor, isMultiTenancyEnabled);
     }
 }

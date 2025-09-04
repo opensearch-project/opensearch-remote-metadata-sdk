@@ -17,7 +17,6 @@ import org.opensearch.action.DocWriteRequest.OpType;
 import org.opensearch.action.bulk.BulkRequest;
 import org.opensearch.action.delete.DeleteRequest;
 import org.opensearch.action.get.GetRequest;
-import org.opensearch.action.get.GetResponse;
 import org.opensearch.action.index.IndexRequest;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.update.UpdateRequest;
@@ -49,7 +48,6 @@ import org.opensearch.remote.metadata.client.SearchDataObjectResponse;
 import org.opensearch.remote.metadata.client.UpdateDataObjectRequest;
 import org.opensearch.remote.metadata.client.UpdateDataObjectResponse;
 import org.opensearch.remote.metadata.client.WriteDataObjectRequest;
-import org.opensearch.remote.metadata.common.CommonValue;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.transport.client.Client;
 
@@ -72,8 +70,6 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
     private static final Logger log = LogManager.getLogger(LocalClusterIndicesClient.class);
 
     private final Client client;
-    private final String globalTenantId;
-    private static final String DEFAULT_TENANT = "DEFAULT_TENANT";
 
     @Override
     public boolean supportsMetadataType(String metadataType) {
@@ -88,7 +84,6 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
      */
     public LocalClusterIndicesClient(Client client, NamedXContentRegistry xContentRegistry, Map<String, String> metadataSettings) {
         super.initialize(metadataSettings);
-        globalTenantId = metadataSettings.get(CommonValue.REMOTE_METADATA_GLOBAL_TENANT_ID_KEY);
         this.client = client;
     }
 
@@ -98,8 +93,6 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
-        validateGlobalTenantId(globalTenantId, tenantId);
         CompletableFuture<PutDataObjectResponse> future = new CompletableFuture<>();
         return doPrivileged(() -> {
             try {
@@ -170,15 +163,34 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
+        return doPrivileged(() -> {
+            if (globalTenantId == null) {
+                return innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
+            }
+
+            // First check cache for global resource
+            GetDataObjectResponse cachedResponse = getGlobalResourceDataFromCache(request);
+            if (cachedResponse != null) {
+                return CompletableFuture.completedFuture(cachedResponse);
+            }
+
+            CompletionStage<GetDataObjectResponse> dataFetched = innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
+            return handleOSDocumentBasedResponse(request, dataFetched);
+        });
+    }
+
+    private CompletionStage<GetDataObjectResponse> innerGetDataObjectAsync(
+        GetDataObjectRequest request,
+        Executor executor,
+        Boolean isMultiTenancyEnabled
+    ) {
         CompletableFuture<GetDataObjectResponse> future = new CompletableFuture<>();
         return doPrivileged(() -> {
             GetRequest getRequest = createGetRequest(request);
             client.get(
                 getRequest,
                 ActionListener.wrap(
-                    getResponse -> future.complete(
-                        new GetDataObjectResponse(replaceGlobalTenantId(getResponse, request.tenantId(), isMultiTenancyEnabled))
-                    ),
+                    getResponse -> future.complete(new GetDataObjectResponse(getResponse)),
                     e -> future.completeExceptionally(
                         new OpenSearchStatusException(
                             "Failed to get data object from index " + request.index(),
@@ -192,21 +204,6 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         });
     }
 
-    private GetResponse replaceGlobalTenantId(GetResponse response, String userTenantId, Boolean isMultiTenancyEnabled) {
-        if (!isMultiTenancyEnabled || response == null || !response.isExists()) {
-            return response;
-        }
-        Map<String, Object> sourceMap = response.getSourceAsMap();
-        if (sourceMap != null && sourceMap.containsKey(tenantIdField)) {
-            Object responseTenantId = sourceMap.get(tenantIdField);
-            // Replace global tenant ID in place with user tenant ID if it matches
-            if (globalTenantId.equals(responseTenantId)) {
-                sourceMap.put(tenantIdField, userTenantId);
-            }
-        }
-        return response;
-    }
-
     private GetRequest createGetRequest(GetDataObjectRequest request) {
         return new GetRequest(request.index(), request.id()).fetchSourceContext(request.fetchSourceContext());
     }
@@ -217,8 +214,6 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
-        validateGlobalTenantId(globalTenantId, tenantId);
         CompletableFuture<UpdateDataObjectResponse> future = new CompletableFuture<>();
         return doPrivileged(() -> {
             try {
@@ -284,8 +279,6 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
-        validateGlobalTenantId(globalTenantId, tenantId);
         CompletableFuture<DeleteDataObjectResponse> future = new CompletableFuture<>();
         return doPrivileged(() -> {
             log.info("Deleting {} from {}", request.id(), request.index());
@@ -412,23 +405,19 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
     }
 
     @Override
-    public CompletionStage<Boolean> isGlobalResource(String index, String id) {
-        // Check whether the tenant id in the document matches global tenant ID
-        CompletableFuture<Boolean> future = new CompletableFuture<>();
-        return doPrivileged(() -> {
-            GetRequest getRequest = new GetRequest(index, id);
-            client.get(getRequest, ActionListener.wrap(getResponse -> {
-                if (getResponse.isExists() && getResponse.getSourceAsMap().containsKey(tenantIdField)) {
-                    Object tenantId = getResponse.getSourceAsMap().get(tenantIdField);
-                    future.complete(globalTenantId.equals(tenantId));
-                } else {
-                    future.complete(false);
-                }
-            }, e -> {
-                log.error("Error checking if resource is global for index: {} id: {}", index, id, e);
-                future.complete(false);
-            }));
-            return future;
+    public CompletionStage<Boolean> isGlobalResource(String index, String id, Executor executor, Boolean isMultiTenancyEnabled) {
+        GetDataObjectRequest request = GetDataObjectRequest.builder().index(index).id(id).tenantId(globalTenantId).build();
+        CompletionStage<GetDataObjectResponse> dataFetchedWithGlobalTenantId = innerGetDataObjectAsync(
+            request,
+            executor,
+            isMultiTenancyEnabled
+        );
+        return dataFetchedWithGlobalTenantId.thenCompose(response -> {
+            boolean isGlobalResource = isGlobalResource(response);
+            if (isGlobalResource) {
+                addToGlobalResourceCache(request, dataFetchedWithGlobalTenantId);
+            }
+            return CompletableFuture.completedFuture(isGlobalResource);
         });
     }
 }
