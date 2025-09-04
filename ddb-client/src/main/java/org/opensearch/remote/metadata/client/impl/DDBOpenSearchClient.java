@@ -24,16 +24,10 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
-import software.amazon.awssdk.services.dynamodb.model.DescribeTableRequest;
-import software.amazon.awssdk.services.dynamodb.model.DescribeTableResponse;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
-import software.amazon.awssdk.services.dynamodb.model.ListTablesResponse;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
-import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
-import software.amazon.awssdk.services.dynamodb.model.QueryResponse;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
-import software.amazon.awssdk.utils.ImmutableMap;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -52,7 +46,6 @@ import org.opensearch.action.index.IndexResponse;
 import org.opensearch.action.support.replication.ReplicationResponse.ShardInfo;
 import org.opensearch.action.update.UpdateRequest;
 import org.opensearch.action.update.UpdateResponse;
-import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.json.JsonXContent;
@@ -80,8 +73,6 @@ import org.opensearch.remote.metadata.client.SearchDataObjectResponse;
 import org.opensearch.remote.metadata.client.UpdateDataObjectRequest;
 import org.opensearch.remote.metadata.client.UpdateDataObjectResponse;
 import org.opensearch.remote.metadata.common.SdkClientUtils;
-import org.opensearch.threadpool.Scheduler;
-import org.opensearch.threadpool.ThreadPool;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -90,24 +81,18 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.opensearch.common.util.concurrent.ThreadContextAccess.doPrivileged;
 import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_PRIMARY_TERM;
 import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
 import static org.opensearch.remote.metadata.common.CommonValue.AWS_DYNAMO_DB;
-import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_REFRESH_INTERVAL_KEY;
-import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_GLOBAL_TENANT_ID_KEY;
-import static org.opensearch.remote.metadata.common.CommonValue.TENANT_ID_FIELD_KEY;
 import static org.opensearch.remote.metadata.common.CommonValue.VALID_AWS_OPENSEARCH_SERVICE_NAMES;
 
 /**
@@ -117,8 +102,6 @@ import static org.opensearch.remote.metadata.common.CommonValue.VALID_AWS_OPENSE
 public class DDBOpenSearchClient extends AbstractSdkClient {
     private static final Logger log = LogManager.getLogger(RemoteClusterIndicesClient.class);
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
     private static final Long DEFAULT_SEQUENCE_NUMBER = 0L;
     private static final Long DEFAULT_PRIMARY_TERM = 1L;
     private static final String RANGE_KEY = "_id";
@@ -127,18 +110,8 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
     private static final String SOURCE = "_source";
     private static final String SEQ_NO_KEY = "_seq_no";
 
-    // TENANT_ID hash key requires non-null value
-    private static final String DEFAULT_TENANT = "DEFAULT_TENANT";
-
     private DynamoDbAsyncClient dynamoDbAsyncClient;
     private AOSOpenSearchClient aosOpenSearchClient;
-    private Scheduler.Cancellable globalResourcesCacheScheduler;
-
-    public static String globalTenantId;
-    private static final Map<String, Map<String, AttributeValue>> GLOBAL_RESOURCES_CACHE = new ConcurrentHashMap<>();
-    private static TimeValue CACHE_REFRESH_INTERVAL;
-    private static final TimeValue DEFAULT_CACHE_REFRESH_INTERVAL = TimeValue.timeValueMinutes(5);
-    private static final TimeValue MIN_CACHE_REFRESH_INTERVAL = TimeValue.timeValueMinutes(1);
 
     @Override
     public boolean supportsMetadataType(String metadataType) {
@@ -153,48 +126,6 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         this.dynamoDbAsyncClient = createDynamoDbAsyncClient(region);
         this.aosOpenSearchClient = new AOSOpenSearchClient();
         this.aosOpenSearchClient.initialize(metadataSettings);
-        globalTenantId = metadataSettings.get(REMOTE_METADATA_GLOBAL_TENANT_ID_KEY);
-        CACHE_REFRESH_INTERVAL = parseCacheRefreshInterval(
-            metadataSettings.get(REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_REFRESH_INTERVAL_KEY)
-        );
-        if (globalTenantId != null) {
-            cacheGlobalResources();
-            // Only start scheduler if not disabled
-            if (!TimeValue.MINUS_ONE.equals(CACHE_REFRESH_INTERVAL)) {
-                startGlobalResourcesCacheScheduler();
-            }
-        }
-    }
-
-    /**
-     * This method is to check if a resource is global based on index/table name and resource id.
-     * @param index The index/table name.
-     * @param id The resource id.
-     * @return If the resource global one.
-     */
-    @Override
-    public CompletionStage<Boolean> isGlobalResource(String index, String id) {
-        if (globalTenantId == null) {
-            return CompletableFuture.completedFuture(false);
-        }
-
-        GetItemRequest getItemRequest = GetItemRequest.builder()
-            .tableName(index)
-            .key(Map.of(HASH_KEY, AttributeValue.builder().s(globalTenantId).build(), RANGE_KEY, AttributeValue.builder().s(id).build()))
-            .consistentRead(true)
-            .build();
-
-        return doPrivileged(() -> dynamoDbAsyncClient.getItem(getItemRequest).thenApply(getItemResponse -> {
-            if (getItemResponse == null || getItemResponse.item() == null || getItemResponse.item().isEmpty()) {
-                return false;
-            }
-
-            AttributeValue tenantIdAttr = getItemResponse.item().get(HASH_KEY);
-            return tenantIdAttr != null && globalTenantId.equals(tenantIdAttr.s());
-        }).exceptionally(e -> {
-            log.error("Error checking if resource is global for index: {} id: {}", index, id, e);
-            return false;
-        }));
     }
 
     /**
@@ -214,86 +145,6 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         this.dynamoDbAsyncClient = dynamoDbAsyncClient;
         this.aosOpenSearchClient = aosOpenSearchClient;
         this.tenantIdField = tenantIdField;
-    }
-
-    /**
-     * Package private constructor for testing with ThreadPool
-     */
-    DDBOpenSearchClient(
-        DynamoDbAsyncClient dynamoDbAsyncClient,
-        AOSOpenSearchClient aosOpenSearchClient,
-        String tenantIdField,
-        ThreadPool tp
-    ) {
-        this.dynamoDbAsyncClient = dynamoDbAsyncClient;
-        this.aosOpenSearchClient = aosOpenSearchClient;
-        this.tenantIdField = tenantIdField;
-        this.threadPool = tp;
-    }
-
-    private void cacheGlobalResources() {
-        this.dynamoDbAsyncClient.listTables().thenCompose(tables -> {
-            Map<String, CompletableFuture<DescribeTableResponse>> describeTableFutures = createDescribeTableFutures(tables);
-            return CompletableFuture.allOf(describeTableFutures.values().toArray(new CompletableFuture[0])).exceptionally(ex -> {
-                log.error("Failed to describe DDB tables", ex);
-                return null;
-            }).thenApply(ignored -> describeTableFutures);
-        }).thenApply(this::filterPotentialGlobalResourceTables).thenCompose(potentialTables -> {
-            if (potentialTables.isEmpty()) {
-                return CompletableFuture.completedFuture(Map.<String, CompletableFuture<QueryResponse>>of());
-            }
-            log.info("Found potential global resource tables: {}", potentialTables);
-            Map<String, CompletableFuture<QueryResponse>> queryFutures = potentialTables.stream()
-                .collect(Collectors.toMap(Function.identity(), this::fetchGlobalResources));
-            return CompletableFuture.allOf(queryFutures.values().toArray(new CompletableFuture[0])).exceptionally(ex -> {
-                log.error("Failed to execute DDB query", ex);
-                return null;
-            }).thenApply(ignored -> queryFutures);
-        }).thenAccept(this::cacheQueryResults).exceptionally(throwable -> {
-            log.error("Failed to list tables!", throwable);
-            return null;
-        });
-    }
-
-    private Map<String, CompletableFuture<DescribeTableResponse>> createDescribeTableFutures(ListTablesResponse tablesResponse) {
-        return tablesResponse.tableNames()
-            .stream()
-            .collect(
-                Collectors.toMap(
-                    Function.identity(),
-                    tableName -> dynamoDbAsyncClient.describeTable(DescribeTableRequest.builder().tableName(tableName).build())
-                )
-            );
-    }
-
-    private List<String> filterPotentialGlobalResourceTables(Map<String, CompletableFuture<DescribeTableResponse>> describeTableFutures) {
-        return describeTableFutures.entrySet().stream().filter(entry -> {
-            DescribeTableResponse response = entry.getValue().join();
-            return response.table().hasKeySchema()
-                && response.table().keySchema().stream().anyMatch(kse -> HASH_KEY.equals(kse.attributeName()));
-        }).map(Map.Entry::getKey).collect(Collectors.toList());
-    }
-
-    private void cacheQueryResults(Map<String, CompletableFuture<QueryResponse>> queryFutures) {
-        queryFutures.entrySet().forEach(entry -> {
-            String tableName = entry.getKey();
-            QueryResponse queryResponse = entry.getValue().join();
-            queryResponse.items().forEach(item -> {
-                String resourceId = item.get(RANGE_KEY).s();
-                GLOBAL_RESOURCES_CACHE.put(buildGlobalCacheKey(tableName, resourceId), item);
-            });
-        });
-    }
-
-    private CompletableFuture<QueryResponse> fetchGlobalResources(String tableName) {
-        Map<String, AttributeValue> attributeValueMap = ImmutableMap.of(":hash_key", AttributeValue.builder().s(globalTenantId).build());
-        QueryRequest request = QueryRequest.builder()
-            .tableName(tableName)
-            .keyConditionExpression("#tid = " + ":hash_key")
-            .expressionAttributeNames(ImmutableMap.of("#tid", "_tenant_id"))
-            .expressionAttributeValues(attributeValueMap)
-            .build();
-        return dynamoDbAsyncClient.query(request);
     }
 
     /**
@@ -323,7 +174,6 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
             throw new OpenSearchStatusException("Request body validation failed.", RestStatus.BAD_REQUEST, e);
         }
         final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
-        validateGlobalTenantId(globalTenantId, tenantId);
         final String tableName = request.index();
         final GetItemRequest getItemRequest = buildGetItemRequest(tenantId, id, request.index());
 
@@ -412,25 +262,54 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         if (globalTenantId == null) {
             final GetItemRequest getItemRequest = buildGetItemRequest(request.tenantId(), request.id(), request.index());
             return fetchDataFromDynamoDB(getItemRequest, request);
-        } else {
-            CompletionStage<GetDataObjectResponse> getDataObjectFromCache = getGlobalResourceDataFromCache(request);
-            if (getDataObjectFromCache != null) {
-                return getDataObjectFromCache;
-            }
-            final GetItemRequest getItemRequest = buildGetItemRequest(request.tenantId(), request.id(), request.index());
-            CompletionStage<GetDataObjectResponse> getDataFromDynamoDB = fetchDataFromDynamoDB(getItemRequest, request);
-            return getDataFromDynamoDB.thenCompose(response -> {
-                // Check if the response has actual data
-                if (response != null && response.source() != null && !response.source().isEmpty()) {
-                    // If we have valid data, return it
-                    return CompletableFuture.completedFuture(response);
-                }
-
-                // If we don't have valid data, proceed with the global tenant request
-                final GetItemRequest getGlobalItemRequest = buildGetItemRequest(globalTenantId, request.id(), request.index());
-                return fetchDataFromDynamoDB(getGlobalItemRequest, request);
-            });
         }
+        // Try fetch from global cache.
+        GetDataObjectResponse getDataObjectFromCache = getGlobalResourceDataFromCache(request);
+        if (getDataObjectFromCache != null) {
+            return CompletableFuture.completedFuture(getDataObjectFromCache);
+        }
+        // fetch resource with user tenant id.
+        final GetItemRequest getItemRequest = buildGetItemRequest(request.tenantId(), request.id(), request.index());
+        CompletionStage<GetDataObjectResponse> getDataFromDynamoDB = fetchDataFromDynamoDB(getItemRequest, request);
+        return getDataFromDynamoDB.thenCompose(response -> {
+            // Extract the `found` in the source map to confirm if the item exists.
+            if (response != null && Boolean.parseBoolean(String.valueOf(response.source().get("found")))) {
+                return CompletableFuture.completedFuture(response);
+            }
+
+            // Fetch with the global tenant id
+            final GetItemRequest getGlobalItemRequest = buildGetItemRequest(globalTenantId, request.id(), request.index());
+            CompletionStage<GetDataObjectResponse> dataFetchedWithGlobalTenantId = fetchDataFromDynamoDB(getGlobalItemRequest, request);
+            return addToGlobalResourceCache(request, dataFetchedWithGlobalTenantId);
+        });
+    }
+
+    /**
+     * This method is to check if a resource is global based on index/table name and resource id.
+     * @param index The index/table name.
+     * @param id The resource id.
+     * @return If the resource global one.
+     */
+    @Override
+    public CompletionStage<Boolean> isGlobalResource(String index, String id, Executor executor, Boolean isMultiTenancyEnabled) {
+        if (globalTenantId == null) {
+            return CompletableFuture.completedFuture(false);
+        }
+
+        GetItemRequest getItemRequest = GetItemRequest.builder()
+            .tableName(index)
+            .key(Map.of(HASH_KEY, AttributeValue.builder().s(globalTenantId).build(), RANGE_KEY, AttributeValue.builder().s(id).build()))
+            .consistentRead(true)
+            .build();
+        GetDataObjectRequest request = GetDataObjectRequest.builder().index(index).id(id).build();
+        CompletionStage<GetDataObjectResponse> getDataFromDynamoDB = fetchDataFromDynamoDB(getItemRequest, request);
+        return getDataFromDynamoDB.thenCompose(response -> {
+            boolean isGlobalResource = isGlobalResource(response);
+            if (isGlobalResource) {
+                addToGlobalResourceCache(request, getDataFromDynamoDB);
+            }
+            return CompletableFuture.completedFuture(isGlobalResource);
+        });
     }
 
     /**
@@ -491,55 +370,6 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         });
     }
 
-    private CompletionStage<GetDataObjectResponse> getGlobalResourceDataFromCache(GetDataObjectRequest request) {
-        String checkingKey = buildGlobalCacheKey(request.index(), request.id());
-        if (GLOBAL_RESOURCES_CACHE.containsKey(checkingKey)) {
-            Map<String, AttributeValue> item = GLOBAL_RESOURCES_CACHE.get(checkingKey);
-            // Replace the tenant id in the global resource response to actual tenant id to bypass the validation of the resources:
-            // e.g.:
-            // https://github.com/opensearch-project/ml-commons/blob/main/ml-algorithms/src/main/java/org/opensearch/ml/engine/algorithms/agent/MLAgentExecutor.java#L206
-            Long seqNo = Optional.ofNullable(item.get(SEQ_NO_KEY)).map(AttributeValue::n).map(Long::parseLong).orElse(null);
-            ObjectNode sourceObject = null;
-            if (item.containsKey(SOURCE)) {
-                sourceObject = DDBJsonTransformer.convertDDBAttributeValueMapToObjectNode(item.get(SOURCE).m());
-            }
-            if (sourceObject == null) {
-                log.error("Empty global resource in cache!");
-                throw new OpenSearchStatusException("Empty global resource in cache!", RestStatus.INTERNAL_SERVER_ERROR);
-            } else {
-                try {
-                    sourceObject.put(TENANT_ID_FIELD_KEY, request.tenantId());
-                    String source = OBJECT_MAPPER.writeValueAsString(sourceObject);
-                    String simulatedGetResponse = simulateOpenSearchResponse(
-                        request.index(),
-                        request.id(),
-                        source,
-                        seqNo,
-                        Map.of("found", true)
-                    );
-                    XContentParser parser = JsonXContent.jsonXContent.createParser(
-                        NamedXContentRegistry.EMPTY,
-                        LoggingDeprecationHandler.INSTANCE,
-                        simulatedGetResponse
-                    );
-                    Map<String, Object> sourceAsMap = GetResponse.fromXContent(
-                        JsonXContent.jsonXContent.createParser(
-                            NamedXContentRegistry.EMPTY,
-                            LoggingDeprecationHandler.INSTANCE,
-                            simulatedGetResponse
-                        )
-                    ).getSourceAsMap();
-                    return CompletableFuture.completedFuture(
-                        GetDataObjectResponse.builder().id(request.id()).parser(parser).source(sourceAsMap).build()
-                    );
-                } catch (IOException e) {
-                    throw new OpenSearchStatusException("Failed to parse cached global response", RestStatus.INTERNAL_SERVER_ERROR, e);
-                }
-            }
-        }
-        return null;
-    }
-
     /**
      * Makes use of DDB update request to update data object.
      *
@@ -574,7 +404,6 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
             throw new OpenSearchStatusException("Request body validation failed.", RestStatus.BAD_REQUEST, e);
         }
         final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
-        validateGlobalTenantId(globalTenantId, tenantId);
         return doPrivileged(() -> {
             try {
                 String source = Strings.toString(MediaTypeRegistry.JSON, request.dataObject());
@@ -696,7 +525,6 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         Boolean isMultiTenancyEnabled
     ) {
         final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
-        validateGlobalTenantId(globalTenantId, tenantId);
         DeleteItemRequest.Builder builder = DeleteItemRequest.builder()
             .tableName(request.index())
             .key(
@@ -990,62 +818,13 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
             .build();
     }
 
-    private void startGlobalResourcesCacheScheduler() {
-        if (threadPool != null && !TimeValue.MINUS_ONE.equals(CACHE_REFRESH_INTERVAL)) {
-            log.info("Starting global resources cache scheduler with interval: {}", CACHE_REFRESH_INTERVAL);
-            globalResourcesCacheScheduler = threadPool.scheduleWithFixedDelay(
-                this::cacheGlobalResources,
-                CACHE_REFRESH_INTERVAL,
-                ThreadPool.Names.GENERIC
-            );
-        } else if (TimeValue.MINUS_ONE.equals(CACHE_REFRESH_INTERVAL)) {
-            log.info("Global resources cache refresh is disabled");
-        } else {
-            log.warn("ThreadPool not available, global resources cache scheduler not started");
-        }
-    }
-
-    private void stopGlobalResourcesCacheScheduler() {
-        if (globalResourcesCacheScheduler != null) {
-            globalResourcesCacheScheduler.cancel();
-            log.info("Stopped global resources cache scheduler");
-        }
-    }
-
     @Override
     public void close() throws Exception {
-        stopGlobalResourcesCacheScheduler();
         if (dynamoDbAsyncClient != null) {
             dynamoDbAsyncClient.close();
         }
         if (aosOpenSearchClient != null) {
             aosOpenSearchClient.close();
-        }
-    }
-
-    private static TimeValue parseCacheRefreshInterval(String value) {
-        if (value == null || value.trim().isEmpty()) {
-            return DEFAULT_CACHE_REFRESH_INTERVAL;
-        }
-
-        try {
-            TimeValue parsed = TimeValue.parseTimeValue(value, "cache_refresh_interval");
-
-            // Allow MINUS_ONE to disable cache refresh
-            if (TimeValue.MINUS_ONE.equals(parsed)) {
-                return TimeValue.MINUS_ONE;
-            }
-
-            // Enforce minimum interval to prevent abuse
-            if (parsed.compareTo(MIN_CACHE_REFRESH_INTERVAL) < 0) {
-                log.warn("Cache refresh interval {} is below minimum {}, using minimum", parsed, MIN_CACHE_REFRESH_INTERVAL);
-                return MIN_CACHE_REFRESH_INTERVAL;
-            }
-
-            return parsed;
-        } catch (Exception e) {
-            log.warn("Invalid cache refresh interval '{}', using default {}: {}", value, DEFAULT_CACHE_REFRESH_INTERVAL, e.getMessage());
-            return DEFAULT_CACHE_REFRESH_INTERVAL;
         }
     }
 }

@@ -146,13 +146,8 @@ public class SdkClientTests {
 
             @Override
             public void close() throws Exception {}
-
-            @Override
-            public boolean isGlobalResource(String index, String id) {
-                return false;
-            }
         });
-        sdkClient = new SdkClient(sdkClientImpl, true);
+        sdkClient = new SdkClient(sdkClientImpl, true, null);
         testException = new OpenSearchStatusException("Test", RestStatus.BAD_REQUEST);
         interruptedException = new InterruptedException();
     }
@@ -403,7 +398,7 @@ public class SdkClientTests {
 
     @Test
     public void testDefaultExecutor() {
-        SdkClient sdkClient = new SdkClient(sdkClientImpl, false);
+        SdkClient sdkClient = new SdkClient(sdkClientImpl, false, null);
         ArgumentCaptor<Executor> executorCaptor = ArgumentCaptor.forClass(Executor.class);
         when(sdkClientImpl.getDataObjectAsync(any(GetDataObjectRequest.class), executorCaptor.capture(), anyBoolean()))
             .thenCallRealMethod();
@@ -415,7 +410,7 @@ public class SdkClientTests {
     @Test
     public void testCustomExecutor() {
         Executor customExecutor = mock(Executor.class);
-        SdkClient sdkClient = new SdkClient(sdkClientImpl, customExecutor, false);
+        SdkClient sdkClient = new SdkClient(sdkClientImpl, customExecutor, false, null);
         ArgumentCaptor<Executor> executorCaptor = ArgumentCaptor.forClass(Executor.class);
         when(sdkClientImpl.getDataObjectAsync(any(GetDataObjectRequest.class), executorCaptor.capture(), anyBoolean()))
             .thenCallRealMethod();

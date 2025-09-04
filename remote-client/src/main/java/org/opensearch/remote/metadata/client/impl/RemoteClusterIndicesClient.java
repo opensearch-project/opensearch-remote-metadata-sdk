@@ -87,7 +87,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
@@ -210,6 +209,10 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
+        return innerGetDataObjectAsync(request);
+    }
+
+    private CompletionStage<GetDataObjectResponse> innerGetDataObjectAsync(GetDataObjectRequest request) {
         return doPrivileged(() -> {
             try {
                 GetRequest getRequest = new GetRequest.Builder().index(request.index()).id(request.id()).build();
@@ -674,14 +677,5 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         if (openSearchAsyncClient != null && openSearchAsyncClient._transport() != null) {
             openSearchAsyncClient._transport().close();
         }
-    }
-
-    /**
-     * For RemoteClusterIndicesClient, we don't have global resource support by default
-     * This can be overridden by subclasses like AOSOpenSearchClient
-     */
-    @Override
-    public CompletionStage<Boolean> isGlobalResource(String index, String id) {
-        return CompletableFuture.completedFuture(false);
     }
 }
