@@ -104,7 +104,7 @@ public class AOSOpenSearchClient extends RemoteClusterIndicesClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        if (globalTenantId == null) {
+        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
             return super.getDataObjectAsync(request, executor, isMultiTenancyEnabled);
         }
         // First check cache for global resource
@@ -126,7 +126,7 @@ public class AOSOpenSearchClient extends RemoteClusterIndicesClient {
 
     @Override
     public CompletionStage<Boolean> isGlobalResource(String index, String id, Executor executor, Boolean isMultiTenancyEnabled) {
-        if (globalTenantId == null) {
+        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
             return CompletableFuture.completedFuture(false);
         }
         GetDataObjectRequest request = GetDataObjectRequest.builder().tenantId(globalTenantId).index(index).id(id).build();

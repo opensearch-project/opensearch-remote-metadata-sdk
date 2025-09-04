@@ -259,8 +259,8 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        if (globalTenantId == null) {
-            final GetItemRequest getItemRequest = buildGetItemRequest(request.tenantId(), request.id(), request.index());
+        final GetItemRequest getItemRequest = buildGetItemRequest(request.tenantId(), request.id(), request.index());
+        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
             return fetchDataFromDynamoDB(getItemRequest, request);
         }
         // Try fetch from global cache.
@@ -269,11 +269,10 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
             return CompletableFuture.completedFuture(getDataObjectFromCache);
         }
         // fetch resource with user tenant id.
-        final GetItemRequest getItemRequest = buildGetItemRequest(request.tenantId(), request.id(), request.index());
         CompletionStage<GetDataObjectResponse> getDataFromDynamoDB = fetchDataFromDynamoDB(getItemRequest, request);
         return getDataFromDynamoDB.thenCompose(response -> {
             // Extract the `found` in the source map to confirm if the item exists.
-            if (response != null && Boolean.parseBoolean(String.valueOf(response.source().get("found")))) {
+            if (response != null && Boolean.TRUE.equals(Boolean.parseBoolean(String.valueOf(response.source().get("found"))))) {
                 return CompletableFuture.completedFuture(response);
             }
 
@@ -292,7 +291,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
      */
     @Override
     public CompletionStage<Boolean> isGlobalResource(String index, String id, Executor executor, Boolean isMultiTenancyEnabled) {
-        if (globalTenantId == null) {
+        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
             return CompletableFuture.completedFuture(false);
         }
 
@@ -316,13 +315,10 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
      * Fetches data from DynamoDB and transforms it into a GetDataObjectResponse.
      *
      * @param getItemRequest The DynamoDB GetItem request
-     * @param originalRequest The original GetDataObject request
+     * @param request The original GetDataObject request
      * @return A CompletionStage with the GetDataObjectResponse
      */
-    private CompletionStage<GetDataObjectResponse> fetchDataFromDynamoDB(
-        GetItemRequest getItemRequest,
-        GetDataObjectRequest originalRequest
-    ) {
+    private CompletionStage<GetDataObjectResponse> fetchDataFromDynamoDB(GetItemRequest getItemRequest, GetDataObjectRequest request) {
         return doPrivileged(() -> dynamoDbAsyncClient.getItem(getItemRequest)).thenApply(getItemResponse -> {
             try {
                 ObjectNode sourceObject;
@@ -343,8 +339,8 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                     ? null
                     : Long.parseLong(sequenceNumberString);
                 String simulatedGetResponse = simulateOpenSearchResponse(
-                    originalRequest.index(),
-                    originalRequest.id(),
+                    request.index(),
+                    request.id(),
                     source,
                     sequenceNumber,
                     Map.of("found", found)
@@ -362,7 +358,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                         simulatedGetResponse
                     )
                 ).getSourceAsMap();
-                return GetDataObjectResponse.builder().id(originalRequest.id()).parser(parser).source(sourceAsMap).build();
+                return GetDataObjectResponse.builder().id(request.id()).parser(parser).source(sourceAsMap).build();
             } catch (IOException e) {
                 // Rethrow unchecked exception on XContent parsing error
                 throw new OpenSearchStatusException("Failed to parse response", RestStatus.INTERNAL_SERVER_ERROR);
