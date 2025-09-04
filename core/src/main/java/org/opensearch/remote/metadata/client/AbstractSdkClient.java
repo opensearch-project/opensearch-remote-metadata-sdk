@@ -46,12 +46,13 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
 
     // TENANT_ID hash key requires non-null value
     protected static final String DEFAULT_TENANT = "DEFAULT_TENANT";
-    protected static final TimeValue DEFAULT_GLOBAL_RESOURCE_CACHE_TTL = TimeValue.timeValueMillis(10 * 60 * 1000);
+    protected static final TimeValue DEFAULT_GLOBAL_RESOURCE_CACHE_TTL = TimeValue.timeValueMillis(5 * 60 * 1000);
     protected static final Map<String, Tuple<GetDataObjectResponse, Long>> GLOBAL_RESOURCES_CACHE = new ConcurrentHashMap<>();
     protected static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     protected String tenantIdField;
     protected String globalTenantId;
+    // global resource cache TTL in milliseconds, should be positive numbers, 0 means no cache.
     protected TimeValue globalResourceCacheTTL;
 
     protected String remoteMetadataType;
@@ -71,6 +72,7 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
         globalTenantId = metadataSettings.get(REMOTE_METADATA_GLOBAL_TENANT_ID_KEY);
         globalResourceCacheTTL = Optional.ofNullable(metadataSettings.get(REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_MILLIS_KEY))
             .map(x -> TimeValue.parseTimeValue(x, DEFAULT_GLOBAL_RESOURCE_CACHE_TTL, "ms"))
+            .filter(x -> x.getMillis() >= 0)
             .orElse(DEFAULT_GLOBAL_RESOURCE_CACHE_TTL);
     }
 
@@ -133,6 +135,9 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
         CompletionStage<GetDataObjectResponse> dataFetchedWithGlobalTenantId
     ) {
         return dataFetchedWithGlobalTenantId.thenCompose(res -> {
+            if (globalResourceCacheTTL.getMillis() == 0) {
+                return CompletableFuture.completedFuture(replaceGlobalTenantId(request, res));
+            }
             GLOBAL_RESOURCES_CACHE.put(buildGlobalCacheKey(request.index(), request.id()), new Tuple<>(res, System.currentTimeMillis()));
             return CompletableFuture.completedFuture(getGlobalResourceDataFromCache(request));
         });
@@ -157,8 +162,12 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
             GLOBAL_RESOURCES_CACHE.remove(checkingKey);
             return null;
         }
-        tuple.v1().source().put(TENANT_ID_FIELD_KEY, request.tenantId());
-        GetResponse getResponse = tuple.v1().getResponse();
+        return replaceGlobalTenantId(request, tuple.v1());
+    }
+
+    private GetDataObjectResponse replaceGlobalTenantId(GetDataObjectRequest request, GetDataObjectResponse response) {
+        response.source().put(TENANT_ID_FIELD_KEY, request.tenantId());
+        GetResponse getResponse = response.getResponse();
         if (getResponse == null) {
             throw new OpenSearchStatusException(
                 "Cached resource can't be parsed successfully, please check the configuration!",
@@ -173,7 +182,7 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
                 LoggingDeprecationHandler.INSTANCE,
                 responseStr
             );
-            return GetDataObjectResponse.builder().id(request.id()).parser(parser).source(tuple.v1().source()).build();
+            return GetDataObjectResponse.builder().id(request.id()).parser(parser).source(response.source()).build();
         } catch (IOException e) {
             throw new OpenSearchStatusException("Failed to parse cached global response", RestStatus.INTERNAL_SERVER_ERROR, e);
         }
