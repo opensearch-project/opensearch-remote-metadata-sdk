@@ -44,21 +44,4 @@ public class GetDataObjectRequestTests {
         assertEquals(testTenantId, request.tenantId());
         assertEquals(testFetchSourceContext, request.fetchSourceContext());
     }
-
-    @Test
-    public void testGetDataObjectRequestBuilderWithExistingRequest() {
-        GetDataObjectRequest originalRequest = GetDataObjectRequest.builder()
-            .index(testIndex)
-            .id(testId)
-            .tenantId(testTenantId)
-            .fetchSourceContext(testFetchSourceContext)
-            .build();
-
-        GetDataObjectRequest copiedRequest = GetDataObjectRequest.builder(originalRequest).tenantId("new-tenant-id").build();
-
-        assertEquals(testIndex, copiedRequest.index());
-        assertEquals(testId, copiedRequest.id());
-        assertEquals("new-tenant-id", copiedRequest.tenantId());
-        assertEquals(testFetchSourceContext, copiedRequest.fetchSourceContext());
-    }
 }

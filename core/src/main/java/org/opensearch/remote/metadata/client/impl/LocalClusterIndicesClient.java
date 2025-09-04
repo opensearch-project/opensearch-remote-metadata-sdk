@@ -164,7 +164,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Boolean isMultiTenancyEnabled
     ) {
         return doPrivileged(() -> {
-            if (globalTenantId == null) {
+            if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
                 return innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
             }
 
@@ -406,6 +406,9 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
 
     @Override
     public CompletionStage<Boolean> isGlobalResource(String index, String id, Executor executor, Boolean isMultiTenancyEnabled) {
+        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
+            return CompletableFuture.completedFuture(false);
+        }
         GetDataObjectRequest request = GetDataObjectRequest.builder().index(index).id(id).tenantId(globalTenantId).build();
         CompletionStage<GetDataObjectResponse> dataFetchedWithGlobalTenantId = innerGetDataObjectAsync(
             request,

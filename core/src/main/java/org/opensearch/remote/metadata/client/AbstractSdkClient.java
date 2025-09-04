@@ -170,7 +170,7 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
         GetResponse getResponse = response.getResponse();
         if (getResponse == null) {
             throw new OpenSearchStatusException(
-                "Cached resource can't be parsed successfully, please check the configuration!",
+                "Cached response is null, please check configuration with system admin!",
                 RestStatus.INTERNAL_SERVER_ERROR
             );
         }
@@ -184,7 +184,11 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
             );
             return GetDataObjectResponse.builder().id(request.id()).parser(parser).source(response.source()).build();
         } catch (IOException e) {
-            throw new OpenSearchStatusException("Failed to parse cached global response", RestStatus.INTERNAL_SERVER_ERROR, e);
+            throw new OpenSearchStatusException(
+                "Failed to parse cached global response, please check configuration with system admin!",
+                RestStatus.INTERNAL_SERVER_ERROR,
+                e
+            );
         }
     }
 
@@ -214,14 +218,6 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
     // Visible for testing
     public void setGlobalTenantId(String globalTenantId) {
         this.globalTenantId = globalTenantId;
-    }
-
-    /**
-     * Getter of global tenant id.
-     * @return {@link String} global tenant id initialized to the client comes from cluster setting.
-     */
-    public String getGlobalTenantId() {
-        return this.globalTenantId;
     }
 
     // visible for testing
