@@ -21,14 +21,9 @@ import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.transport.aws.AwsSdk2Transport;
 import org.opensearch.client.transport.aws.AwsSdk2TransportOptions;
 import org.opensearch.core.common.Strings;
-import org.opensearch.remote.metadata.client.GetDataObjectRequest;
-import org.opensearch.remote.metadata.client.GetDataObjectResponse;
 import org.opensearch.remote.metadata.client.SdkClient;
 
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionStage;
-import java.util.concurrent.Executor;
 
 import static org.opensearch.common.util.concurrent.ThreadContextAccess.doPrivileged;
 import static org.opensearch.remote.metadata.common.CommonValue.AWS_OPENSEARCH_SERVICE;
@@ -103,25 +98,5 @@ public class AOSOpenSearchClient extends RemoteClusterIndicesClient {
         if (openSearchAsyncClient != null && openSearchAsyncClient._transport() != null) {
             openSearchAsyncClient._transport().close();
         }
-    }
-
-    @Override
-    public CompletionStage<Boolean> isGlobalResource(String index, String id, Executor executor, Boolean isMultiTenancyEnabled) {
-        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
-            return CompletableFuture.completedFuture(false);
-        }
-        GetDataObjectRequest request = GetDataObjectRequest.builder().tenantId(globalTenantId).index(index).id(id).build();
-        CompletionStage<GetDataObjectResponse> dataFetchedWithGlobalTenantId = super.getDataObjectAsync(
-            request,
-            executor,
-            isMultiTenancyEnabled
-        );
-        return dataFetchedWithGlobalTenantId.thenCompose(response -> {
-            boolean isGlobalResource = isGlobalResource(response);
-            if (isGlobalResource) {
-                addToGlobalResourceCache(request, dataFetchedWithGlobalTenantId);
-            }
-            return CompletableFuture.completedFuture(isGlobalResource);
-        });
     }
 }

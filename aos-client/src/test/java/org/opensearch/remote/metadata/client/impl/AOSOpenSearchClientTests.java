@@ -13,15 +13,9 @@ import org.opensearch.client.opensearch.core.GetRequest;
 import org.opensearch.client.opensearch.core.GetResponse;
 import org.opensearch.client.transport.OpenSearchTransport;
 import org.opensearch.client.transport.aws.AwsSdk2Transport;
-import org.opensearch.common.settings.Settings;
 import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.concurrent.OpenSearchExecutors;
 import org.opensearch.remote.metadata.client.GetDataObjectRequest;
 import org.opensearch.remote.metadata.client.GetDataObjectResponse;
-import org.opensearch.threadpool.ScalingExecutorBuilder;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -29,7 +23,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Executor;
 
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -68,22 +62,6 @@ class AOSOpenSearchClientTests {
 
     @Mock
     private OpenSearchTransport transport;
-
-    private static TestThreadPool testThreadPool = new TestThreadPool(
-        AOSOpenSearchClientTests.class.getName(),
-        new ScalingExecutorBuilder(
-            TEST_THREAD_POOL,
-            1,
-            Math.max(1, OpenSearchExecutors.allocatedProcessors(Settings.EMPTY) - 1),
-            TimeValue.timeValueMinutes(1),
-            TEST_THREAD_POOL
-        )
-    );
-
-    @AfterAll
-    static void cleanup() {
-        ThreadPool.terminate(testThreadPool, 500, TimeUnit.MILLISECONDS);
-    }
 
     @BeforeEach
     void setUp() {
@@ -167,7 +145,7 @@ class AOSOpenSearchClientTests {
             CompletableFuture.completedFuture(getResponse)
         );
 
-        GetDataObjectResponse result = aosOpenSearchClient.getDataObjectAsync(request, testThreadPool.executor(TEST_THREAD_POOL), true)
+        GetDataObjectResponse result = aosOpenSearchClient.getDataObjectAsync(request, mock(Executor.class), true)
             .toCompletableFuture()
             .join();
 
@@ -196,7 +174,7 @@ class AOSOpenSearchClientTests {
             CompletableFuture.completedFuture(getResponse)
         );
 
-        GetDataObjectResponse result = aosOpenSearchClient.getDataObjectAsync(request, testThreadPool.executor(TEST_THREAD_POOL), true)
+        GetDataObjectResponse result = aosOpenSearchClient.getDataObjectAsync(request, mock(Executor.class), true)
             .toCompletableFuture()
             .join();
         assertEquals(TEST_TENANT_ID, result.source().get(TENANT_ID_FIELD_KEY));
@@ -222,7 +200,7 @@ class AOSOpenSearchClientTests {
             CompletableFuture.completedFuture(getResponse)
         );
 
-        GetDataObjectResponse result = aosOpenSearchClient.getDataObjectAsync(request, testThreadPool.executor(TEST_THREAD_POOL), true)
+        GetDataObjectResponse result = aosOpenSearchClient.getDataObjectAsync(request, mock(Executor.class), true)
             .toCompletableFuture()
             .join();
         assertEquals(TEST_TENANT_ID, result.source().get(TENANT_ID_FIELD_KEY));
@@ -249,17 +227,15 @@ class AOSOpenSearchClientTests {
             CompletableFuture.completedFuture(getResponse)
         );
 
-        GetDataObjectResponse result = aosOpenSearchClient.getDataObjectAsync(request, testThreadPool.executor(TEST_THREAD_POOL), true)
+        GetDataObjectResponse result = aosOpenSearchClient.getDataObjectAsync(request, mock(Executor.class), true)
             .toCompletableFuture()
             .join();
         assertEquals(TEST_TENANT_ID, result.source().get(TENANT_ID_FIELD_KEY));
         assertEquals(TEST_TENANT_ID, result.getResponse().getSourceAsMap().get(TENANT_ID_FIELD_KEY));
 
-        GetDataObjectResponse resultFromCache = aosOpenSearchClient.getDataObjectAsync(
-            request,
-            testThreadPool.executor(TEST_THREAD_POOL),
-            true
-        ).toCompletableFuture().join();
+        GetDataObjectResponse resultFromCache = aosOpenSearchClient.getDataObjectAsync(request, mock(Executor.class), true)
+            .toCompletableFuture()
+            .join();
         assertEquals(TEST_TENANT_ID, resultFromCache.source().get(TENANT_ID_FIELD_KEY));
         assertEquals(TEST_TENANT_ID, result.getResponse().getSourceAsMap().get(TENANT_ID_FIELD_KEY));
     }
@@ -285,9 +261,7 @@ class AOSOpenSearchClientTests {
             CompletableFuture.completedFuture(getResponse)
         );
 
-        boolean result = aosOpenSearchClient.isGlobalResource(TEST_INDEX, TEST_ID, testThreadPool.executor(TEST_THREAD_POOL), true)
-            .toCompletableFuture()
-            .join();
+        boolean result = aosOpenSearchClient.isGlobalResource(TEST_INDEX, TEST_ID, mock(Executor.class), true).toCompletableFuture().join();
         assertTrue(result);
     }
 
@@ -309,9 +283,7 @@ class AOSOpenSearchClientTests {
             CompletableFuture.completedFuture(getResponse)
         );
 
-        boolean result = aosOpenSearchClient.isGlobalResource(TEST_INDEX, TEST_ID, testThreadPool.executor(TEST_THREAD_POOL), true)
-            .toCompletableFuture()
-            .join();
+        boolean result = aosOpenSearchClient.isGlobalResource(TEST_INDEX, TEST_ID, mock(Executor.class), true).toCompletableFuture().join();
         assertFalse(result);
     }
 }
