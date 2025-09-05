@@ -29,7 +29,7 @@ public class CommonValue {
     /** A configurable tenant id to identify global resources. */
     public static final String REMOTE_METADATA_GLOBAL_TENANT_ID_KEY = "global_tenant_id";
     /** The key for remote metadata cache refresh interval */
-    public static final String REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_MILLIS_KEY = "remote_metadata_global_resource_cache_millis_ttl";
+    public static final String REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY = "remote_metadata_global_resource_cache_ttl";
 
     /** The value for remote metadata type for a remote OpenSearch cluster compatible with OpenSearch Java Client. */
     public static final String REMOTE_OPENSEARCH = "RemoteOpenSearch";

@@ -378,7 +378,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
                 boolQuery.filter(tenantIdTermQuery);
                 searchSource.query(boolQuery);
             }
-            log.debug("Adding indices {} to search query", Arrays.toString(request.indices()));
+            log.debug("Adding tenant id to search query");
         }
         log.info("Searching {}", Arrays.toString(request.indices()));
         return doPrivileged(() -> {

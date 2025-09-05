@@ -984,6 +984,27 @@ public class LocalClusterIndicesClientTests {
     }
 
     @Test
+    public void testGetDataAsync_WithGlobalTenantId_notGlobalResource() {
+        String json = "{\"" + TENANT_ID_FIELD + "\":\"" + TEST_TENANT_ID + "\"}";
+        GetResponse getResponse = new GetResponse(new GetResult(TEST_INDEX, TEST_ID, -2, 0, 1, true, new BytesArray(json), null, null));
+        innerClient.setGlobalTenantId(GLOBAL_TENANT_ID);
+        innerClient.setGlobalResourceCacheTTL(TimeValue.timeValueMillis(10 * 60 * 1000));
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(1);
+            listener.onResponse(getResponse);
+            return null;
+        }).when(mockedClient).get(any(GetRequest.class), any());
+
+        GetDataObjectResponse result = innerClient.getDataObjectAsync(
+            GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build(),
+            null,
+            true
+        ).toCompletableFuture().join();
+        assertTrue(Objects.requireNonNull(result.getResponse()).isExists());
+        assertEquals(TEST_TENANT_ID, Objects.requireNonNull(result.getResponse()).getSourceAsMap().get(TENANT_ID_FIELD_KEY));
+    }
+
+    @Test
     public void testGetDataAsync_WithGlobalTenantId_foundFromCache() {
         String json = "{\"" + TENANT_ID_FIELD + "\":\"" + GLOBAL_TENANT_ID + "\"}";
         GetResponse getResponse = new GetResponse(new GetResult(TEST_INDEX, TEST_ID, -2, 0, 1, true, new BytesArray(json), null, null));
@@ -1008,6 +1029,7 @@ public class LocalClusterIndicesClientTests {
             null
         ).toCompletableFuture().join();
         assertTrue(Objects.requireNonNull(resultFromCache.getResponse()).isExists());
+        assertEquals(TEST_TENANT_ID, Objects.requireNonNull(result.getResponse()).getSourceAsMap().get(TENANT_ID_FIELD_KEY));
     }
 
     @Test
@@ -1026,6 +1048,7 @@ public class LocalClusterIndicesClientTests {
             null
         ).toCompletableFuture().join();
         assertTrue(Objects.requireNonNull(result.getResponse()).isExists());
+        assertEquals(TEST_TENANT_ID, Objects.requireNonNull(result.getResponse()).getSourceAsMap().get(TENANT_ID_FIELD_KEY));
     }
 
     @Test

@@ -87,6 +87,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
@@ -209,7 +210,17 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        return innerGetDataObjectAsync(request);
+        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
+            return innerGetDataObjectAsync(request);
+        }
+        // First check cache for global resource
+        GetDataObjectResponse cachedResponse = getGlobalResourceDataFromCache(request);
+        if (cachedResponse != null) {
+            return CompletableFuture.completedFuture(cachedResponse);
+        }
+
+        CompletionStage<GetDataObjectResponse> dataFetched = innerGetDataObjectAsync(request);
+        return handleOSDocumentBasedResponse(request, dataFetched);
     }
 
     private CompletionStage<GetDataObjectResponse> innerGetDataObjectAsync(GetDataObjectRequest request) {
