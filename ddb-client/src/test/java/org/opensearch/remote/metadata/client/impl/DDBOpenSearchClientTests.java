@@ -84,6 +84,7 @@ import org.mockito.MockitoAnnotations;
 
 import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
 import static org.opensearch.remote.metadata.client.impl.DDBOpenSearchClient.simulateOpenSearchResponse;
+import static org.opensearch.remote.metadata.common.CommonValue.TENANT_ID_FIELD_KEY;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -1196,6 +1197,7 @@ public class DDBOpenSearchClientTests {
         GetItemRequest getItemRequest = getItemRequestArgumentCaptor.getValue();
         assertEquals(GLOBAL_TENANT_ID, getItemRequest.key().get(HASH_KEY).s());
         assertEquals(TEST_TENANT_ID, getDataObjectResponse.getResponse().getSource().get(TENANT_ID_FIELD));
+        assertEquals(TEST_TENANT_ID, getDataObjectResponse.getResponse().getSourceAsMap().get(TENANT_ID_FIELD_KEY));
     }
 
     @Test
@@ -1215,6 +1217,7 @@ public class DDBOpenSearchClientTests {
         GetItemRequest getItemRequest = getItemRequestArgumentCaptor.getValue();
         assertEquals(TEST_TENANT_ID, getItemRequest.key().get(HASH_KEY).s());
         assertEquals(TEST_TENANT_ID, getDataObjectResponse.getResponse().getSource().get(TENANT_ID_FIELD));
+        assertEquals(TEST_TENANT_ID, getDataObjectResponse.getResponse().getSourceAsMap().get(TENANT_ID_FIELD_KEY));
     }
 
     @Test
@@ -1237,6 +1240,7 @@ public class DDBOpenSearchClientTests {
             .toCompletableFuture()
             .join(); // Read from cache.
         assertEquals(TEST_TENANT_ID, getDataObjectResponse.source().get(TENANT_ID_FIELD));
+        assertEquals(TEST_TENANT_ID, getDataObjectResponse.getResponse().getSourceAsMap().get(TENANT_ID_FIELD_KEY));
     }
 
     @Test
@@ -1264,6 +1268,7 @@ public class DDBOpenSearchClientTests {
             .toCompletableFuture()
             .join(); // Read from cache.
         assertEquals(TEST_TENANT_ID, getDataObjectResponse.source().get(TENANT_ID_FIELD));
+        assertEquals(TEST_TENANT_ID, getDataObjectResponse.getResponse().getSourceAsMap().get(TENANT_ID_FIELD_KEY));
     }
 
     @Test

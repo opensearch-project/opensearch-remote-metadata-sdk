@@ -200,6 +200,7 @@ class AOSOpenSearchClientTests {
             .toCompletableFuture()
             .join();
         assertEquals(TEST_TENANT_ID, result.source().get(TENANT_ID_FIELD_KEY));
+        assertEquals(TEST_TENANT_ID, result.getResponse().getSourceAsMap().get(TENANT_ID_FIELD_KEY));
     }
 
     @Test
@@ -252,6 +253,7 @@ class AOSOpenSearchClientTests {
             .toCompletableFuture()
             .join();
         assertEquals(TEST_TENANT_ID, result.source().get(TENANT_ID_FIELD_KEY));
+        assertEquals(TEST_TENANT_ID, result.getResponse().getSourceAsMap().get(TENANT_ID_FIELD_KEY));
 
         GetDataObjectResponse resultFromCache = aosOpenSearchClient.getDataObjectAsync(
             request,
@@ -259,6 +261,7 @@ class AOSOpenSearchClientTests {
             true
         ).toCompletableFuture().join();
         assertEquals(TEST_TENANT_ID, resultFromCache.source().get(TENANT_ID_FIELD_KEY));
+        assertEquals(TEST_TENANT_ID, result.getResponse().getSourceAsMap().get(TENANT_ID_FIELD_KEY));
     }
 
     @Test
