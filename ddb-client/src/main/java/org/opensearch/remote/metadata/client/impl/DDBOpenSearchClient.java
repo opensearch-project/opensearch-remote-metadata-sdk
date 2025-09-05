@@ -18,6 +18,7 @@ import software.amazon.awssdk.auth.credentials.AwsCredentialsProviderChain;
 import software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider;
+import software.amazon.awssdk.http.nio.netty.NettyNioAsyncHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
@@ -101,8 +102,6 @@ import static org.opensearch.remote.metadata.common.CommonValue.VALID_AWS_OPENSE
 public class DDBOpenSearchClient extends AbstractSdkClient {
     private static final Logger log = LogManager.getLogger(RemoteClusterIndicesClient.class);
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
     private static final Long DEFAULT_SEQUENCE_NUMBER = 0L;
     private static final Long DEFAULT_PRIMARY_TERM = 1L;
     private static final String RANGE_KEY = "_id";
@@ -110,9 +109,6 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
 
     private static final String SOURCE = "_source";
     private static final String SEQ_NO_KEY = "_seq_no";
-
-    // TENANT_ID hash key requires non-null value
-    private static final String DEFAULT_TENANT = "DEFAULT_TENANT";
 
     private DynamoDbAsyncClient dynamoDbAsyncClient;
     private AOSOpenSearchClient aosOpenSearchClient;
@@ -264,6 +260,65 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         Boolean isMultiTenancyEnabled
     ) {
         final GetItemRequest getItemRequest = buildGetItemRequest(request.tenantId(), request.id(), request.index());
+        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
+            return fetchDataFromDynamoDB(getItemRequest, request);
+        }
+        // Try fetch from global cache.
+        GetDataObjectResponse getDataObjectFromCache = getGlobalResourceDataFromCache(request);
+        if (getDataObjectFromCache != null) {
+            return CompletableFuture.completedFuture(getDataObjectFromCache);
+        }
+        // fetch resource with user tenant id.
+        CompletionStage<GetDataObjectResponse> getDataFromDynamoDB = fetchDataFromDynamoDB(getItemRequest, request);
+        return getDataFromDynamoDB.thenCompose(response -> {
+            // Extract the `found` in the source map to confirm if the item exists.
+            if (response != null && Boolean.TRUE.equals(Boolean.parseBoolean(String.valueOf(response.source().get("found"))))) {
+                return CompletableFuture.completedFuture(response);
+            }
+
+            // Fetch with the global tenant id
+            final GetItemRequest getGlobalItemRequest = buildGetItemRequest(globalTenantId, request.id(), request.index());
+            CompletionStage<GetDataObjectResponse> dataFetchedWithGlobalTenantId = fetchDataFromDynamoDB(getGlobalItemRequest, request);
+            return addToGlobalResourceCache(request, dataFetchedWithGlobalTenantId);
+        });
+    }
+
+    /**
+     * This method is to check if a resource is global based on index/table name and resource id.
+     * @param index The index/table name.
+     * @param id The resource id.
+     * @return If the resource global one.
+     */
+    @Override
+    public CompletionStage<Boolean> isGlobalResource(String index, String id, Executor executor, Boolean isMultiTenancyEnabled) {
+        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
+            return CompletableFuture.completedFuture(false);
+        }
+
+        GetItemRequest getItemRequest = GetItemRequest.builder()
+            .tableName(index)
+            .key(Map.of(HASH_KEY, AttributeValue.builder().s(globalTenantId).build(), RANGE_KEY, AttributeValue.builder().s(id).build()))
+            .consistentRead(true)
+            .build();
+        GetDataObjectRequest request = GetDataObjectRequest.builder().index(index).id(id).build();
+        CompletionStage<GetDataObjectResponse> getDataFromDynamoDB = fetchDataFromDynamoDB(getItemRequest, request);
+        return getDataFromDynamoDB.thenCompose(response -> {
+            boolean isGlobalResource = isGlobalResource(response);
+            if (isGlobalResource) {
+                addToGlobalResourceCache(request, getDataFromDynamoDB);
+            }
+            return CompletableFuture.completedFuture(isGlobalResource);
+        });
+    }
+
+    /**
+     * Fetches data from DynamoDB and transforms it into a GetDataObjectResponse.
+     *
+     * @param getItemRequest The DynamoDB GetItem request
+     * @param request The original GetDataObject request
+     * @return A CompletionStage with the GetDataObjectResponse
+     */
+    private CompletionStage<GetDataObjectResponse> fetchDataFromDynamoDB(GetItemRequest getItemRequest, GetDataObjectRequest request) {
         return doPrivileged(() -> dynamoDbAsyncClient.getItem(getItemRequest)).thenApply(getItemResponse -> {
             try {
                 ObjectNode sourceObject;
@@ -743,7 +798,11 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
             throw new IllegalStateException("REGION environment variable needs to be set!");
         }
         return doPrivileged(
-            () -> DynamoDbAsyncClient.builder().region(Region.of(region)).credentialsProvider(createCredentialsProvider()).build()
+            () -> DynamoDbAsyncClient.builder()
+                .httpClient(NettyNioAsyncHttpClient.builder().build())
+                .region(Region.of(region))
+                .credentialsProvider(createCredentialsProvider())
+                .build()
         );
     }
 

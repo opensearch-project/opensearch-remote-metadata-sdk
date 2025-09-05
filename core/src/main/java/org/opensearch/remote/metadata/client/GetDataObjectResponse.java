@@ -25,7 +25,7 @@ import java.util.Optional;
 public class GetDataObjectResponse extends DataObjectResponse {
     private final Map<String, Object> source;
     // If populated directly, will populate superclass fields
-    private final GetResponse getResponse;
+    private GetResponse getResponse;
 
     /**
      * Instantiate this response with a {@link GetResponse}.
@@ -78,7 +78,8 @@ public class GetDataObjectResponse extends DataObjectResponse {
     public @Nullable GetResponse getResponse() {
         if (this.getResponse == null) {
             try {
-                return GetResponse.fromXContent(parser());
+                this.getResponse = GetResponse.fromXContent(parser());
+                return this.getResponse;
             } catch (IOException | NullPointerException e) {
                 return null;
             }

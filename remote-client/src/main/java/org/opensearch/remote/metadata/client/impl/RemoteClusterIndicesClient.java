@@ -87,6 +87,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
@@ -209,6 +210,36 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
+        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
+            return innerGetDataObjectAsync(request);
+        }
+        // First check cache for global resource
+        GetDataObjectResponse cachedResponse = getGlobalResourceDataFromCache(request);
+        if (cachedResponse != null) {
+            return CompletableFuture.completedFuture(cachedResponse);
+        }
+
+        CompletionStage<GetDataObjectResponse> dataFetched = innerGetDataObjectAsync(request);
+        return handleOSDocumentBasedResponse(request, dataFetched);
+    }
+
+    @Override
+    public CompletionStage<Boolean> isGlobalResource(String index, String id, Executor executor, Boolean isMultiTenancyEnabled) {
+        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
+            return CompletableFuture.completedFuture(false);
+        }
+        GetDataObjectRequest request = GetDataObjectRequest.builder().tenantId(globalTenantId).index(index).id(id).build();
+        CompletionStage<GetDataObjectResponse> dataFetchedWithGlobalTenantId = innerGetDataObjectAsync(request);
+        return dataFetchedWithGlobalTenantId.thenCompose(response -> {
+            boolean isGlobalResource = isGlobalResource(response);
+            if (isGlobalResource) {
+                addToGlobalResourceCache(request, dataFetchedWithGlobalTenantId);
+            }
+            return CompletableFuture.completedFuture(isGlobalResource);
+        });
+    }
+
+    private CompletionStage<GetDataObjectResponse> innerGetDataObjectAsync(GetDataObjectRequest request) {
         return doPrivileged(() -> {
             try {
                 GetRequest getRequest = new GetRequest.Builder().index(request.index()).id(request.id()).build();

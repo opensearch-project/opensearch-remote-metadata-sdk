@@ -13,12 +13,15 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.DeleteItemResponse;
+import software.amazon.awssdk.services.dynamodb.model.DescribeTableRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemResponse;
+import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemResponse;
+import software.amazon.awssdk.utils.ImmutableMap;
 
 import org.opensearch.OpenSearchStatusException;
 import org.opensearch.action.DocWriteResponse;
@@ -67,6 +70,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -80,6 +84,7 @@ import org.mockito.MockitoAnnotations;
 
 import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
 import static org.opensearch.remote.metadata.client.impl.DDBOpenSearchClient.simulateOpenSearchResponse;
+import static org.opensearch.remote.metadata.common.CommonValue.TENANT_ID_FIELD_KEY;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -107,6 +112,9 @@ public class DDBOpenSearchClientTests {
     private static final String TEST_INDEX_2 = "test_index_2";
     private static final String TEST_SYSTEM_INDEX = ".test_index";
     private static final String TEST_THREAD_POOL = "test_pool";
+    private static final String GLOBAL_TENANT_ID = "_global_tenant_id";
+    private static final String TEST_TENANT_ID = "test_tenant_id";
+    private static final TimeValue TEST_GLOBAL_RESOURCE_CACHE_TTL = TimeValue.timeValueMillis(5 * 60 * 1000);
     private SdkClient sdkClient;
 
     @Mock
@@ -123,7 +131,12 @@ public class DDBOpenSearchClientTests {
     private ArgumentCaptor<UpdateItemRequest> updateItemRequestArgumentCaptor;
     @Captor
     private ArgumentCaptor<SearchDataObjectRequest> searchDataObjectRequestArgumentCaptor;
+    @Captor
+    private ArgumentCaptor<DescribeTableRequest> describeTableRequestArgumentCaptor;
+    @Captor
+    private ArgumentCaptor<QueryRequest> queryRequestArgumentCaptor;
     private TestDataObject testDataObject;
+    private DDBOpenSearchClient ddbClient;
 
     private static TestThreadPool testThreadPool = new TestThreadPool(
         DDBOpenSearchClientTests.class.getName(),
@@ -147,7 +160,8 @@ public class DDBOpenSearchClientTests {
 
         sdkClient = SdkClientFactory.wrapSdkClientDelegate(
             new DDBOpenSearchClient(dynamoDbAsyncClient, aosOpenSearchClient, TENANT_ID_FIELD),
-            true
+            true,
+            null
         );
         testDataObject = new TestDataObject("foo");
         when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(
@@ -1159,5 +1173,223 @@ public class DDBOpenSearchClientTests {
         assertEquals("%22%3C%3E", response.getId());
         assertEquals("test%20index", response.getIndex());
         assertEquals("created", response.getResult().toString().toLowerCase());
+    }
+
+    @Test
+    public void testGetDataObject_globalTenantIdEnabled_foundGlobalResourceFromDDB() {
+        GetDataObjectRequest getRequest = GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build();
+        GetItemResponse itemNotExistResponse = GetItemResponse.builder().build();
+        Map<String, AttributeValue> itemResponse = new HashMap<>();
+        itemResponse.put(
+            SOURCE,
+            AttributeValue.builder().m(ImmutableMap.of(TENANT_ID_FIELD, AttributeValue.builder().s(GLOBAL_TENANT_ID).build())).build()
+        );
+        GetItemResponse getItemResponse = GetItemResponse.builder().item(itemResponse).build();
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(itemNotExistResponse))
+
+            .thenReturn(CompletableFuture.completedFuture(getItemResponse));
+        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalTenantId(GLOBAL_TENANT_ID);
+        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalResourceCacheTTL(TEST_GLOBAL_RESOURCE_CACHE_TTL);
+        GetDataObjectResponse getDataObjectResponse = sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(TEST_THREAD_POOL))
+            .toCompletableFuture()
+            .join();
+        verify(dynamoDbAsyncClient, times(2)).getItem(getItemRequestArgumentCaptor.capture());
+        GetItemRequest getItemRequest = getItemRequestArgumentCaptor.getValue();
+        assertEquals(GLOBAL_TENANT_ID, getItemRequest.key().get(HASH_KEY).s());
+        assertEquals(TEST_TENANT_ID, getDataObjectResponse.getResponse().getSource().get(TENANT_ID_FIELD));
+        assertEquals(TEST_TENANT_ID, getDataObjectResponse.getResponse().getSourceAsMap().get(TENANT_ID_FIELD_KEY));
+    }
+
+    @Test
+    public void testGetDataObject_globalTenantIdDisabled_foundGlobalResourceFromDDB() {
+        GetDataObjectRequest getRequest = GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build();
+        Map<String, AttributeValue> itemResponse = new HashMap<>();
+        itemResponse.put(
+            SOURCE,
+            AttributeValue.builder().m(ImmutableMap.of(TENANT_ID_FIELD, AttributeValue.builder().s(TEST_TENANT_ID).build())).build()
+        );
+        GetItemResponse getItemResponse = GetItemResponse.builder().item(itemResponse).build();
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
+        GetDataObjectResponse getDataObjectResponse = sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(TEST_THREAD_POOL))
+            .toCompletableFuture()
+            .join();
+        verify(dynamoDbAsyncClient, times(1)).getItem(getItemRequestArgumentCaptor.capture());
+        GetItemRequest getItemRequest = getItemRequestArgumentCaptor.getValue();
+        assertEquals(TEST_TENANT_ID, getItemRequest.key().get(HASH_KEY).s());
+        assertEquals(TEST_TENANT_ID, getDataObjectResponse.getResponse().getSource().get(TENANT_ID_FIELD));
+        assertEquals(TEST_TENANT_ID, getDataObjectResponse.getResponse().getSourceAsMap().get(TENANT_ID_FIELD_KEY));
+    }
+
+    @Test
+    public void testGetDataObject_globalTenantIdEnabled_foundGlobalResourceFromCache() {
+        GetDataObjectRequest getRequest = GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build();
+        GetItemResponse itemNotExistResponse = GetItemResponse.builder().build();
+        Map<String, AttributeValue> itemResponse = new HashMap<>();
+        itemResponse.put(
+            SOURCE,
+            AttributeValue.builder().m(ImmutableMap.of(TENANT_ID_FIELD, AttributeValue.builder().s(GLOBAL_TENANT_ID).build())).build()
+        );
+        GetItemResponse getItemResponse = GetItemResponse.builder().item(itemResponse).build();
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(itemNotExistResponse))
+            .thenReturn(CompletableFuture.completedFuture(getItemResponse));
+        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalTenantId(GLOBAL_TENANT_ID);
+        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalResourceCacheTTL(TEST_GLOBAL_RESOURCE_CACHE_TTL);
+        sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join();
+
+        GetDataObjectResponse getDataObjectResponse = sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(TEST_THREAD_POOL))
+            .toCompletableFuture()
+            .join(); // Read from cache.
+        assertEquals(TEST_TENANT_ID, getDataObjectResponse.source().get(TENANT_ID_FIELD));
+        assertEquals(TEST_TENANT_ID, getDataObjectResponse.getResponse().getSourceAsMap().get(TENANT_ID_FIELD_KEY));
+    }
+
+    @Test
+    public void testGetDataObject_globalTenantIdEnabled_userTenantIdResourceFound() {
+        GetDataObjectRequest getRequest = GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build();
+        Map<String, AttributeValue> itemResponse = new HashMap<>();
+        itemResponse.put(
+            SOURCE,
+            AttributeValue.builder()
+                .m(
+                    ImmutableMap.of(
+                        TENANT_ID_FIELD,
+                        AttributeValue.builder().s(TEST_TENANT_ID).build(),
+                        "found",
+                        AttributeValue.builder().bool(true).build()
+                    )
+                )
+                .build()
+        );
+        GetItemResponse getItemResponse = GetItemResponse.builder().item(itemResponse).build();
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
+        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalTenantId(GLOBAL_TENANT_ID);
+        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalResourceCacheTTL(TEST_GLOBAL_RESOURCE_CACHE_TTL);
+        GetDataObjectResponse getDataObjectResponse = sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(TEST_THREAD_POOL))
+            .toCompletableFuture()
+            .join(); // Read from cache.
+        assertEquals(TEST_TENANT_ID, getDataObjectResponse.source().get(TENANT_ID_FIELD));
+        assertEquals(TEST_TENANT_ID, getDataObjectResponse.getResponse().getSourceAsMap().get(TENANT_ID_FIELD_KEY));
+    }
+
+    @Test
+    public void testIsGlobalResource_globalTenantIdEnabled_foundGlobalResourceFromDDB() {
+        Map<String, AttributeValue> itemResponse = new HashMap<>();
+        itemResponse.put(
+            SOURCE,
+            AttributeValue.builder().m(ImmutableMap.of(TENANT_ID_FIELD, AttributeValue.builder().s(GLOBAL_TENANT_ID).build())).build()
+        );
+        GetItemResponse getItemResponse = GetItemResponse.builder().item(itemResponse).build();
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
+        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalTenantId(GLOBAL_TENANT_ID);
+        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalResourceCacheTTL(TEST_GLOBAL_RESOURCE_CACHE_TTL);
+        boolean isGlobalResource = sdkClient.isGlobalResource(TEST_INDEX, TEST_ID).toCompletableFuture().join();
+        assertTrue(isGlobalResource);
+    }
+
+    @Test
+    public void testIsGlobalResource_globalTenantIdDisabled_returnFalse() {
+        Map<String, AttributeValue> itemResponse = new HashMap<>();
+        itemResponse.put(
+            SOURCE,
+            AttributeValue.builder().m(ImmutableMap.of(TENANT_ID_FIELD, AttributeValue.builder().s(GLOBAL_TENANT_ID).build())).build()
+        );
+        GetItemResponse getItemResponse = GetItemResponse.builder().item(itemResponse).build();
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
+        boolean isGlobalResource = sdkClient.isGlobalResource(TEST_INDEX, TEST_ID).toCompletableFuture().join();
+        assertFalse(isGlobalResource);
+    }
+
+    @Test
+    public void testIsGlobalResource_WithoutGlobalTenantId() {
+        ddbClient = new DDBOpenSearchClient(dynamoDbAsyncClient, aosOpenSearchClient, TENANT_ID_FIELD);
+
+        // Test when no global tenant ID is set
+        assertFalse(ddbClient.isGlobalResource(TEST_INDEX, TEST_ID, null, null).toCompletableFuture().join());
+        assertFalse(ddbClient.isGlobalResource("other_index", "other_id", null, null).toCompletableFuture().join());
+    }
+
+    @Test
+    public void testPutDataObject_GlobalTenantInRequest_throwException() {
+        PutDataObjectRequest putRequest = PutDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(GLOBAL_TENANT_ID)
+            .dataObject(testDataObject)
+            .build();
+
+        when(dynamoDbAsyncClient.putItem(any(PutItemRequest.class))).thenReturn(
+            CompletableFuture.completedFuture(PutItemResponse.builder().build())
+        );
+        sdkClient = SdkClientFactory.wrapSdkClientDelegate(
+            new DDBOpenSearchClient(dynamoDbAsyncClient, aosOpenSearchClient, TENANT_ID_FIELD),
+            true,
+            GLOBAL_TENANT_ID
+        );
+        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalTenantId(GLOBAL_TENANT_ID);
+        OpenSearchStatusException ex = assertThrows(
+            OpenSearchStatusException.class,
+            () -> sdkClient.putDataObjectAsync(putRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join()
+        );
+        assertEquals("The tenant id in request is not correct, or you don't have permission to operate on this resource!", ex.getMessage());
+    }
+
+    @Test
+    public void testUpdateDataObject_GlobalTenantInRequest_throwException() {
+        UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(GLOBAL_TENANT_ID)
+            .dataObject(testDataObject)
+            .build();
+
+        GetItemResponse getItemResponse = GetItemResponse.builder()
+            .item(
+                Map.of(SEQ_NUM, AttributeValue.builder().n("0").build(), SOURCE, AttributeValue.builder().m(Collections.emptyMap()).build())
+            )
+            .build();
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
+        when(dynamoDbAsyncClient.updateItem(any(UpdateItemRequest.class))).thenReturn(
+            CompletableFuture.completedFuture(UpdateItemResponse.builder().build())
+        );
+        sdkClient = SdkClientFactory.wrapSdkClientDelegate(
+            new DDBOpenSearchClient(dynamoDbAsyncClient, aosOpenSearchClient, TENANT_ID_FIELD),
+            true,
+            GLOBAL_TENANT_ID
+        );
+        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalTenantId(GLOBAL_TENANT_ID);
+
+        OpenSearchStatusException ex = assertThrows(
+            OpenSearchStatusException.class,
+            () -> sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join()
+        );
+        assertEquals("The tenant id in request is not correct, or you don't have permission to operate on this resource!", ex.getMessage());
+    }
+
+    @Test
+    public void testDeleteDataObject_GlobalTenantInRequest_throwException() {
+        DeleteDataObjectRequest deleteRequest = DeleteDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(GLOBAL_TENANT_ID)
+            .build();
+
+        when(dynamoDbAsyncClient.deleteItem(any(DeleteItemRequest.class))).thenReturn(
+            CompletableFuture.completedFuture(
+                DeleteItemResponse.builder().attributes(Map.of(SEQ_NUM, AttributeValue.builder().n("5").build())).build()
+            )
+        );
+        sdkClient = SdkClientFactory.wrapSdkClientDelegate(
+            new DDBOpenSearchClient(dynamoDbAsyncClient, aosOpenSearchClient, TENANT_ID_FIELD),
+            true,
+            GLOBAL_TENANT_ID
+        );
+        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalTenantId(GLOBAL_TENANT_ID);
+
+        OpenSearchStatusException ex = assertThrows(
+            OpenSearchStatusException.class,
+            () -> sdkClient.deleteDataObjectAsync(deleteRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join()
+        );
+
+        assertEquals("The tenant id in request is not correct, or you don't have permission to operate on this resource!", ex.getMessage());
     }
 }

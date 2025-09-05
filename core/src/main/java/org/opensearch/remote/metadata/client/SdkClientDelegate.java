@@ -11,6 +11,7 @@ package org.opensearch.remote.metadata.client;
 import org.opensearch.remote.metadata.common.CommonValue;
 
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 
@@ -114,4 +115,19 @@ public interface SdkClientDelegate extends AutoCloseable {
         Executor executor,
         Boolean isMultiTenancyEnabled
     );
+
+    /**
+     * This method is to check if a given resource index and id is global resource or not.
+     * This is useful for invokers in case they need perform different operations based on
+     * resource type. It's false by default since for most cases, override this method if
+     * otherwise.
+     * @param index The index/table name.
+     * @param id The resource id.
+     * @param executor the executor to use for asynchronous execution
+     * @param isMultiTenancyEnabled whether multitenancy is enabled
+     * @return If the resource is global or not.
+     */
+    default CompletionStage<Boolean> isGlobalResource(String index, String id, Executor executor, Boolean isMultiTenancyEnabled) {
+        return CompletableFuture.completedFuture(false);
+    }
 }

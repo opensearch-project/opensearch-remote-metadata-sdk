@@ -163,6 +163,27 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
+        return doPrivileged(() -> {
+            if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
+                return innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
+            }
+
+            // First check cache for global resource
+            GetDataObjectResponse cachedResponse = getGlobalResourceDataFromCache(request);
+            if (cachedResponse != null) {
+                return CompletableFuture.completedFuture(cachedResponse);
+            }
+
+            CompletionStage<GetDataObjectResponse> dataFetched = innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
+            return handleOSDocumentBasedResponse(request, dataFetched);
+        });
+    }
+
+    private CompletionStage<GetDataObjectResponse> innerGetDataObjectAsync(
+        GetDataObjectRequest request,
+        Executor executor,
+        Boolean isMultiTenancyEnabled
+    ) {
         CompletableFuture<GetDataObjectResponse> future = new CompletableFuture<>();
         return doPrivileged(() -> {
             GetRequest getRequest = createGetRequest(request);
@@ -181,7 +202,6 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
             );
             return future;
         });
-
     }
 
     private GetRequest createGetRequest(GetDataObjectRequest request) {
@@ -358,7 +378,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
                 boolQuery.filter(tenantIdTermQuery);
                 searchSource.query(boolQuery);
             }
-            log.debug("Adding tenant id to search query", Arrays.toString(request.indices()));
+            log.debug("Adding tenant id to search query");
         }
         log.info("Searching {}", Arrays.toString(request.indices()));
         return doPrivileged(() -> {
@@ -382,5 +402,25 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
     @Override
     public void close() throws Exception {
         // No resources to close, OpenSearch manages the NodeClient
+    }
+
+    @Override
+    public CompletionStage<Boolean> isGlobalResource(String index, String id, Executor executor, Boolean isMultiTenancyEnabled) {
+        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
+            return CompletableFuture.completedFuture(false);
+        }
+        GetDataObjectRequest request = GetDataObjectRequest.builder().index(index).id(id).tenantId(globalTenantId).build();
+        CompletionStage<GetDataObjectResponse> dataFetchedWithGlobalTenantId = innerGetDataObjectAsync(
+            request,
+            executor,
+            isMultiTenancyEnabled
+        );
+        return dataFetchedWithGlobalTenantId.thenCompose(response -> {
+            boolean isGlobalResource = isGlobalResource(response);
+            if (isGlobalResource) {
+                addToGlobalResourceCache(request, dataFetchedWithGlobalTenantId);
+            }
+            return CompletableFuture.completedFuture(isGlobalResource);
+        });
     }
 }

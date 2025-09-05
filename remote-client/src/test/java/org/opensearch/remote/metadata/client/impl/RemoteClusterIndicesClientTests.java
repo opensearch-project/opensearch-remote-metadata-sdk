@@ -152,7 +152,8 @@ public class RemoteClusterIndicesClientTests {
         );
         sdkClient = SdkClientFactory.wrapSdkClientDelegate(
             new RemoteClusterIndicesClient(mockedOpenSearchAsyncClient, TENANT_ID_FIELD),
-            true
+            true,
+            null
         );
         testDataObject = new TestDataObject("foo");
     }
@@ -1197,7 +1198,8 @@ public class RemoteClusterIndicesClientTests {
         // Tests no status exception if multitenancy not enabled
         SdkClient sdkClientNoTenant = SdkClientFactory.wrapSdkClientDelegate(
             new RemoteClusterIndicesClient(mockedOpenSearchAsyncClient, null),
-            false
+            false,
+            null
         );
 
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
