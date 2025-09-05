@@ -99,25 +99,6 @@ public class AOSOpenSearchClient extends RemoteClusterIndicesClient {
     }
 
     @Override
-    public CompletionStage<GetDataObjectResponse> getDataObjectAsync(
-        GetDataObjectRequest request,
-        Executor executor,
-        Boolean isMultiTenancyEnabled
-    ) {
-        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
-            return super.getDataObjectAsync(request, executor, isMultiTenancyEnabled);
-        }
-        // First check cache for global resource
-        GetDataObjectResponse cachedResponse = getGlobalResourceDataFromCache(request);
-        if (cachedResponse != null) {
-            return CompletableFuture.completedFuture(cachedResponse);
-        }
-
-        CompletionStage<GetDataObjectResponse> dataFetched = super.getDataObjectAsync(request, executor, isMultiTenancyEnabled);
-        return handleOSDocumentBasedResponse(request, dataFetched);
-    }
-
-    @Override
     public void close() throws Exception {
         if (openSearchAsyncClient != null && openSearchAsyncClient._transport() != null) {
             openSearchAsyncClient._transport().close();

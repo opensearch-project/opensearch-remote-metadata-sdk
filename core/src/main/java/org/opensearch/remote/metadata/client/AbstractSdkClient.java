@@ -32,7 +32,7 @@ import java.util.concurrent.Executor;
 
 import static org.opensearch.common.util.concurrent.ThreadContextAccess.doPrivileged;
 import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_ENDPOINT_KEY;
-import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_MILLIS_KEY;
+import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY;
 import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_GLOBAL_TENANT_ID_KEY;
 import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_REGION_KEY;
 import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_SERVICE_NAME_KEY;
@@ -70,8 +70,8 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
         this.serviceName = metadataSettings.get(REMOTE_METADATA_SERVICE_NAME_KEY);
 
         globalTenantId = metadataSettings.get(REMOTE_METADATA_GLOBAL_TENANT_ID_KEY);
-        globalResourceCacheTTL = Optional.ofNullable(metadataSettings.get(REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_MILLIS_KEY))
-            .map(x -> TimeValue.parseTimeValue(x, DEFAULT_GLOBAL_RESOURCE_CACHE_TTL, "ms"))
+        globalResourceCacheTTL = Optional.ofNullable(metadataSettings.get(REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY))
+            .map(x -> TimeValue.parseTimeValue(x, DEFAULT_GLOBAL_RESOURCE_CACHE_TTL, REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY))
             .filter(x -> x.getMillis() >= 0)
             .orElse(DEFAULT_GLOBAL_RESOURCE_CACHE_TTL);
     }
@@ -150,19 +150,17 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
      */
     protected GetDataObjectResponse getGlobalResourceDataFromCache(GetDataObjectRequest request) {
         String checkingKey = buildGlobalCacheKey(request.index(), request.id());
-        if (!GLOBAL_RESOURCES_CACHE.containsKey(checkingKey)) {
-            return null;
-        }
-        Tuple<GetDataObjectResponse, Long> tuple = GLOBAL_RESOURCES_CACHE.get(checkingKey);
-        // Replace the tenant id in the global resource response to actual tenant id to bypass the validation of the resources:
-        // e.g.:
+        long currentTime = System.currentTimeMillis();
+        Tuple<GetDataObjectResponse, Long> tuple = GLOBAL_RESOURCES_CACHE.computeIfPresent(checkingKey, (key, value) -> {
+            if (currentTime - value.v2() > globalResourceCacheTTL.getMillis()) {
+                return null; // If expired, return null to remove the entry
+            }
+            return value; // Keep the entry
+        });
+        // If we have a value, replace the tenant id in the global resource response to actual tenant id
+        // to bypass the validation of the resources e.g.:
         // https://github.com/opensearch-project/ml-commons/blob/main/ml-algorithms/src/main/java/org/opensearch/ml/engine/algorithms/agent/MLAgentExecutor.java#L206
-        if (System.currentTimeMillis() - tuple.v2() > globalResourceCacheTTL.getMillis()) {
-            // Cache is expired case.
-            GLOBAL_RESOURCES_CACHE.remove(checkingKey);
-            return null;
-        }
-        return replaceGlobalTenantId(request, tuple.v1());
+        return tuple != null ? replaceGlobalTenantId(request, tuple.v1()) : null;
     }
 
     private GetDataObjectResponse replaceGlobalTenantId(GetDataObjectRequest request, GetDataObjectResponse response) {
