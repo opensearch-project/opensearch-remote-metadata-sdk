@@ -223,6 +223,22 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         return handleOSDocumentBasedResponse(request, dataFetched);
     }
 
+    @Override
+    public CompletionStage<Boolean> isGlobalResource(String index, String id, Executor executor, Boolean isMultiTenancyEnabled) {
+        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
+            return CompletableFuture.completedFuture(false);
+        }
+        GetDataObjectRequest request = GetDataObjectRequest.builder().tenantId(globalTenantId).index(index).id(id).build();
+        CompletionStage<GetDataObjectResponse> dataFetchedWithGlobalTenantId = innerGetDataObjectAsync(request);
+        return dataFetchedWithGlobalTenantId.thenCompose(response -> {
+            boolean isGlobalResource = isGlobalResource(response);
+            if (isGlobalResource) {
+                addToGlobalResourceCache(request, dataFetchedWithGlobalTenantId);
+            }
+            return CompletableFuture.completedFuture(isGlobalResource);
+        });
+    }
+
     private CompletionStage<GetDataObjectResponse> innerGetDataObjectAsync(GetDataObjectRequest request) {
         return doPrivileged(() -> {
             try {

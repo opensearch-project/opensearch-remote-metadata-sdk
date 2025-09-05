@@ -981,6 +981,7 @@ public class LocalClusterIndicesClientTests {
             true
         ).toCompletableFuture().join();
         assertTrue(Objects.requireNonNull(result.getResponse()).isExists());
+        assertEquals(TEST_TENANT_ID, Objects.requireNonNull(result.getResponse()).getSourceAsMap().get(TENANT_ID_FIELD_KEY));
     }
 
     @Test

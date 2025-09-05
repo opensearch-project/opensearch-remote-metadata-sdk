@@ -8,7 +8,9 @@
  */
 package org.opensearch.remote.metadata.client;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import org.opensearch.OpenSearchStatusException;
 import org.opensearch.action.get.GetResponse;
@@ -172,13 +174,13 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
                 RestStatus.INTERNAL_SERVER_ERROR
             );
         }
-        String responseStr = getResponse.toString()
-            .replaceAll(globalTenantId, Optional.ofNullable(request.tenantId()).orElse(DEFAULT_TENANT));
         try {
+            JsonNode jsonNode = OBJECT_MAPPER.readTree(getResponse.toString());
+            ((ObjectNode) jsonNode.get("_source")).put(TENANT_ID_FIELD_KEY, Optional.ofNullable(request.tenantId()).orElse(DEFAULT_TENANT));
             XContentParser parser = JsonXContent.jsonXContent.createParser(
                 NamedXContentRegistry.EMPTY,
                 LoggingDeprecationHandler.INSTANCE,
-                responseStr
+                OBJECT_MAPPER.writeValueAsString(jsonNode)
             );
             return GetDataObjectResponse.builder().id(request.id()).parser(parser).source(response.source()).build();
         } catch (IOException e) {
