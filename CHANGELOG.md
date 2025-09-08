@@ -5,6 +5,8 @@ Inspired from [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased 3.3](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/compare/3.2...HEAD)
 ### Features
+- Add global resource support ([#224](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/224))
+
 ### Enhancements
 - Add SeqNo and PrimaryTerm support to Put and Delete requests ([#234](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/234))
 
