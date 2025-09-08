@@ -108,7 +108,7 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
      * @param dataFetched data fetched with original request.
      * @return {@link CompletionStage<GetDataObjectResponse>} which either is the user's resource or global resource been added to cache then replaced the tenant id to which from request.
      */
-    protected CompletionStage<GetDataObjectResponse> handleOSDocumentBasedResponse(
+    public CompletionStage<GetDataObjectResponse> handleOSDocumentBasedResponse(
         GetDataObjectRequest request,
         CompletionStage<GetDataObjectResponse> dataFetched
     ) {
@@ -191,6 +191,39 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
             );
         }
     }
+
+    @Override
+    public CompletionStage<Boolean> isGlobalResource(String index, String id, Executor executor, Boolean isMultiTenancyEnabled) {
+        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
+            return CompletableFuture.completedFuture(false);
+        }
+        GetDataObjectRequest request = GetDataObjectRequest.builder().index(index).id(id).tenantId(globalTenantId).build();
+        CompletionStage<GetDataObjectResponse> dataFetchedWithGlobalTenantId = innerGetDataObjectAsync(
+            request,
+            executor,
+            isMultiTenancyEnabled
+        );
+        return dataFetchedWithGlobalTenantId.thenCompose(response -> {
+            boolean isGlobalResource = isGlobalResource(response);
+            if (isGlobalResource) {
+                addToGlobalResourceCache(request, dataFetchedWithGlobalTenantId);
+            }
+            return CompletableFuture.completedFuture(isGlobalResource);
+        });
+    }
+
+    /**
+     * Get data from storage, this method has different implementations for different storages.
+     * @param request The request that contains index, id and nullable tenant_id.
+     * @param executor the executor for the action
+     * @param isMultiTenancyEnabled is multi tenancy enabled flag.
+     * @return A {@link CompletionStage} of {@link GetDataObjectResponse} the fetched result encapsulated into a CompletionStage.
+     */
+    abstract protected CompletionStage<GetDataObjectResponse> innerGetDataObjectAsync(
+        GetDataObjectRequest request,
+        Executor executor,
+        Boolean isMultiTenancyEnabled
+    );
 
     /**
      * Building the global cache key, which is a combination of index_name:resource_id.

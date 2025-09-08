@@ -179,7 +179,14 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         });
     }
 
-    private CompletionStage<GetDataObjectResponse> innerGetDataObjectAsync(
+    /**
+     * Get data from local cluster.
+     * @param request The request that contains index, id and nullable tenant_id.
+     * @param executor the executor for the action
+     * @param isMultiTenancyEnabled is multi tenancy enabled flag.
+     * @return A {@link CompletionStage} of {@link GetDataObjectResponse} the fetched result encapsulated into a CompletionStage.
+     */
+    protected CompletionStage<GetDataObjectResponse> innerGetDataObjectAsync(
         GetDataObjectRequest request,
         Executor executor,
         Boolean isMultiTenancyEnabled
@@ -402,25 +409,5 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
     @Override
     public void close() throws Exception {
         // No resources to close, OpenSearch manages the NodeClient
-    }
-
-    @Override
-    public CompletionStage<Boolean> isGlobalResource(String index, String id, Executor executor, Boolean isMultiTenancyEnabled) {
-        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
-            return CompletableFuture.completedFuture(false);
-        }
-        GetDataObjectRequest request = GetDataObjectRequest.builder().index(index).id(id).tenantId(globalTenantId).build();
-        CompletionStage<GetDataObjectResponse> dataFetchedWithGlobalTenantId = innerGetDataObjectAsync(
-            request,
-            executor,
-            isMultiTenancyEnabled
-        );
-        return dataFetchedWithGlobalTenantId.thenCompose(response -> {
-            boolean isGlobalResource = isGlobalResource(response);
-            if (isGlobalResource) {
-                addToGlobalResourceCache(request, dataFetchedWithGlobalTenantId);
-            }
-            return CompletableFuture.completedFuture(isGlobalResource);
-        });
     }
 }

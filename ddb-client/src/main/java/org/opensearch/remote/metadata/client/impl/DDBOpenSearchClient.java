@@ -259,9 +259,8 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        final GetItemRequest getItemRequest = buildGetItemRequest(request.tenantId(), request.id(), request.index());
         if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
-            return fetchDataFromDynamoDB(getItemRequest, request);
+            return innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
         }
         // Try fetch from global cache.
         GetDataObjectResponse getDataObjectFromCache = getGlobalResourceDataFromCache(request);
@@ -269,7 +268,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
             return CompletableFuture.completedFuture(getDataObjectFromCache);
         }
         // fetch resource with user tenant id.
-        CompletionStage<GetDataObjectResponse> getDataFromDynamoDB = fetchDataFromDynamoDB(getItemRequest, request);
+        CompletionStage<GetDataObjectResponse> getDataFromDynamoDB = innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
         return getDataFromDynamoDB.thenCompose(response -> {
             // Extract the `found` in the source map to confirm if the item exists.
             if (response != null && Boolean.TRUE.equals(Boolean.parseBoolean(String.valueOf(response.source().get("found"))))) {
@@ -277,48 +276,34 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
             }
 
             // Fetch with the global tenant id
-            final GetItemRequest getGlobalItemRequest = buildGetItemRequest(globalTenantId, request.id(), request.index());
-            CompletionStage<GetDataObjectResponse> dataFetchedWithGlobalTenantId = fetchDataFromDynamoDB(getGlobalItemRequest, request);
+            final GetDataObjectRequest requestWithGlobalTenantId = GetDataObjectRequest.builder()
+                .tenantId(globalTenantId)
+                .id(request.id())
+                .index(request.index())
+                .build();
+            CompletionStage<GetDataObjectResponse> dataFetchedWithGlobalTenantId = innerGetDataObjectAsync(
+                requestWithGlobalTenantId,
+                executor,
+                isMultiTenancyEnabled
+            );
             return addToGlobalResourceCache(request, dataFetchedWithGlobalTenantId);
-        });
-    }
-
-    /**
-     * This method is to check if a resource is global based on index/table name and resource id.
-     * @param index The index/table name.
-     * @param id The resource id.
-     * @return If the resource global one.
-     */
-    @Override
-    public CompletionStage<Boolean> isGlobalResource(String index, String id, Executor executor, Boolean isMultiTenancyEnabled) {
-        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
-            return CompletableFuture.completedFuture(false);
-        }
-
-        GetItemRequest getItemRequest = GetItemRequest.builder()
-            .tableName(index)
-            .key(Map.of(HASH_KEY, AttributeValue.builder().s(globalTenantId).build(), RANGE_KEY, AttributeValue.builder().s(id).build()))
-            .consistentRead(true)
-            .build();
-        GetDataObjectRequest request = GetDataObjectRequest.builder().index(index).id(id).build();
-        CompletionStage<GetDataObjectResponse> getDataFromDynamoDB = fetchDataFromDynamoDB(getItemRequest, request);
-        return getDataFromDynamoDB.thenCompose(response -> {
-            boolean isGlobalResource = isGlobalResource(response);
-            if (isGlobalResource) {
-                addToGlobalResourceCache(request, getDataFromDynamoDB);
-            }
-            return CompletableFuture.completedFuture(isGlobalResource);
         });
     }
 
     /**
      * Fetches data from DynamoDB and transforms it into a GetDataObjectResponse.
      *
-     * @param getItemRequest The DynamoDB GetItem request
      * @param request The original GetDataObject request
-     * @return A CompletionStage with the GetDataObjectResponse
+     * @param executor the executor for the action
+     * @param isMultiTenancyEnabled multi tenancy enabled flag.
+     * @return A {@link CompletionStage} with the {@link GetDataObjectResponse}
      */
-    private CompletionStage<GetDataObjectResponse> fetchDataFromDynamoDB(GetItemRequest getItemRequest, GetDataObjectRequest request) {
+    protected CompletionStage<GetDataObjectResponse> innerGetDataObjectAsync(
+        GetDataObjectRequest request,
+        Executor executor,
+        Boolean isMultiTenancyEnabled
+    ) {
+        final GetItemRequest getItemRequest = buildGetItemRequest(request.tenantId(), request.id(), request.index());
         return doPrivileged(() -> dynamoDbAsyncClient.getItem(getItemRequest)).thenApply(getItemResponse -> {
             try {
                 ObjectNode sourceObject;

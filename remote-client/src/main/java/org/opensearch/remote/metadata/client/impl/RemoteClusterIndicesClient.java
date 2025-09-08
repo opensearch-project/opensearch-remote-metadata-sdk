@@ -211,7 +211,7 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         Boolean isMultiTenancyEnabled
     ) {
         if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
-            return innerGetDataObjectAsync(request);
+            return innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
         }
         // First check cache for global resource
         GetDataObjectResponse cachedResponse = getGlobalResourceDataFromCache(request);
@@ -219,27 +219,22 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
             return CompletableFuture.completedFuture(cachedResponse);
         }
 
-        CompletionStage<GetDataObjectResponse> dataFetched = innerGetDataObjectAsync(request);
+        CompletionStage<GetDataObjectResponse> dataFetched = innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
         return handleOSDocumentBasedResponse(request, dataFetched);
     }
 
-    @Override
-    public CompletionStage<Boolean> isGlobalResource(String index, String id, Executor executor, Boolean isMultiTenancyEnabled) {
-        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
-            return CompletableFuture.completedFuture(false);
-        }
-        GetDataObjectRequest request = GetDataObjectRequest.builder().tenantId(globalTenantId).index(index).id(id).build();
-        CompletionStage<GetDataObjectResponse> dataFetchedWithGlobalTenantId = innerGetDataObjectAsync(request);
-        return dataFetchedWithGlobalTenantId.thenCompose(response -> {
-            boolean isGlobalResource = isGlobalResource(response);
-            if (isGlobalResource) {
-                addToGlobalResourceCache(request, dataFetchedWithGlobalTenantId);
-            }
-            return CompletableFuture.completedFuture(isGlobalResource);
-        });
-    }
-
-    private CompletionStage<GetDataObjectResponse> innerGetDataObjectAsync(GetDataObjectRequest request) {
+    /**
+     * Get data from remote cluster
+     * @param request The request that contains index, id and nullable tenant_id.
+     * @param executor the executor for the action
+     * @param isMultiTenancyEnabled is multi tenancy enabled flag.
+     * @return A {@link CompletionStage} of {@link GetDataObjectResponse} the fetched result encapsulated into a CompletionStage.
+     */
+    protected CompletionStage<GetDataObjectResponse> innerGetDataObjectAsync(
+        GetDataObjectRequest request,
+        Executor executor,
+        Boolean isMultiTenancyEnabled
+    ) {
         return doPrivileged(() -> {
             try {
                 GetRequest getRequest = new GetRequest.Builder().index(request.index()).id(request.id()).build();
