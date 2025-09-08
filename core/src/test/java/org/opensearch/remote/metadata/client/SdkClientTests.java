@@ -86,6 +86,15 @@ public class SdkClientTests {
 
         sdkClientImpl = spy(new AbstractSdkClient() {
             @Override
+            protected CompletionStage<GetDataObjectResponse> innerGetDataObjectAsync(
+                GetDataObjectRequest request,
+                Executor executor,
+                Boolean isMultiTenancyEnabled
+            ) {
+                return CompletableFuture.completedFuture(getResponse);
+            }
+
+            @Override
             public CompletionStage<PutDataObjectResponse> putDataObjectAsync(
                 PutDataObjectRequest request,
                 Executor executor,
@@ -100,7 +109,7 @@ public class SdkClientTests {
                 Executor executor,
                 Boolean isMultiTenancyEnabled
             ) {
-                return CompletableFuture.completedFuture(getResponse);
+                return innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
             }
 
             @Override

@@ -28,7 +28,6 @@ import org.opensearch.action.search.ShardSearchFailure;
 import org.opensearch.action.support.replication.ReplicationResponse.ShardInfo;
 import org.opensearch.action.update.UpdateRequest;
 import org.opensearch.action.update.UpdateResponse;
-import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
@@ -70,6 +69,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
 import java.util.stream.Collectors;
 
 import org.mockito.ArgumentCaptor;
@@ -86,6 +86,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -968,17 +969,14 @@ public class LocalClusterIndicesClientTests {
         String json = "{\"" + TENANT_ID_FIELD + "\":\"" + GLOBAL_TENANT_ID + "\"}";
         GetResponse getResponse = new GetResponse(new GetResult(TEST_INDEX, TEST_ID, -2, 0, 1, true, new BytesArray(json), null, null));
         innerClient.setGlobalTenantId(GLOBAL_TENANT_ID);
-        innerClient.setGlobalResourceCacheTTL(TimeValue.timeValueMillis(10 * 60 * 1000));
         doAnswer(invocation -> {
             ActionListener<GetResponse> listener = invocation.getArgument(1);
             listener.onResponse(getResponse);
             return null;
         }).when(mockedClient).get(any(GetRequest.class), any());
-
-        GetDataObjectResponse result = innerClient.getDataObjectAsync(
-            GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build(),
-            null,
-            true
+        SdkClient sdkClient = new SdkClient(innerClient, true, GLOBAL_TENANT_ID);
+        GetDataObjectResponse result = sdkClient.getDataObjectAsync(
+            GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build()
         ).toCompletableFuture().join();
         assertTrue(Objects.requireNonNull(result.getResponse()).isExists());
         assertEquals(TEST_TENANT_ID, Objects.requireNonNull(result.getResponse()).getSourceAsMap().get(TENANT_ID_FIELD_KEY));
@@ -989,17 +987,14 @@ public class LocalClusterIndicesClientTests {
         String json = "{\"" + TENANT_ID_FIELD + "\":\"" + TEST_TENANT_ID + "\"}";
         GetResponse getResponse = new GetResponse(new GetResult(TEST_INDEX, TEST_ID, -2, 0, 1, true, new BytesArray(json), null, null));
         innerClient.setGlobalTenantId(GLOBAL_TENANT_ID);
-        innerClient.setGlobalResourceCacheTTL(TimeValue.timeValueMillis(10 * 60 * 1000));
         doAnswer(invocation -> {
             ActionListener<GetResponse> listener = invocation.getArgument(1);
             listener.onResponse(getResponse);
             return null;
         }).when(mockedClient).get(any(GetRequest.class), any());
-
-        GetDataObjectResponse result = innerClient.getDataObjectAsync(
-            GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build(),
-            null,
-            true
+        SdkClient sdkClient = new SdkClient(innerClient, true, GLOBAL_TENANT_ID);
+        GetDataObjectResponse result = sdkClient.getDataObjectAsync(
+            GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build()
         ).toCompletableFuture().join();
         assertTrue(Objects.requireNonNull(result.getResponse()).isExists());
         assertEquals(TEST_TENANT_ID, Objects.requireNonNull(result.getResponse()).getSourceAsMap().get(TENANT_ID_FIELD_KEY));
@@ -1010,13 +1005,12 @@ public class LocalClusterIndicesClientTests {
         String json = "{\"" + TENANT_ID_FIELD + "\":\"" + GLOBAL_TENANT_ID + "\"}";
         GetResponse getResponse = new GetResponse(new GetResult(TEST_INDEX, TEST_ID, -2, 0, 1, true, new BytesArray(json), null, null));
         innerClient.setGlobalTenantId(GLOBAL_TENANT_ID);
-        innerClient.setGlobalResourceCacheTTL(TimeValue.timeValueMillis(10 * 60 * 1000));
         doAnswer(invocation -> {
             ActionListener<GetResponse> listener = invocation.getArgument(1);
             listener.onResponse(getResponse);
             return null;
         }).when(mockedClient).get(any(GetRequest.class), any());
-
+        SdkClient sdkClient = new SdkClient(innerClient, true, GLOBAL_TENANT_ID);
         GetDataObjectResponse result = innerClient.getDataObjectAsync(
             GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build(),
             null,
@@ -1024,10 +1018,8 @@ public class LocalClusterIndicesClientTests {
         ).toCompletableFuture().join();
         assertTrue(Objects.requireNonNull(result.getResponse()).isExists());
 
-        GetDataObjectResponse resultFromCache = innerClient.getDataObjectAsync(
-            GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build(),
-            null,
-            null
+        GetDataObjectResponse resultFromCache = sdkClient.getDataObjectAsync(
+            GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build()
         ).toCompletableFuture().join();
         assertTrue(Objects.requireNonNull(resultFromCache.getResponse()).isExists());
         assertEquals(TEST_TENANT_ID, Objects.requireNonNull(result.getResponse()).getSourceAsMap().get(TENANT_ID_FIELD_KEY));
@@ -1042,11 +1034,9 @@ public class LocalClusterIndicesClientTests {
             listener.onResponse(getResponse);
             return null;
         }).when(mockedClient).get(any(GetRequest.class), any());
-
-        GetDataObjectResponse result = innerClient.getDataObjectAsync(
-            GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build(),
-            null,
-            null
+        SdkClient sdkClient = new SdkClient(innerClient, true, GLOBAL_TENANT_ID);
+        GetDataObjectResponse result = sdkClient.getDataObjectAsync(
+            GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build()
         ).toCompletableFuture().join();
         assertTrue(Objects.requireNonNull(result.getResponse()).isExists());
         assertEquals(TEST_TENANT_ID, Objects.requireNonNull(result.getResponse()).getSourceAsMap().get(TENANT_ID_FIELD_KEY));
@@ -1062,8 +1052,8 @@ public class LocalClusterIndicesClientTests {
             listener.onResponse(getResponse);
             return null;
         }).when(mockedClient).get(any(GetRequest.class), any());
-
-        boolean result = innerClient.isGlobalResource(TEST_INDEX, TEST_ID, null, null).toCompletableFuture().join();
+        SdkClient sdkClient = new SdkClient(innerClient, true, GLOBAL_TENANT_ID);
+        boolean result = sdkClient.isGlobalResource(TEST_INDEX, TEST_ID).toCompletableFuture().join();
         assertTrue(result);
 
         // Verify the request
@@ -1083,8 +1073,8 @@ public class LocalClusterIndicesClientTests {
             listener.onResponse(getResponse);
             return null;
         }).when(mockedClient).get(any(GetRequest.class), any());
-
-        boolean result = innerClient.isGlobalResource(TEST_INDEX, TEST_ID, null, null).toCompletableFuture().join();
+        SdkClient sdkClient = new SdkClient(innerClient, true, GLOBAL_TENANT_ID);
+        boolean result = sdkClient.isGlobalResource(TEST_INDEX, TEST_ID).toCompletableFuture().join();
         assertFalse(result);
     }
 
@@ -1097,8 +1087,8 @@ public class LocalClusterIndicesClientTests {
             listener.onResponse(getResponse);
             return null;
         }).when(mockedClient).get(any(GetRequest.class), any());
-
-        boolean result = innerClient.isGlobalResource(TEST_INDEX, TEST_ID, null, null).toCompletableFuture().join();
+        SdkClient sdkClient = new SdkClient(innerClient, true, GLOBAL_TENANT_ID);
+        boolean result = sdkClient.isGlobalResource(TEST_INDEX, TEST_ID).toCompletableFuture().join();
         assertFalse(result);
     }
 
@@ -1111,9 +1101,9 @@ public class LocalClusterIndicesClientTests {
             listener.onFailure(new RuntimeException("Test exception"));
             return null;
         }).when(mockedClient).get(any(GetRequest.class), any());
-
+        SdkClient sdkClient = new SdkClient(innerClient, true, GLOBAL_TENANT_ID);
         // Execute the method and verify result - should return false on exception
-        CompletableFuture<Boolean> future = innerClient.isGlobalResource(TEST_INDEX, TEST_ID, null, null).toCompletableFuture();
+        CompletableFuture<Boolean> future = sdkClient.isGlobalResource(TEST_INDEX, TEST_ID).toCompletableFuture();
         CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
         Throwable cause = ce.getCause();
         assertEquals(OpenSearchStatusException.class, cause.getClass());
@@ -1130,8 +1120,53 @@ public class LocalClusterIndicesClientTests {
             listener.onResponse(getResponse);
             return null;
         }).when(mockedClient).get(any(GetRequest.class), any());
-
-        boolean result = innerClient.isGlobalResource(TEST_INDEX, TEST_ID, null, null).toCompletableFuture().join();
+        SdkClient sdkClient = new SdkClient(innerClient, true, GLOBAL_TENANT_ID);
+        boolean result = sdkClient.isGlobalResource(TEST_INDEX, TEST_ID).toCompletableFuture().join();
         assertFalse(result);
+    }
+
+    @Test
+    public void testHandleOSDocumentBasedResponse_globalResourceEnabled_globalResourceFound() {
+        String json = "{\"" + TENANT_ID_FIELD + "\":\"" + GLOBAL_TENANT_ID + "\"}";
+        GetResponse getResponse = new GetResponse(new GetResult(TEST_INDEX, TEST_ID, -2, 0, 1, true, new BytesArray(json), null, null));
+        innerClient.setGlobalTenantId(GLOBAL_TENANT_ID);
+        GetDataObjectRequest request = mock(GetDataObjectRequest.class);
+        when(request.tenantId()).thenReturn(TEST_TENANT_ID);
+        GetDataObjectResponse response = mock(GetDataObjectResponse.class);
+        when(response.getResponse()).thenReturn(getResponse);
+        CompletionStage<GetDataObjectResponse> getDataObjectResponseCompletionStage = CompletableFuture.completedStage(response);
+        GetDataObjectResponse handledResponse = innerClient.handleOSDocumentBasedResponse(request, getDataObjectResponseCompletionStage)
+            .toCompletableFuture()
+            .join();
+        assertEquals(TEST_TENANT_ID, Objects.requireNonNull(handledResponse.getResponse()).getSourceAsMap().get(TENANT_ID_FIELD_KEY));
+    }
+
+    @Test
+    public void testHandleOSDocumentBasedResponse_globalResourceEnabled_resourceNotFound() {
+        GetResponse getResponse = new GetResponse(new GetResult(TEST_INDEX, TEST_ID, -2, 0, 1, false, null, null, null));
+        innerClient.setGlobalTenantId(GLOBAL_TENANT_ID);
+        GetDataObjectRequest request = mock(GetDataObjectRequest.class);
+        GetDataObjectResponse response = mock(GetDataObjectResponse.class);
+        when(response.getResponse()).thenReturn(getResponse);
+        CompletionStage<GetDataObjectResponse> getDataObjectResponseCompletionStage = CompletableFuture.completedStage(response);
+        GetDataObjectResponse handledResponse = innerClient.handleOSDocumentBasedResponse(request, getDataObjectResponseCompletionStage)
+            .toCompletableFuture()
+            .join();
+        assertFalse(Objects.requireNonNull(handledResponse.getResponse()).isExists());
+    }
+
+    @Test
+    public void testHandleOSDocumentBasedResponse_globalResourceEnabled_userResourceFound() {
+        String json = "{\"" + TENANT_ID_FIELD + "\":\"" + TEST_TENANT_ID + "\"}";
+        GetResponse getResponse = new GetResponse(new GetResult(TEST_INDEX, TEST_ID, -2, 0, 1, true, new BytesArray(json), null, null));
+        innerClient.setGlobalTenantId(GLOBAL_TENANT_ID);
+        GetDataObjectRequest request = mock(GetDataObjectRequest.class);
+        GetDataObjectResponse response = mock(GetDataObjectResponse.class);
+        when(response.getResponse()).thenReturn(getResponse);
+        CompletionStage<GetDataObjectResponse> getDataObjectResponseCompletionStage = CompletableFuture.completedStage(response);
+        GetDataObjectResponse handledResponse = innerClient.handleOSDocumentBasedResponse(request, getDataObjectResponseCompletionStage)
+            .toCompletableFuture()
+            .join();
+        assertEquals(TEST_TENANT_ID, Objects.requireNonNull(handledResponse.getResponse()).getSourceAsMap().get(TENANT_ID_FIELD_KEY));
     }
 }
