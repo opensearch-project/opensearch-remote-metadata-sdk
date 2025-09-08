@@ -31,7 +31,7 @@ public class SdkClient {
     private final Executor defaultExecutor;
     private final Boolean isMultiTenancyEnabled;
     private final String globalTenantId;
-    private static final String NO_PERMISSION_TO_OPERATE_GLOBAL_RESOURCE =
+    protected static final String NO_PERMISSION_TO_OPERATE_GLOBAL_RESOURCE =
         "The tenant id in request is not correct, or you don't have permission to operate on this resource!";
 
     /**
