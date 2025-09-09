@@ -101,6 +101,8 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
+import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY;
+import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_GLOBAL_TENANT_ID_KEY;
 import static org.opensearch.remote.metadata.common.CommonValue.TENANT_ID_FIELD_KEY;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -122,7 +124,7 @@ public class RemoteClusterIndicesClientTests {
     private static final String TEST_TENANT_ID = "xyz";
     private static final String TEST_THREAD_POOL = "test_pool";
     private static final String TEST_GLOBAL_TENANT_ID = "test_global_tenant";
-    private static final TimeValue TEST_GLOBAL_RESOURCE_CACHE_TTL = TimeValue.timeValueMillis(5 * 60 * 1000);
+    private static final String TEST_GLOBAL_RESOURCE_CACHE_TTL = "10000ms";
 
     private static TestThreadPool testThreadPool = new TestThreadPool(
         RemoteClusterIndicesClientTests.class.getName(),
@@ -1202,7 +1204,7 @@ public class RemoteClusterIndicesClientTests {
     public void testSearchDataObject_NullTenantNoMultitenancy() throws IOException {
         // Tests no status exception if multitenancy not enabled
         SdkClient sdkClientNoTenant = SdkClientFactory.wrapSdkClientDelegate(
-            new RemoteClusterIndicesClient(mockedOpenSearchAsyncClient, null),
+            new RemoteClusterIndicesClient(mockedOpenSearchAsyncClient, (String) null),
             false,
             null
         );
@@ -1310,7 +1312,17 @@ public class RemoteClusterIndicesClientTests {
         );
 
         SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(
-            new RemoteClusterIndicesClient(mockedOpenSearchAsyncClient, TENANT_ID_FIELD),
+            new RemoteClusterIndicesClient(
+                mockedOpenSearchAsyncClient,
+                Map.of(
+                    TENANT_ID_FIELD,
+                    TEST_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                    TEST_GLOBAL_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                    TEST_GLOBAL_RESOURCE_CACHE_TTL
+                )
+            ),
             true,
             TEST_GLOBAL_TENANT_ID
         );
@@ -1323,13 +1335,21 @@ public class RemoteClusterIndicesClientTests {
 
     @Test
     void test_getDataObject_withGlobalTenantId_resourceFound() throws IOException {
-        RemoteClusterIndicesClient remoteClusterIndicesClient = new RemoteClusterIndicesClient(
-            mockedOpenSearchAsyncClient,
-            TENANT_ID_FIELD
+        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(
+            new RemoteClusterIndicesClient(
+                mockedOpenSearchAsyncClient,
+                Map.of(
+                    TENANT_ID_FIELD,
+                    TEST_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                    TEST_GLOBAL_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                    TEST_GLOBAL_RESOURCE_CACHE_TTL
+                )
+            ),
+            true,
+            TEST_GLOBAL_TENANT_ID
         );
-        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(remoteClusterIndicesClient, true, TEST_GLOBAL_TENANT_ID);
-        remoteClusterIndicesClient.setGlobalTenantId(TEST_GLOBAL_TENANT_ID);
-        remoteClusterIndicesClient.setGlobalResourceCacheTTL(TEST_GLOBAL_RESOURCE_CACHE_TTL);
         GetDataObjectRequest request = mock(GetDataObjectRequest.class);
         when(request.index()).thenReturn(TEST_INDEX);
         when(request.id()).thenReturn(TEST_ID);
@@ -1357,11 +1377,21 @@ public class RemoteClusterIndicesClientTests {
 
     @Test
     void test_getDataObject_globalResourceDisabled_resourceFound() throws IOException {
-        RemoteClusterIndicesClient remoteClusterIndicesClient = new RemoteClusterIndicesClient(
-            mockedOpenSearchAsyncClient,
-            TENANT_ID_FIELD
+        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(
+            new RemoteClusterIndicesClient(
+                mockedOpenSearchAsyncClient,
+                Map.of(
+                    TENANT_ID_FIELD,
+                    TEST_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                    TEST_GLOBAL_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                    TEST_GLOBAL_RESOURCE_CACHE_TTL
+                )
+            ),
+            true,
+            TEST_GLOBAL_TENANT_ID
         );
-        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(remoteClusterIndicesClient, false, null);
         GetDataObjectRequest request = mock(GetDataObjectRequest.class);
         when(request.index()).thenReturn(TEST_INDEX);
         when(request.id()).thenReturn(TEST_ID);
@@ -1383,13 +1413,21 @@ public class RemoteClusterIndicesClientTests {
 
     @Test
     void test_getDataObject_withGlobalTenantId_resourceFound_readAgainFromCache() throws IOException {
-        RemoteClusterIndicesClient remoteClusterIndicesClient = new RemoteClusterIndicesClient(
-            mockedOpenSearchAsyncClient,
-            TENANT_ID_FIELD
+        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(
+            new RemoteClusterIndicesClient(
+                mockedOpenSearchAsyncClient,
+                Map.of(
+                    TENANT_ID_FIELD,
+                    TEST_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                    TEST_GLOBAL_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                    TEST_GLOBAL_RESOURCE_CACHE_TTL
+                )
+            ),
+            true,
+            TEST_GLOBAL_TENANT_ID
         );
-        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(remoteClusterIndicesClient, true, TEST_GLOBAL_TENANT_ID);
-        remoteClusterIndicesClient.setGlobalTenantId(TEST_GLOBAL_TENANT_ID);
-        remoteClusterIndicesClient.setGlobalResourceCacheTTL(TEST_GLOBAL_RESOURCE_CACHE_TTL);
         GetDataObjectRequest request = mock(GetDataObjectRequest.class);
         when(request.index()).thenReturn(TEST_INDEX);
         when(request.id()).thenReturn(TEST_ID);
@@ -1420,13 +1458,21 @@ public class RemoteClusterIndicesClientTests {
 
     @Test
     void test_isGlobalResource_whenGlobalResourceEnabled() throws IOException {
-        RemoteClusterIndicesClient remoteClusterIndicesClient = new RemoteClusterIndicesClient(
-            mockedOpenSearchAsyncClient,
-            TENANT_ID_FIELD
+        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(
+            new RemoteClusterIndicesClient(
+                mockedOpenSearchAsyncClient,
+                Map.of(
+                    TENANT_ID_FIELD,
+                    TEST_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                    TEST_GLOBAL_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                    TEST_GLOBAL_RESOURCE_CACHE_TTL
+                )
+            ),
+            true,
+            TEST_GLOBAL_TENANT_ID
         );
-        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(remoteClusterIndicesClient, true, TEST_GLOBAL_TENANT_ID);
-        remoteClusterIndicesClient.setGlobalTenantId(TEST_GLOBAL_TENANT_ID);
-        remoteClusterIndicesClient.setGlobalResourceCacheTTL(TEST_GLOBAL_RESOURCE_CACHE_TTL);
         GetDataObjectRequest request = mock(GetDataObjectRequest.class);
         when(request.index()).thenReturn(TEST_INDEX);
         when(request.id()).thenReturn(TEST_ID);
@@ -1475,13 +1521,21 @@ public class RemoteClusterIndicesClientTests {
     @Test
     void test_getDataObject_withGlobalTenantId_tryCoverDocumentBasedHandler() throws IOException, ExecutionException, InterruptedException,
         TimeoutException {
-        RemoteClusterIndicesClient remoteClusterIndicesClient = new RemoteClusterIndicesClient(
-            mockedOpenSearchAsyncClient,
-            TENANT_ID_FIELD
+        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(
+            new RemoteClusterIndicesClient(
+                mockedOpenSearchAsyncClient,
+                Map.of(
+                    TENANT_ID_FIELD,
+                    TEST_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                    TEST_GLOBAL_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                    TEST_GLOBAL_RESOURCE_CACHE_TTL
+                )
+            ),
+            true,
+            TEST_GLOBAL_TENANT_ID
         );
-        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(remoteClusterIndicesClient, true, TEST_GLOBAL_TENANT_ID);
-        remoteClusterIndicesClient.setGlobalTenantId(TEST_GLOBAL_TENANT_ID);
-        remoteClusterIndicesClient.setGlobalResourceCacheTTL(TEST_GLOBAL_RESOURCE_CACHE_TTL);
         GetDataObjectRequest request = mock(GetDataObjectRequest.class);
         when(request.index()).thenReturn(TEST_INDEX);
         when(request.id()).thenReturn(TEST_ID);
@@ -1497,17 +1551,13 @@ public class RemoteClusterIndicesClientTests {
             CompletableFuture.completedFuture(getResponse)
         );
 
-        CompletionStage<GetDataObjectResponse> result = sdkClient.getDataObjectAsync(request);
-        // assertEquals(TEST_TENANT_ID, result.source().get(TENANT_ID_FIELD_KEY));
-        // assertEquals(TEST_TENANT_ID, result.getResponse().getSourceAsMap().get(TENANT_ID_FIELD_KEY));
-        // assertTrue(
-        // result.getResponse().getSourceAsString().contains(TEST_TENANT_ID)
-        // && !result.getResponse().getSourceAsString().contains(TEST_GLOBAL_TENANT_ID)
-        // );
-        // assertFalse(new String(result.getResponse().getSourceAsBytes()).contains(TEST_GLOBAL_TENANT_ID));
-        // }
-        GetDataObjectResponse response = result.toCompletableFuture().get(10, TimeUnit.SECONDS);
-        assertNotNull(response);
+        GetDataObjectResponse result = sdkClient.getDataObjectAsync(request).toCompletableFuture().join();
+        assertEquals(TEST_TENANT_ID, result.source().get(TENANT_ID_FIELD_KEY));
+        assertEquals(TEST_TENANT_ID, result.getResponse().getSourceAsMap().get(TENANT_ID_FIELD_KEY));
+        assertTrue(
+            result.getResponse().getSourceAsString().contains(TEST_TENANT_ID)
+                && !result.getResponse().getSourceAsString().contains(TEST_GLOBAL_TENANT_ID)
+        );
+        assertFalse(new String(result.getResponse().getSourceAsBytes()).contains(TEST_GLOBAL_TENANT_ID));
     }
-
 }

@@ -84,6 +84,8 @@ import org.mockito.MockitoAnnotations;
 
 import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
 import static org.opensearch.remote.metadata.client.impl.DDBOpenSearchClient.simulateOpenSearchResponse;
+import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY;
+import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_GLOBAL_TENANT_ID_KEY;
 import static org.opensearch.remote.metadata.common.CommonValue.TENANT_ID_FIELD_KEY;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -114,7 +116,7 @@ public class DDBOpenSearchClientTests {
     private static final String TEST_THREAD_POOL = "test_pool";
     private static final String GLOBAL_TENANT_ID = "_global_tenant_id";
     private static final String TEST_TENANT_ID = "test_tenant_id";
-    private static final TimeValue TEST_GLOBAL_RESOURCE_CACHE_TTL = TimeValue.timeValueMillis(5 * 60 * 1000);
+    private static final String TEST_GLOBAL_RESOURCE_CACHE_TTL = "10000ms";
     private SdkClient sdkClient;
 
     @Mock
@@ -1188,8 +1190,22 @@ public class DDBOpenSearchClientTests {
         when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(itemNotExistResponse))
 
             .thenReturn(CompletableFuture.completedFuture(getItemResponse));
-        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalTenantId(GLOBAL_TENANT_ID);
-        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalResourceCacheTTL(TEST_GLOBAL_RESOURCE_CACHE_TTL);
+        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(
+            new DDBOpenSearchClient(
+                dynamoDbAsyncClient,
+                aosOpenSearchClient,
+                Map.of(
+                    TENANT_ID_FIELD_KEY,
+                    TEST_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                    GLOBAL_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                    TEST_GLOBAL_RESOURCE_CACHE_TTL
+                )
+            ),
+            true,
+            GLOBAL_TENANT_ID
+        );
         GetDataObjectResponse getDataObjectResponse = sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
             .join();
@@ -1232,8 +1248,22 @@ public class DDBOpenSearchClientTests {
         GetItemResponse getItemResponse = GetItemResponse.builder().item(itemResponse).build();
         when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(itemNotExistResponse))
             .thenReturn(CompletableFuture.completedFuture(getItemResponse));
-        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalTenantId(GLOBAL_TENANT_ID);
-        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalResourceCacheTTL(TEST_GLOBAL_RESOURCE_CACHE_TTL);
+        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(
+            new DDBOpenSearchClient(
+                dynamoDbAsyncClient,
+                aosOpenSearchClient,
+                Map.of(
+                    TENANT_ID_FIELD_KEY,
+                    TEST_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                    GLOBAL_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                    TEST_GLOBAL_RESOURCE_CACHE_TTL
+                )
+            ),
+            true,
+            GLOBAL_TENANT_ID
+        );
         sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join();
 
         GetDataObjectResponse getDataObjectResponse = sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(TEST_THREAD_POOL))
@@ -1262,8 +1292,22 @@ public class DDBOpenSearchClientTests {
         );
         GetItemResponse getItemResponse = GetItemResponse.builder().item(itemResponse).build();
         when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
-        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalTenantId(GLOBAL_TENANT_ID);
-        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalResourceCacheTTL(TEST_GLOBAL_RESOURCE_CACHE_TTL);
+        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(
+            new DDBOpenSearchClient(
+                dynamoDbAsyncClient,
+                aosOpenSearchClient,
+                Map.of(
+                    TENANT_ID_FIELD_KEY,
+                    TEST_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                    GLOBAL_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                    TEST_GLOBAL_RESOURCE_CACHE_TTL
+                )
+            ),
+            true,
+            GLOBAL_TENANT_ID
+        );
         GetDataObjectResponse getDataObjectResponse = sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(TEST_THREAD_POOL))
             .toCompletableFuture()
             .join(); // Read from cache.
@@ -1280,8 +1324,22 @@ public class DDBOpenSearchClientTests {
         );
         GetItemResponse getItemResponse = GetItemResponse.builder().item(itemResponse).build();
         when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
-        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalTenantId(GLOBAL_TENANT_ID);
-        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalResourceCacheTTL(TEST_GLOBAL_RESOURCE_CACHE_TTL);
+        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(
+            new DDBOpenSearchClient(
+                dynamoDbAsyncClient,
+                aosOpenSearchClient,
+                Map.of(
+                    TENANT_ID_FIELD_KEY,
+                    TEST_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                    GLOBAL_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                    TEST_GLOBAL_RESOURCE_CACHE_TTL
+                )
+            ),
+            true,
+            GLOBAL_TENANT_ID
+        );
         boolean isGlobalResource = sdkClient.isGlobalResource(TEST_INDEX, TEST_ID).toCompletableFuture().join();
         assertTrue(isGlobalResource);
     }
@@ -1325,7 +1383,22 @@ public class DDBOpenSearchClientTests {
             true,
             GLOBAL_TENANT_ID
         );
-        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalTenantId(GLOBAL_TENANT_ID);
+        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(
+            new DDBOpenSearchClient(
+                dynamoDbAsyncClient,
+                aosOpenSearchClient,
+                Map.of(
+                    TENANT_ID_FIELD_KEY,
+                    TEST_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                    GLOBAL_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                    TEST_GLOBAL_RESOURCE_CACHE_TTL
+                )
+            ),
+            true,
+            GLOBAL_TENANT_ID
+        );
         OpenSearchStatusException ex = assertThrows(
             OpenSearchStatusException.class,
             () -> sdkClient.putDataObjectAsync(putRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join()
@@ -1356,7 +1429,22 @@ public class DDBOpenSearchClientTests {
             true,
             GLOBAL_TENANT_ID
         );
-        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalTenantId(GLOBAL_TENANT_ID);
+        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(
+            new DDBOpenSearchClient(
+                dynamoDbAsyncClient,
+                aosOpenSearchClient,
+                Map.of(
+                    TENANT_ID_FIELD_KEY,
+                    TEST_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                    GLOBAL_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                    TEST_GLOBAL_RESOURCE_CACHE_TTL
+                )
+            ),
+            true,
+            GLOBAL_TENANT_ID
+        );
 
         OpenSearchStatusException ex = assertThrows(
             OpenSearchStatusException.class,
@@ -1383,7 +1471,22 @@ public class DDBOpenSearchClientTests {
             true,
             GLOBAL_TENANT_ID
         );
-        ((DDBOpenSearchClient) sdkClient.getDelegate()).setGlobalTenantId(GLOBAL_TENANT_ID);
+        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(
+            new DDBOpenSearchClient(
+                dynamoDbAsyncClient,
+                aosOpenSearchClient,
+                Map.of(
+                    TENANT_ID_FIELD_KEY,
+                    TEST_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                    GLOBAL_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                    TEST_GLOBAL_RESOURCE_CACHE_TTL
+                )
+            ),
+            true,
+            GLOBAL_TENANT_ID
+        );
 
         OpenSearchStatusException ex = assertThrows(
             OpenSearchStatusException.class,

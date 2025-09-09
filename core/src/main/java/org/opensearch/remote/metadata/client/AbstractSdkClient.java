@@ -247,14 +247,4 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
             .map(y -> Objects.equals(y, globalTenantId))
             .orElse(false);
     }
-
-    // Visible for testing
-    public void setGlobalTenantId(String globalTenantId) {
-        this.globalTenantId = globalTenantId;
-    }
-
-    // visible for testing
-    public void setGlobalResourceCacheTTL(TimeValue globalResourceCacheTTL) {
-        this.globalResourceCacheTTL = globalResourceCacheTTL;
-    }
 }

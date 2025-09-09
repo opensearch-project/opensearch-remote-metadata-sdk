@@ -140,6 +140,17 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         this.mapper = openSearchAsyncClient._transport().jsonpMapper();
     }
 
+    /**
+     * Package Private constructor for testing
+     * @param openSearchAsyncClient an OpenSearch async client (or mock for testing)
+     * @param metadataSettings the metadata map that used by the class.
+     */
+    RemoteClusterIndicesClient(OpenSearchAsyncClient openSearchAsyncClient, Map<String, String> metadataSettings) {
+        super.initialize(metadataSettings);
+        this.openSearchAsyncClient = openSearchAsyncClient;
+        this.mapper = openSearchAsyncClient._transport().jsonpMapper();
+    }
+
     @Override
     public CompletionStage<PutDataObjectResponse> putDataObjectAsync(
         PutDataObjectRequest request,
