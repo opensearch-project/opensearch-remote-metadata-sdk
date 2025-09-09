@@ -103,7 +103,7 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
     }
 
     /**
-     * Handle the result queried either from remote AOS cluster or local cluster which returns OpenSearch document results.
+     * Handle the result queried either from remote AWS Opensearch managed domain or local cluster which returns OpenSearch document results.
      * @param request the original request.
      * @param dataFetched data fetched with original request.
      * @return {@link CompletionStage<GetDataObjectResponse>} which either is the user's resource or global resource been added to cache then replaced the tenant id to which from request.

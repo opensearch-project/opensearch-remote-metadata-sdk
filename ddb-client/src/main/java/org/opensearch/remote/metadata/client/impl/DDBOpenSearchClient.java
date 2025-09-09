@@ -81,6 +81,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -249,7 +250,12 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
     }
 
     /**
-     * Fetches data document from DDB. Default tenant ID will be used if tenant ID is not specified.
+     * 0. Tenant_id: Fetches data document from DDB. Default tenant ID will be used if tenant ID is not specified.
+     * The fetching flow is:
+     * 1. If global resource is not enabled, fetch data with tenant_id in step 0.
+     * 2. If global resource enabled, fetch from cache and return if found.
+     * 3. If not found, fetch with tenant_id in step 0, return if found.
+     * 4. If not found, fetch with global tenant id and add to cache if found, then return result to user.
      *
      * {@inheritDoc}
      */
@@ -270,8 +276,8 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         // fetch resource with user tenant id.
         CompletionStage<GetDataObjectResponse> getDataFromDynamoDB = innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
         return getDataFromDynamoDB.thenCompose(response -> {
-            // Extract the `found` in the source map to confirm if the item exists.
-            if (response != null && Boolean.TRUE.equals(Boolean.parseBoolean(String.valueOf(response.source().get("found"))))) {
+            // return the document if it's not exist.
+            if (Optional.ofNullable(response).map(GetDataObjectResponse::getResponse).map(GetResponse::isExists).orElse(false)) {
                 return CompletableFuture.completedFuture(response);
             }
 
