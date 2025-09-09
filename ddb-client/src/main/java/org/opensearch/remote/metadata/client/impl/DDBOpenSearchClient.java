@@ -149,6 +149,24 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
     }
 
     /**
+     * Package private constructor for testing
+     *
+     * @param dynamoDbAsyncClient AWS DDB async client to perform CRUD operations on a DDB table.
+     * @param aosOpenSearchClient Remote opensearch client to perform search operations. Documents written to DDB
+     *                                  needs to be synced offline with remote opensearch.
+     * @param metadataSettings metadata settings used in the class.
+     */
+    DDBOpenSearchClient(
+        DynamoDbAsyncClient dynamoDbAsyncClient,
+        AOSOpenSearchClient aosOpenSearchClient,
+        Map<String, String> metadataSettings
+    ) {
+        super.initialize(metadataSettings);
+        this.dynamoDbAsyncClient = dynamoDbAsyncClient;
+        this.aosOpenSearchClient = aosOpenSearchClient;
+    }
+
+    /**
      * DDB implementation to write data objects to DDB table. Tenant ID will be used as hash key and document ID will
      * be used as range key. If tenant ID is not defined a default tenant ID will be used. If document ID is not defined
      * a random UUID will be generated. Data object will be written as a nested DDB attribute.
