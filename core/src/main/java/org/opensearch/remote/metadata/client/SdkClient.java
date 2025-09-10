@@ -31,8 +31,7 @@ public class SdkClient {
     private final Executor defaultExecutor;
     private final Boolean isMultiTenancyEnabled;
     private final String globalTenantId;
-    protected static final String NO_PERMISSION_TO_OPERATE_GLOBAL_RESOURCE =
-        "The tenant id in request is not correct, or you don't have permission to operate on this resource!";
+    protected static final String NO_PERMISSION_TO_OPERATE_GLOBAL_RESOURCE = "You don't have permission to operate on this resource!";
 
     /**
      * Instantiate this client with the {@link ForkJoinPool#commonPool()} as the default executor
