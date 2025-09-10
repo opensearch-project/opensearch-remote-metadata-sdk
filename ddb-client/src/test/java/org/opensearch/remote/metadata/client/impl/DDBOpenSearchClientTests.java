@@ -1403,7 +1403,7 @@ public class DDBOpenSearchClientTests {
             OpenSearchStatusException.class,
             () -> sdkClient.putDataObjectAsync(putRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join()
         );
-        assertEquals("The tenant id in request is not correct, or you don't have permission to operate on this resource!", ex.getMessage());
+        assertEquals("You don't have permission to operate on this resource!", ex.getMessage());
     }
 
     @Test
@@ -1450,7 +1450,7 @@ public class DDBOpenSearchClientTests {
             OpenSearchStatusException.class,
             () -> sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join()
         );
-        assertEquals("The tenant id in request is not correct, or you don't have permission to operate on this resource!", ex.getMessage());
+        assertEquals("You don't have permission to operate on this resource!", ex.getMessage());
     }
 
     @Test
@@ -1493,6 +1493,6 @@ public class DDBOpenSearchClientTests {
             () -> sdkClient.deleteDataObjectAsync(deleteRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join()
         );
 
-        assertEquals("The tenant id in request is not correct, or you don't have permission to operate on this resource!", ex.getMessage());
+        assertEquals("You don't have permission to operate on this resource!", ex.getMessage());
     }
 }
