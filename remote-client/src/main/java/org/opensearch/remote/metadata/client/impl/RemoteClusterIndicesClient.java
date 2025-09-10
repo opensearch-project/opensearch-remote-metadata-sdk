@@ -87,6 +87,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
@@ -135,6 +136,17 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
      */
     RemoteClusterIndicesClient(OpenSearchAsyncClient openSearchAsyncClient, String tenantIdField) {
         super.initialize(Collections.singletonMap(TENANT_ID_FIELD_KEY, tenantIdField));
+        this.openSearchAsyncClient = openSearchAsyncClient;
+        this.mapper = openSearchAsyncClient._transport().jsonpMapper();
+    }
+
+    /**
+     * Package Private constructor for testing
+     * @param openSearchAsyncClient an OpenSearch async client (or mock for testing)
+     * @param metadataSettings the metadata map that used by the class.
+     */
+    RemoteClusterIndicesClient(OpenSearchAsyncClient openSearchAsyncClient, Map<String, String> metadataSettings) {
+        super.initialize(metadataSettings);
         this.openSearchAsyncClient = openSearchAsyncClient;
         this.mapper = openSearchAsyncClient._transport().jsonpMapper();
     }
@@ -205,6 +217,31 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
 
     @Override
     public CompletionStage<GetDataObjectResponse> getDataObjectAsync(
+        GetDataObjectRequest request,
+        Executor executor,
+        Boolean isMultiTenancyEnabled
+    ) {
+        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
+            return innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
+        }
+        // First check cache for global resource
+        GetDataObjectResponse cachedResponse = getGlobalResourceDataFromCache(request);
+        if (cachedResponse != null) {
+            return CompletableFuture.completedFuture(cachedResponse);
+        }
+
+        CompletionStage<GetDataObjectResponse> dataFetched = innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
+        return handleOSDocumentBasedResponse(request, dataFetched);
+    }
+
+    /**
+     * Get data from remote cluster
+     * @param request The request that contains index, id and nullable tenant_id.
+     * @param executor the executor for the action
+     * @param isMultiTenancyEnabled is multi tenancy enabled flag.
+     * @return A {@link CompletionStage} of {@link GetDataObjectResponse} the fetched result encapsulated into a CompletionStage.
+     */
+    protected CompletionStage<GetDataObjectResponse> innerGetDataObjectAsync(
         GetDataObjectRequest request,
         Executor executor,
         Boolean isMultiTenancyEnabled

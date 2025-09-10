@@ -28,6 +28,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import static org.opensearch.remote.metadata.client.SdkClient.NO_PERMISSION_TO_OPERATE_GLOBAL_RESOURCE;
 import static org.junit.Assert.assertSame;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -44,6 +45,7 @@ import static org.mockito.Mockito.when;
 public class SdkClientTests {
 
     private static final String TENANT_ID = "test_id";
+    private static final String GLOBAL_TENANT_ID = "global_tenant_id";
     private SdkClient sdkClient;
     private AbstractSdkClient sdkClientImpl;
 
@@ -86,6 +88,15 @@ public class SdkClientTests {
 
         sdkClientImpl = spy(new AbstractSdkClient() {
             @Override
+            protected CompletionStage<GetDataObjectResponse> innerGetDataObjectAsync(
+                GetDataObjectRequest request,
+                Executor executor,
+                Boolean isMultiTenancyEnabled
+            ) {
+                return CompletableFuture.completedFuture(getResponse);
+            }
+
+            @Override
             public CompletionStage<PutDataObjectResponse> putDataObjectAsync(
                 PutDataObjectRequest request,
                 Executor executor,
@@ -100,7 +111,7 @@ public class SdkClientTests {
                 Executor executor,
                 Boolean isMultiTenancyEnabled
             ) {
-                return CompletableFuture.completedFuture(getResponse);
+                return innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
             }
 
             @Override
@@ -147,7 +158,7 @@ public class SdkClientTests {
             @Override
             public void close() throws Exception {}
         });
-        sdkClient = new SdkClient(sdkClientImpl, true);
+        sdkClient = new SdkClient(sdkClientImpl, true, GLOBAL_TENANT_ID);
         testException = new OpenSearchStatusException("Test", RestStatus.BAD_REQUEST);
         interruptedException = new InterruptedException();
     }
@@ -162,6 +173,13 @@ public class SdkClientTests {
     public void testPutDataObjectNullTenantId() {
         when(putRequest.tenantId()).thenReturn(null);
         assertThrows(IllegalArgumentException.class, () -> sdkClient.putDataObject(putRequest));
+    }
+
+    @Test
+    public void testPutDataObjectGlobalTenantId() {
+        when(putRequest.tenantId()).thenReturn(GLOBAL_TENANT_ID);
+        OpenSearchStatusException exception = assertThrows(OpenSearchStatusException.class, () -> sdkClient.putDataObject(putRequest));
+        assertEquals(NO_PERMISSION_TO_OPERATE_GLOBAL_RESOURCE, exception.getMessage());
     }
 
     @Test
@@ -201,6 +219,13 @@ public class SdkClientTests {
     }
 
     @Test
+    public void testGetDataObjectGlobalTenantId() {
+        when(getRequest.tenantId()).thenReturn(GLOBAL_TENANT_ID);
+        OpenSearchStatusException exception = assertThrows(OpenSearchStatusException.class, () -> sdkClient.getDataObject(getRequest));
+        assertEquals(NO_PERMISSION_TO_OPERATE_GLOBAL_RESOURCE, exception.getMessage());
+    }
+
+    @Test
     public void testGetDataObjectException() {
         when(sdkClientImpl.getDataObjectAsync(any(GetDataObjectRequest.class), any(Executor.class), anyBoolean())).thenReturn(
             CompletableFuture.failedFuture(testException)
@@ -234,6 +259,16 @@ public class SdkClientTests {
     public void testUpdateDataObjectNullTenantId() {
         when(updateRequest.tenantId()).thenReturn(null);
         assertThrows(IllegalArgumentException.class, () -> sdkClient.updateDataObject(updateRequest));
+    }
+
+    @Test
+    public void testUpdateDataObjectGlobalTenantId() {
+        when(updateRequest.tenantId()).thenReturn(GLOBAL_TENANT_ID);
+        OpenSearchStatusException exception = assertThrows(
+            OpenSearchStatusException.class,
+            () -> sdkClient.updateDataObject(updateRequest)
+        );
+        assertEquals(NO_PERMISSION_TO_OPERATE_GLOBAL_RESOURCE, exception.getMessage());
     }
 
     @Test
@@ -271,6 +306,16 @@ public class SdkClientTests {
     public void testDeleteDataObjectNullTenantId() {
         when(deleteRequest.tenantId()).thenReturn(null);
         assertThrows(IllegalArgumentException.class, () -> sdkClient.deleteDataObject(deleteRequest));
+    }
+
+    @Test
+    public void testDeleteDataObjectGlobalTenantId() {
+        when(deleteRequest.tenantId()).thenReturn(GLOBAL_TENANT_ID);
+        OpenSearchStatusException exception = assertThrows(
+            OpenSearchStatusException.class,
+            () -> sdkClient.deleteDataObject(deleteRequest)
+        );
+        assertEquals(NO_PERMISSION_TO_OPERATE_GLOBAL_RESOURCE, exception.getMessage());
     }
 
     @Test
@@ -398,7 +443,7 @@ public class SdkClientTests {
 
     @Test
     public void testDefaultExecutor() {
-        SdkClient sdkClient = new SdkClient(sdkClientImpl, false);
+        SdkClient sdkClient = new SdkClient(sdkClientImpl, false, null);
         ArgumentCaptor<Executor> executorCaptor = ArgumentCaptor.forClass(Executor.class);
         when(sdkClientImpl.getDataObjectAsync(any(GetDataObjectRequest.class), executorCaptor.capture(), anyBoolean()))
             .thenCallRealMethod();
@@ -410,7 +455,7 @@ public class SdkClientTests {
     @Test
     public void testCustomExecutor() {
         Executor customExecutor = mock(Executor.class);
-        SdkClient sdkClient = new SdkClient(sdkClientImpl, customExecutor, false);
+        SdkClient sdkClient = new SdkClient(sdkClientImpl, customExecutor, false, null);
         ArgumentCaptor<Executor> executorCaptor = ArgumentCaptor.forClass(Executor.class);
         when(sdkClientImpl.getDataObjectAsync(any(GetDataObjectRequest.class), executorCaptor.capture(), anyBoolean()))
             .thenCallRealMethod();

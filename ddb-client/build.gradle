@@ -11,4 +11,5 @@ dependencies {
 
     implementation(platform("software.amazon.awssdk:bom:${versions.aws}"))
     implementation "software.amazon.awssdk:dynamodb"
+    implementation "software.amazon.awssdk:netty-nio-client"
 }

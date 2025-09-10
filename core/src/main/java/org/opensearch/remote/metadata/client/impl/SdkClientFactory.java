@@ -22,6 +22,7 @@ import java.util.ServiceLoader;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ForkJoinPool;
 
+import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_GLOBAL_TENANT_ID_KEY;
 import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_TYPE_KEY;
 import static org.opensearch.remote.metadata.common.CommonValue.TENANT_AWARE_KEY;
 
@@ -58,6 +59,7 @@ public class SdkClientFactory {
     ) {
         String remoteMetadataType = metadataSettings.get(REMOTE_METADATA_TYPE_KEY);
         Boolean multiTenancy = Boolean.parseBoolean(metadataSettings.get(TENANT_AWARE_KEY));
+        String globalTenantId = metadataSettings.get(REMOTE_METADATA_GLOBAL_TENANT_ID_KEY);
 
         ServiceLoader<SdkClientDelegate> loader = ServiceLoader.load(SdkClientDelegate.class, SdkClientDelegate.class.getClassLoader());
         Iterator<SdkClientDelegate> iterator = loader.iterator();
@@ -65,7 +67,7 @@ public class SdkClientFactory {
         if (Strings.isNullOrEmpty(remoteMetadataType)) {
             // Default client does not use SPI
             log.info("Using local opensearch cluster as metadata store.", remoteMetadataType);
-            return createDefaultClient(client, xContentRegistry, metadataSettings, defaultExecutor, multiTenancy);
+            return createDefaultClient(client, xContentRegistry, metadataSettings, defaultExecutor, multiTenancy, globalTenantId);
         } else {
             // Use SPI to find the correct client
             while (iterator.hasNext()) {
@@ -73,14 +75,14 @@ public class SdkClientFactory {
                 if (delegate.supportsMetadataType(remoteMetadataType)) {
                     log.info("Using {} as metadata store.", remoteMetadataType);
                     delegate.initialize(metadataSettings);
-                    return new SdkClient(delegate, defaultExecutor, multiTenancy);
+                    return new SdkClient(delegate, defaultExecutor, multiTenancy, globalTenantId);
                 }
             }
         }
 
         // If no suitable implementation is found, use the default
         log.warn("Unable to find {} client implementation. Using local opensearch cluster as metadata store.", remoteMetadataType);
-        return createDefaultClient(client, xContentRegistry, metadataSettings, defaultExecutor, multiTenancy);
+        return createDefaultClient(client, xContentRegistry, metadataSettings, defaultExecutor, multiTenancy, globalTenantId);
     }
 
     private static SdkClient createDefaultClient(
@@ -88,14 +90,15 @@ public class SdkClientFactory {
         NamedXContentRegistry xContentRegistry,
         Map<String, String> metadataSettings,
         Executor defaultExecutor,
-        Boolean multiTenancy
+        Boolean multiTenancy,
+        String globalTenantId
     ) {
         LocalClusterIndicesClient defaultclient = new LocalClusterIndicesClient(client, xContentRegistry, metadataSettings);
-        return new SdkClient(defaultclient, defaultExecutor, multiTenancy);
+        return new SdkClient(defaultclient, defaultExecutor, multiTenancy, globalTenantId);
     }
 
     // Package private for testing
-    static SdkClient wrapSdkClientDelegate(SdkClientDelegate delegate, Boolean multiTenancy) {
-        return new SdkClient(delegate, multiTenancy);
+    static SdkClient wrapSdkClientDelegate(SdkClientDelegate delegate, Boolean multiTenancy, String globalTenantId) {
+        return new SdkClient(delegate, multiTenancy, globalTenantId);
     }
 }

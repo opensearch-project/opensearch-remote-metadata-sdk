@@ -66,6 +66,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.util.EnumSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
@@ -76,6 +77,8 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
+import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY;
+import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_GLOBAL_TENANT_ID_KEY;
 import static org.opensearch.remote.metadata.common.CommonValue.TENANT_ID_FIELD_KEY;
 import static org.junit.Assert.assertNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -94,6 +97,8 @@ public class LocalClusterIndicesClientTests {
     private static final String TEST_INDEX = "test_index";
     private static final String TEST_TENANT_ID = "xyz";
     private static final String TENANT_ID_FIELD = "tenant_id";
+    private static final String GLOBAL_TENANT_ID = "test_global_tenant";
+    private LocalClusterIndicesClient innerClient;
 
     @Mock
     private Client mockedClient;
@@ -108,12 +113,8 @@ public class LocalClusterIndicesClientTests {
     public void setup() {
         MockitoAnnotations.openMocks(this);
 
-        LocalClusterIndicesClient innerClient = new LocalClusterIndicesClient(
-            mockedClient,
-            xContentRegistry,
-            Map.of(TENANT_ID_FIELD_KEY, TENANT_ID_FIELD)
-        );
-        sdkClient = new SdkClient(innerClient, true);
+        innerClient = new LocalClusterIndicesClient(mockedClient, xContentRegistry, Map.of(TENANT_ID_FIELD_KEY, TENANT_ID_FIELD));
+        sdkClient = new SdkClient(innerClient, true, null);
 
         testDataObject = new TestDataObject("foo");
     }
@@ -821,7 +822,7 @@ public class LocalClusterIndicesClientTests {
             xContentRegistry,
             Map.of(TENANT_ID_FIELD_KEY, TENANT_ID_FIELD)
         );
-        SdkClient sdkClientNoTenant = new SdkClient(innerClient, false);
+        SdkClient sdkClientNoTenant = new SdkClient(innerClient, false, null);
         SearchDataObjectResponse response = sdkClientNoTenant.searchDataObjectAsync(searchRequest).toCompletableFuture().join();
 
         ArgumentCaptor<SearchRequest> requestCaptor = ArgumentCaptor.forClass(SearchRequest.class);
@@ -940,7 +941,7 @@ public class LocalClusterIndicesClientTests {
             xContentRegistry,
             Map.of(TENANT_ID_FIELD_KEY, TENANT_ID_FIELD)
         );
-        SdkClient sdkClientNoTenant = new SdkClient(innerClient, false);
+        SdkClient sdkClientNoTenant = new SdkClient(innerClient, false, null);
 
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
         SearchDataObjectRequest searchRequest = SearchDataObjectRequest.builder()
@@ -961,5 +962,328 @@ public class LocalClusterIndicesClientTests {
         Throwable cause = ce.getCause();
         assertEquals(OpenSearchStatusException.class, cause.getClass());
         assertEquals("Failed to search indices [test_index]", cause.getMessage());
+    }
+
+    @Test
+    public void test_initialize() {
+        innerClient.initialize(Map.of(REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY, "1ms"));
+        innerClient.initialize(Map.of(REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY, "-1ms"));
+    }
+
+    @Test
+    public void testGetDataAsync_WithGlobalTenantId_resourceFound() {
+        String json = "{\"" + TENANT_ID_FIELD + "\":\"" + GLOBAL_TENANT_ID + "\"}";
+        GetResponse getResponse = new GetResponse(new GetResult(TEST_INDEX, TEST_ID, -2, 0, 1, true, new BytesArray(json), null, null));
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(1);
+            listener.onResponse(getResponse);
+            return null;
+        }).when(mockedClient).get(any(GetRequest.class), any());
+        LocalClusterIndicesClient innerClient = new LocalClusterIndicesClient(
+            mockedClient,
+            xContentRegistry,
+            Map.of(TENANT_ID_FIELD_KEY, TENANT_ID_FIELD, REMOTE_METADATA_GLOBAL_TENANT_ID_KEY, GLOBAL_TENANT_ID)
+        );
+        SdkClient sdkClient = new SdkClient(innerClient, true, GLOBAL_TENANT_ID);
+        GetDataObjectResponse result = sdkClient.getDataObjectAsync(
+            GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build()
+        ).toCompletableFuture().join();
+        assertTrue(Objects.requireNonNull(result.getResponse()).isExists());
+        assertEquals(TEST_TENANT_ID, Objects.requireNonNull(result.getResponse()).getSourceAsMap().get(TENANT_ID_FIELD_KEY));
+    }
+
+    @Test
+    public void testGetDataAsync_WithGlobalTenantId_notGlobalResource() {
+        String notGlobalDocId = "not_global_doc_id";
+        String json = "{\"" + TENANT_ID_FIELD + "\":\"" + TEST_TENANT_ID + "\"}";
+        GetResponse getResponse = new GetResponse(
+            new GetResult(TEST_INDEX, notGlobalDocId, -2, 0, 1, true, new BytesArray(json), null, null)
+        );
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(1);
+            listener.onResponse(getResponse);
+            return null;
+        }).when(mockedClient).get(any(GetRequest.class), any());
+        LocalClusterIndicesClient innerClient = new LocalClusterIndicesClient(
+            mockedClient,
+            xContentRegistry,
+            Map.of(TENANT_ID_FIELD_KEY, TENANT_ID_FIELD, REMOTE_METADATA_GLOBAL_TENANT_ID_KEY, GLOBAL_TENANT_ID)
+        );
+        SdkClient sdkClient = new SdkClient(innerClient, true, GLOBAL_TENANT_ID);
+        GetDataObjectResponse result = sdkClient.getDataObjectAsync(
+            GetDataObjectRequest.builder().index(TEST_INDEX).id(notGlobalDocId).tenantId(TEST_TENANT_ID).build()
+        ).toCompletableFuture().join();
+        assertTrue(Objects.requireNonNull(result.getResponse()).isExists());
+        assertEquals(TEST_TENANT_ID, Objects.requireNonNull(result.getResponse()).getSourceAsMap().get(TENANT_ID_FIELD_KEY));
+    }
+
+    @Test
+    public void testGetDataAsync_WithGlobalTenantId_foundFromCache() {
+        String cacheDocId = "456";
+        String json = "{\"" + TENANT_ID_FIELD + "\":\"" + GLOBAL_TENANT_ID + "\"}";
+        GetResponse getResponse = new GetResponse(new GetResult(TEST_INDEX, cacheDocId, -2, 0, 1, true, new BytesArray(json), null, null));
+        LocalClusterIndicesClient innerClient = new LocalClusterIndicesClient(
+            mockedClient,
+            xContentRegistry,
+            Map.of(TENANT_ID_FIELD_KEY, TENANT_ID_FIELD, REMOTE_METADATA_GLOBAL_TENANT_ID_KEY, GLOBAL_TENANT_ID)
+        );
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(1);
+            listener.onResponse(getResponse);
+            return null;
+        }).when(mockedClient).get(any(GetRequest.class), any());
+        SdkClient sdkClient = new SdkClient(innerClient, true, GLOBAL_TENANT_ID);
+        GetDataObjectResponse result = sdkClient.getDataObjectAsync(
+            GetDataObjectRequest.builder().index(TEST_INDEX).id(cacheDocId).tenantId(TEST_TENANT_ID).build()
+        ).toCompletableFuture().join();
+        assertTrue(Objects.requireNonNull(result.getResponse()).isExists());
+
+        GetDataObjectResponse resultFromCache = sdkClient.getDataObjectAsync(
+            GetDataObjectRequest.builder().index(TEST_INDEX).id(cacheDocId).tenantId(TEST_TENANT_ID).build()
+        ).toCompletableFuture().join();
+        assertTrue(Objects.requireNonNull(resultFromCache.getResponse()).isExists());
+        assertEquals(TEST_TENANT_ID, Objects.requireNonNull(result.getResponse()).getSourceAsMap().get(TENANT_ID_FIELD_KEY));
+    }
+
+    @Test
+    public void testGetDataAsync_WithGlobalTenantId_cacheExpired() throws InterruptedException {
+        String cacheExpiredDocId = "cache_expired_doc_id";
+        String json = "{\"" + TENANT_ID_FIELD + "\":\"" + GLOBAL_TENANT_ID + "\"}";
+        GetResponse getResponse = new GetResponse(
+            new GetResult(TEST_INDEX, cacheExpiredDocId, -2, 0, 1, true, new BytesArray(json), null, null)
+        );
+        LocalClusterIndicesClient innerClient = new LocalClusterIndicesClient(
+            mockedClient,
+            xContentRegistry,
+            Map.of(
+                TENANT_ID_FIELD_KEY,
+                TENANT_ID_FIELD,
+                REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                GLOBAL_TENANT_ID,
+                REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                "1ms"
+            )
+        );
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(1);
+            listener.onResponse(getResponse);
+            return null;
+        }).when(mockedClient).get(any(GetRequest.class), any());
+        SdkClient sdkClient = new SdkClient(innerClient, true, GLOBAL_TENANT_ID);
+        GetDataObjectResponse result = sdkClient.getDataObjectAsync(
+            GetDataObjectRequest.builder().index(TEST_INDEX).id(cacheExpiredDocId).tenantId(TEST_TENANT_ID).build()
+        ).toCompletableFuture().join();
+        assertTrue(Objects.requireNonNull(result.getResponse()).isExists());
+
+        Thread.sleep(2);
+        GetDataObjectResponse resultFromCache = sdkClient.getDataObjectAsync(
+            GetDataObjectRequest.builder().index(TEST_INDEX).id(cacheExpiredDocId).tenantId(TEST_TENANT_ID).build()
+        ).toCompletableFuture().join();
+        assertTrue(Objects.requireNonNull(resultFromCache.getResponse()).isExists());
+        assertEquals(TEST_TENANT_ID, Objects.requireNonNull(result.getResponse()).getSourceAsMap().get(TENANT_ID_FIELD_KEY));
+    }
+
+    @Test
+    public void testGetDataAsync_WithGlobalTenantId_ttlSetTo0_notAddToCache() {
+        String toCachedDocId = "to_cached_doc_id_ttl_is_0";
+        String json = "{\"" + TENANT_ID_FIELD + "\":\"" + GLOBAL_TENANT_ID + "\"}";
+        GetResponse getResponse = new GetResponse(
+            new GetResult(TEST_INDEX, toCachedDocId, -2, 0, 1, true, new BytesArray(json), null, null)
+        );
+        LocalClusterIndicesClient innerClient = new LocalClusterIndicesClient(
+            mockedClient,
+            xContentRegistry,
+            Map.of(
+                TENANT_ID_FIELD_KEY,
+                TENANT_ID_FIELD,
+                REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                GLOBAL_TENANT_ID,
+                REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                "0ms"
+            )
+        );
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(1);
+            listener.onResponse(getResponse);
+            return null;
+        }).when(mockedClient).get(any(GetRequest.class), any());
+        SdkClient sdkClient = new SdkClient(innerClient, true, GLOBAL_TENANT_ID);
+        GetDataObjectResponse result = sdkClient.getDataObjectAsync(
+            GetDataObjectRequest.builder().index(TEST_INDEX).id(toCachedDocId).tenantId(TEST_TENANT_ID).build()
+        ).toCompletableFuture().join();
+        assertTrue(Objects.requireNonNull(result.getResponse()).isExists());
+    }
+
+    @Test
+    public void testGetDataAsync_WithUserTenantId_resourceFound() {
+        String json = "{\"" + TENANT_ID_FIELD + "\":\"" + TEST_TENANT_ID + "\"}";
+        GetResponse getResponse = new GetResponse(new GetResult(TEST_INDEX, TEST_ID, -2, 0, 1, true, new BytesArray(json), null, null));
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(1);
+            listener.onResponse(getResponse);
+            return null;
+        }).when(mockedClient).get(any(GetRequest.class), any());
+        LocalClusterIndicesClient innerClient = new LocalClusterIndicesClient(
+            mockedClient,
+            xContentRegistry,
+            Map.of(TENANT_ID_FIELD_KEY, TENANT_ID_FIELD, REMOTE_METADATA_GLOBAL_TENANT_ID_KEY, GLOBAL_TENANT_ID)
+        );
+        SdkClient sdkClient = new SdkClient(innerClient, true, GLOBAL_TENANT_ID);
+        GetDataObjectResponse result = sdkClient.getDataObjectAsync(
+            GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build()
+        ).toCompletableFuture().join();
+        assertTrue(Objects.requireNonNull(result.getResponse()).isExists());
+        assertEquals(TEST_TENANT_ID, Objects.requireNonNull(result.getResponse()).getSourceAsMap().get(TENANT_ID_FIELD_KEY));
+    }
+
+    @Test
+    public void testGetDataAsync_WithUserTenantId_resourceNotFound() {
+        String userDocId = "789";
+        GetResponse getResponse = new GetResponse(new GetResult(TEST_INDEX, userDocId, -2, 0, 1, false, null, null, null));
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(1);
+            listener.onResponse(getResponse);
+            return null;
+        }).when(mockedClient).get(any(GetRequest.class), any());
+        LocalClusterIndicesClient innerClient = new LocalClusterIndicesClient(
+            mockedClient,
+            xContentRegistry,
+            Map.of(TENANT_ID_FIELD_KEY, TENANT_ID_FIELD, REMOTE_METADATA_GLOBAL_TENANT_ID_KEY, GLOBAL_TENANT_ID)
+        );
+        SdkClient sdkClient = new SdkClient(innerClient, true, GLOBAL_TENANT_ID);
+        GetDataObjectResponse result = sdkClient.getDataObjectAsync(
+            GetDataObjectRequest.builder().index(TEST_INDEX).id(userDocId).tenantId(TEST_TENANT_ID).build()
+        ).toCompletableFuture().join();
+        assertFalse(Objects.requireNonNull(result.getResponse()).isExists());
+    }
+
+    @Test
+    public void testIsGlobalResource_WithGlobalTenantId() {
+        String json = "{\"" + TENANT_ID_FIELD + "\":\"" + GLOBAL_TENANT_ID + "\"}";
+        GetResponse getResponse = new GetResponse(new GetResult(TEST_INDEX, TEST_ID, -2, 0, 1, true, new BytesArray(json), null, null));
+        LocalClusterIndicesClient innerClient = new LocalClusterIndicesClient(
+            mockedClient,
+            xContentRegistry,
+            Map.of(TENANT_ID_FIELD_KEY, TENANT_ID_FIELD, REMOTE_METADATA_GLOBAL_TENANT_ID_KEY, GLOBAL_TENANT_ID)
+        );
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(1);
+            listener.onResponse(getResponse);
+            return null;
+        }).when(mockedClient).get(any(GetRequest.class), any());
+        SdkClient sdkClient = new SdkClient(innerClient, true, GLOBAL_TENANT_ID);
+        boolean result = sdkClient.isGlobalResource(TEST_INDEX, TEST_ID).toCompletableFuture().join();
+        assertTrue(result);
+
+        // Verify the request
+        ArgumentCaptor<GetRequest> requestCaptor = ArgumentCaptor.forClass(GetRequest.class);
+        verify(mockedClient, times(1)).get(requestCaptor.capture(), any());
+        assertEquals(TEST_INDEX, requestCaptor.getValue().index());
+        assertEquals(TEST_ID, requestCaptor.getValue().id());
+    }
+
+    @Test
+    public void testIsGlobalResource_multiTenancyNotEnabled_orGlobalTenantNotEnabled() {
+        String notCachedDocId = "not_cached_doc_id";
+        String json = "{\"" + TENANT_ID_FIELD + "\":\"" + GLOBAL_TENANT_ID + "\"}";
+        GetResponse getResponse = new GetResponse(
+            new GetResult(TEST_INDEX, notCachedDocId, -2, 0, 1, true, new BytesArray(json), null, null)
+        );
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(1);
+            listener.onResponse(getResponse);
+            return null;
+        }).when(mockedClient).get(any(GetRequest.class), any());
+
+        SdkClient globalResourceDisabled = new SdkClient(innerClient, true, null);
+        boolean grdResult = globalResourceDisabled.isGlobalResource(TEST_INDEX, notCachedDocId).toCompletableFuture().join();
+        assertFalse(grdResult);
+
+        LocalClusterIndicesClient innerClient = new LocalClusterIndicesClient(
+            mockedClient,
+            xContentRegistry,
+            Map.of(TENANT_ID_FIELD_KEY, TENANT_ID_FIELD, REMOTE_METADATA_GLOBAL_TENANT_ID_KEY, GLOBAL_TENANT_ID)
+        );
+        SdkClient multiTenancyDisabled = new SdkClient(innerClient, false, GLOBAL_TENANT_ID);
+        boolean mtdResult = multiTenancyDisabled.isGlobalResource(TEST_INDEX, notCachedDocId).toCompletableFuture().join();
+        assertFalse(mtdResult);
+    }
+
+    @Test
+    public void testIsGlobalResource_resourceWithNonGlobalTenantId() {
+        String json = "{\"" + TENANT_ID_FIELD + "\":\"" + TEST_TENANT_ID + "\"}";
+        GetResponse getResponse = new GetResponse(new GetResult(TEST_INDEX, TEST_ID, -2, 0, 1, true, new BytesArray(json), null, null));
+        LocalClusterIndicesClient innerClient = new LocalClusterIndicesClient(
+            mockedClient,
+            xContentRegistry,
+            Map.of(TENANT_ID_FIELD_KEY, TENANT_ID_FIELD, REMOTE_METADATA_GLOBAL_TENANT_ID_KEY, GLOBAL_TENANT_ID)
+        );
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(1);
+            listener.onResponse(getResponse);
+            return null;
+        }).when(mockedClient).get(any(GetRequest.class), any());
+        SdkClient sdkClient = new SdkClient(innerClient, true, GLOBAL_TENANT_ID);
+        boolean result = sdkClient.isGlobalResource(TEST_INDEX, TEST_ID).toCompletableFuture().join();
+        assertFalse(result);
+    }
+
+    @Test
+    public void testIsGlobalResource_DocumentDoesNotExist() {
+        GetResponse getResponse = new GetResponse(new GetResult(TEST_INDEX, "nonExistId", -2, 0, 1, false, null, null, null));
+        LocalClusterIndicesClient innerClient = new LocalClusterIndicesClient(
+            mockedClient,
+            xContentRegistry,
+            Map.of(TENANT_ID_FIELD_KEY, TENANT_ID_FIELD, REMOTE_METADATA_GLOBAL_TENANT_ID_KEY, GLOBAL_TENANT_ID)
+        );
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(1);
+            listener.onResponse(getResponse);
+            return null;
+        }).when(mockedClient).get(any(GetRequest.class), any());
+        SdkClient sdkClient = new SdkClient(innerClient, true, GLOBAL_TENANT_ID);
+        boolean result = sdkClient.isGlobalResource(TEST_INDEX, TEST_ID).toCompletableFuture().join();
+        assertFalse(result);
+    }
+
+    @Test
+    public void testIsGlobalResource_Exception() {
+        LocalClusterIndicesClient innerClient = new LocalClusterIndicesClient(
+            mockedClient,
+            xContentRegistry,
+            Map.of(TENANT_ID_FIELD_KEY, TENANT_ID_FIELD, REMOTE_METADATA_GLOBAL_TENANT_ID_KEY, GLOBAL_TENANT_ID)
+        );
+        // Mock an exception
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(1);
+            listener.onFailure(new RuntimeException("Test exception"));
+            return null;
+        }).when(mockedClient).get(any(GetRequest.class), any());
+        SdkClient sdkClient = new SdkClient(innerClient, true, GLOBAL_TENANT_ID);
+        // Execute the method and verify result - should return false on exception
+        CompletableFuture<Boolean> future = sdkClient.isGlobalResource(TEST_INDEX, TEST_ID).toCompletableFuture();
+        CompletionException ce = assertThrows(CompletionException.class, () -> future.join());
+        Throwable cause = ce.getCause();
+        assertEquals(OpenSearchStatusException.class, cause.getClass());
+        assertEquals("Failed to get data object from index test_index", cause.getMessage());
+    }
+
+    @Test
+    public void testIsGlobalResource_NoTenantIdField() {
+        String json = "{\"other_field\":\"some_value\"}";
+        GetResponse getResponse = new GetResponse(new GetResult(TEST_INDEX, TEST_ID, -2, 0, 1, true, new BytesArray(json), null, null));
+        LocalClusterIndicesClient innerClient = new LocalClusterIndicesClient(
+            mockedClient,
+            xContentRegistry,
+            Map.of(TENANT_ID_FIELD_KEY, TENANT_ID_FIELD, REMOTE_METADATA_GLOBAL_TENANT_ID_KEY, GLOBAL_TENANT_ID)
+        );
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(1);
+            listener.onResponse(getResponse);
+            return null;
+        }).when(mockedClient).get(any(GetRequest.class), any());
+        SdkClient sdkClient = new SdkClient(innerClient, true, GLOBAL_TENANT_ID);
+        boolean result = sdkClient.isGlobalResource(TEST_INDEX, TEST_ID).toCompletableFuture().join();
+        assertFalse(result);
     }
 }

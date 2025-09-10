@@ -163,6 +163,34 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
+        return doPrivileged(() -> {
+            if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
+                return innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
+            }
+
+            // First check cache for global resource
+            GetDataObjectResponse cachedResponse = getGlobalResourceDataFromCache(request);
+            if (cachedResponse != null) {
+                return CompletableFuture.completedFuture(cachedResponse);
+            }
+
+            CompletionStage<GetDataObjectResponse> dataFetched = innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
+            return handleOSDocumentBasedResponse(request, dataFetched);
+        });
+    }
+
+    /**
+     * Get data from local cluster.
+     * @param request The request that contains index, id and nullable tenant_id.
+     * @param executor the executor for the action
+     * @param isMultiTenancyEnabled is multi tenancy enabled flag.
+     * @return A {@link CompletionStage} of {@link GetDataObjectResponse} the fetched result encapsulated into a CompletionStage.
+     */
+    protected CompletionStage<GetDataObjectResponse> innerGetDataObjectAsync(
+        GetDataObjectRequest request,
+        Executor executor,
+        Boolean isMultiTenancyEnabled
+    ) {
         CompletableFuture<GetDataObjectResponse> future = new CompletableFuture<>();
         return doPrivileged(() -> {
             GetRequest getRequest = createGetRequest(request);
@@ -181,7 +209,6 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
             );
             return future;
         });
-
     }
 
     private GetRequest createGetRequest(GetDataObjectRequest request) {
@@ -358,7 +385,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
                 boolQuery.filter(tenantIdTermQuery);
                 searchSource.query(boolQuery);
             }
-            log.debug("Adding tenant id to search query", Arrays.toString(request.indices()));
+            log.debug("Adding tenant id to search query");
         }
         log.info("Searching {}", Arrays.toString(request.indices()));
         return doPrivileged(() -> {

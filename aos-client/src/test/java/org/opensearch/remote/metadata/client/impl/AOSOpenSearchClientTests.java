@@ -55,7 +55,6 @@ class AOSOpenSearchClientTests {
         metadataSettings.put(REMOTE_METADATA_ENDPOINT_KEY, "https://example.amazonaws.com");
         metadataSettings.put(REMOTE_METADATA_REGION_KEY, "us-west-2");
         metadataSettings.put(REMOTE_METADATA_SERVICE_NAME_KEY, "es");
-
         assertDoesNotThrow(() -> aosOpenSearchClient.initialize(metadataSettings));
     }
 

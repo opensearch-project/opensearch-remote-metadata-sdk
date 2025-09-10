@@ -18,6 +18,7 @@ import software.amazon.awssdk.auth.credentials.AwsCredentialsProviderChain;
 import software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider;
+import software.amazon.awssdk.http.nio.netty.NettyNioAsyncHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
@@ -80,6 +81,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -101,8 +103,6 @@ import static org.opensearch.remote.metadata.common.CommonValue.VALID_AWS_OPENSE
 public class DDBOpenSearchClient extends AbstractSdkClient {
     private static final Logger log = LogManager.getLogger(RemoteClusterIndicesClient.class);
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
     private static final Long DEFAULT_SEQUENCE_NUMBER = 0L;
     private static final Long DEFAULT_PRIMARY_TERM = 1L;
     private static final String RANGE_KEY = "_id";
@@ -110,9 +110,6 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
 
     private static final String SOURCE = "_source";
     private static final String SEQ_NO_KEY = "_seq_no";
-
-    // TENANT_ID hash key requires non-null value
-    private static final String DEFAULT_TENANT = "DEFAULT_TENANT";
 
     private DynamoDbAsyncClient dynamoDbAsyncClient;
     private AOSOpenSearchClient aosOpenSearchClient;
@@ -149,6 +146,24 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         this.dynamoDbAsyncClient = dynamoDbAsyncClient;
         this.aosOpenSearchClient = aosOpenSearchClient;
         this.tenantIdField = tenantIdField;
+    }
+
+    /**
+     * Package private constructor for testing
+     *
+     * @param dynamoDbAsyncClient AWS DDB async client to perform CRUD operations on a DDB table.
+     * @param aosOpenSearchClient Remote opensearch client to perform search operations. Documents written to DDB
+     *                                  needs to be synced offline with remote opensearch.
+     * @param metadataSettings metadata settings used in the class.
+     */
+    DDBOpenSearchClient(
+        DynamoDbAsyncClient dynamoDbAsyncClient,
+        AOSOpenSearchClient aosOpenSearchClient,
+        Map<String, String> metadataSettings
+    ) {
+        super.initialize(metadataSettings);
+        this.dynamoDbAsyncClient = dynamoDbAsyncClient;
+        this.aosOpenSearchClient = aosOpenSearchClient;
     }
 
     /**
@@ -253,12 +268,61 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
     }
 
     /**
-     * Fetches data document from DDB. Default tenant ID will be used if tenant ID is not specified.
+     * 0. Tenant_id: Fetches data document from DDB. Default tenant ID will be used if tenant ID is not specified.
+     * The fetching flow is:
+     * 1. If global resource is not enabled, fetch data with tenant_id in step 0.
+     * 2. If global resource enabled, fetch from cache and return if found.
+     * 3. If not found, fetch with tenant_id in step 0, return if found.
+     * 4. If not found, fetch with global tenant id and add to cache if found, then return result to user.
      *
      * {@inheritDoc}
      */
     @Override
     public CompletionStage<GetDataObjectResponse> getDataObjectAsync(
+        GetDataObjectRequest request,
+        Executor executor,
+        Boolean isMultiTenancyEnabled
+    ) {
+        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
+            return innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
+        }
+        // Try fetch from global cache.
+        GetDataObjectResponse getDataObjectFromCache = getGlobalResourceDataFromCache(request);
+        if (getDataObjectFromCache != null) {
+            return CompletableFuture.completedFuture(getDataObjectFromCache);
+        }
+        // fetch resource with user tenant id.
+        CompletionStage<GetDataObjectResponse> getDataFromDynamoDB = innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
+        return getDataFromDynamoDB.thenCompose(response -> {
+            // return the document if it's not exist.
+            if (Optional.ofNullable(response).map(GetDataObjectResponse::getResponse).map(GetResponse::isExists).orElse(false)) {
+                return CompletableFuture.completedFuture(response);
+            }
+
+            // Fetch with the global tenant id
+            final GetDataObjectRequest requestWithGlobalTenantId = GetDataObjectRequest.builder()
+                .tenantId(globalTenantId)
+                .id(request.id())
+                .index(request.index())
+                .build();
+            CompletionStage<GetDataObjectResponse> dataFetchedWithGlobalTenantId = innerGetDataObjectAsync(
+                requestWithGlobalTenantId,
+                executor,
+                isMultiTenancyEnabled
+            );
+            return addToGlobalResourceCache(request, dataFetchedWithGlobalTenantId);
+        });
+    }
+
+    /**
+     * Fetches data from DynamoDB and transforms it into a GetDataObjectResponse.
+     *
+     * @param request The original GetDataObject request
+     * @param executor the executor for the action
+     * @param isMultiTenancyEnabled multi tenancy enabled flag.
+     * @return A {@link CompletionStage} with the {@link GetDataObjectResponse}
+     */
+    protected CompletionStage<GetDataObjectResponse> innerGetDataObjectAsync(
         GetDataObjectRequest request,
         Executor executor,
         Boolean isMultiTenancyEnabled
@@ -743,7 +807,11 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
             throw new IllegalStateException("REGION environment variable needs to be set!");
         }
         return doPrivileged(
-            () -> DynamoDbAsyncClient.builder().region(Region.of(region)).credentialsProvider(createCredentialsProvider()).build()
+            () -> DynamoDbAsyncClient.builder()
+                .httpClient(NettyNioAsyncHttpClient.builder().build())
+                .region(Region.of(region))
+                .credentialsProvider(createCredentialsProvider())
+                .build()
         );
     }
 
