@@ -23,7 +23,6 @@ import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.XContentParser;
 
 import java.io.IOException;
-import java.security.PrivilegedAction;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -31,6 +30,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import java.util.function.Supplier;
 
 import static org.opensearch.common.util.concurrent.ThreadContextAccess.doPrivileged;
 import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_ENDPOINT_KEY;
@@ -85,7 +85,7 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
      * @param executor the executor for the action
      * @return A {@link CompletionStage} encapsulating the completable future for the action
      */
-    protected <T> CompletionStage<T> executePrivilegedAsync(PrivilegedAction<T> action, Executor executor) {
+    protected <T> CompletionStage<T> executePrivilegedAsync(Supplier<T> action, Executor executor) {
         return CompletableFuture.supplyAsync(() -> doPrivileged(action), executor);
     }
 

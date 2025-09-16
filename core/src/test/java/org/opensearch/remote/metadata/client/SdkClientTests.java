@@ -14,7 +14,6 @@ import org.opensearch.core.rest.RestStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.security.PrivilegedAction;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -23,6 +22,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -421,7 +421,7 @@ public class SdkClientTests {
 
     @Test
     public void testExecutePrivilegedAsync() throws Exception {
-        PrivilegedAction<String> action = () -> "Test Result";
+        Supplier<String> action = () -> "Test Result";
         Executor executor = Executors.newCachedThreadPool();
         CompletionStage<String> result = sdkClientImpl.executePrivilegedAsync(action, executor);
         CompletableFuture<String> future = result.toCompletableFuture();
@@ -432,7 +432,7 @@ public class SdkClientTests {
 
     @Test
     public void testExecutePrivilegedAsyncWithException() throws Exception {
-        PrivilegedAction<String> action = () -> { throw new RuntimeException("Test Exception"); };
+        Supplier<String> action = () -> { throw new RuntimeException("Test Exception"); };
         Executor executor = Executors.newCachedThreadPool();
         CompletionStage<String> result = sdkClientImpl.executePrivilegedAsync(action, executor);
         CompletableFuture<String> future = result.toCompletableFuture();
