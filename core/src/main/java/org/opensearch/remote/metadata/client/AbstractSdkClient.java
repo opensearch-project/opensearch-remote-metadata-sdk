@@ -18,6 +18,7 @@ import org.opensearch.common.collect.Tuple;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
 import org.opensearch.common.xcontent.json.JsonXContent;
+import org.opensearch.core.common.Strings;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.XContentParser;
@@ -73,6 +74,7 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
 
         globalTenantId = metadataSettings.get(REMOTE_METADATA_GLOBAL_TENANT_ID_KEY);
         globalResourceCacheTTL = Optional.ofNullable(metadataSettings.get(REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY))
+            .filter(x -> !Strings.isNullOrEmpty(x))
             .map(x -> TimeValue.parseTimeValue(x, DEFAULT_GLOBAL_RESOURCE_CACHE_TTL, REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY))
             .filter(x -> x.getMillis() >= 0)
             .orElse(DEFAULT_GLOBAL_RESOURCE_CACHE_TTL);
