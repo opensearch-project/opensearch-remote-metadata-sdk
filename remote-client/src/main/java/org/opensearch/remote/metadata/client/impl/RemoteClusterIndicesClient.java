@@ -95,9 +95,9 @@ import java.util.concurrent.Executor;
 import jakarta.json.stream.JsonGenerator;
 import jakarta.json.stream.JsonParser;
 
-import static org.opensearch.common.util.concurrent.ThreadContextAccess.doPrivileged;
 import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_OPENSEARCH;
 import static org.opensearch.remote.metadata.common.CommonValue.TENANT_ID_FIELD_KEY;
+import static org.opensearch.secure_sm.AccessController.doPrivileged;
 
 /**
  * An implementation of {@link SdkClient} that stores data in a remote

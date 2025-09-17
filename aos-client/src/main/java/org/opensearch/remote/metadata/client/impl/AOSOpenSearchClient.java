@@ -25,9 +25,9 @@ import org.opensearch.remote.metadata.client.SdkClient;
 
 import java.util.Map;
 
-import static org.opensearch.common.util.concurrent.ThreadContextAccess.doPrivileged;
 import static org.opensearch.remote.metadata.common.CommonValue.AWS_OPENSEARCH_SERVICE;
 import static org.opensearch.remote.metadata.common.CommonValue.VALID_AWS_OPENSEARCH_SERVICE_NAMES;
+import static org.opensearch.secure_sm.AccessController.doPrivileged;
 
 /**
  * An implementation of {@link SdkClient} that stores data in a remote
