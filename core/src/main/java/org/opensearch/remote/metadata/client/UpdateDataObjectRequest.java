@@ -8,6 +8,8 @@
  */
 package org.opensearch.remote.metadata.client;
 
+import org.opensearch.action.support.WriteRequest.RefreshPolicy;
+import org.opensearch.common.unit.TimeValue;
 import org.opensearch.core.xcontent.ToXContentObject;
 import org.opensearch.core.xcontent.XContentBuilder;
 
@@ -17,7 +19,7 @@ import java.util.Map;
 /**
  * A class abstracting an OpenSearch UpdateRequest
  */
-public class UpdateDataObjectRequest extends WriteDataObjectRequest {
+public class UpdateDataObjectRequest extends WriteDataObjectRequest<UpdateDataObjectRequest> {
 
     private final int retryOnConflict;
     private final ToXContentObject dataObject;
@@ -31,6 +33,8 @@ public class UpdateDataObjectRequest extends WriteDataObjectRequest {
      * @param tenantId the tenant id
      * @param ifSeqNo the sequence number to match or null if not required
      * @param ifPrimaryTerm the primary term to match or null if not required
+     * @param refreshPolicy when should the written data be refreshed. May not be applicable on all clients. Defaults to {@code IMMEDIATE}.
+     * @param timeout A timeout to wait if the index operation can't be performed immediately. May not be applicable on all clients. Defaults to {@code 1m}.
      * @param retryOnConflict number of times to retry an update if a version conflict exists
      * @param dataObject the data object
      */
@@ -40,10 +44,12 @@ public class UpdateDataObjectRequest extends WriteDataObjectRequest {
         String tenantId,
         Long ifSeqNo,
         Long ifPrimaryTerm,
+        RefreshPolicy refreshPolicy,
+        TimeValue timeout,
         int retryOnConflict,
         ToXContentObject dataObject
     ) {
-        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, false);
+        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, false);
         this.retryOnConflict = retryOnConflict;
         this.dataObject = dataObject;
     }
@@ -131,6 +137,8 @@ public class UpdateDataObjectRequest extends WriteDataObjectRequest {
                 this.tenantId,
                 this.ifSeqNo,
                 this.ifPrimaryTerm,
+                this.refreshPolicy,
+                this.timeout,
                 this.retryOnConflict,
                 this.dataObject
             );

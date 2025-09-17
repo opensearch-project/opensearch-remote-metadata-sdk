@@ -10,6 +10,7 @@ package org.opensearch.remote.metadata.client;
 
 import org.opensearch.action.support.WriteRequest.RefreshPolicy;
 import org.opensearch.common.Nullable;
+import org.opensearch.common.unit.TimeValue;
 import org.opensearch.core.common.Strings;
 
 import java.util.ArrayList;
@@ -25,7 +26,8 @@ public class BulkDataObjectRequest {
 
     private final List<DataObjectRequest> requests = new ArrayList<>();
     private final Set<String> indices = new HashSet<>();
-    private RefreshPolicy refreshPolicy = RefreshPolicy.NONE;
+    private RefreshPolicy refreshPolicy = RefreshPolicy.IMMEDIATE;
+    private TimeValue timeout = TimeValue.timeValueMinutes(1L);
     private String globalIndex;
 
     /**
@@ -71,10 +73,11 @@ public class BulkDataObjectRequest {
 
     /**
      * Add the given request to the {@link BulkDataObjectRequest}
+     * @param <R> The specific type of WriteDataObjectRequest
      * @param request The request to add
      * @return the updated request object
      */
-    public BulkDataObjectRequest add(WriteDataObjectRequest request) {
+    public <R extends WriteDataObjectRequest<R>> BulkDataObjectRequest add(R request) {
         if (Strings.isNullOrEmpty(request.index())) {
             if (Strings.isNullOrEmpty(globalIndex)) {
                 throw new IllegalArgumentException(
@@ -86,6 +89,8 @@ public class BulkDataObjectRequest {
         } else {
             indices.add(request.index());
         }
+        // Bulk Requests require this on individual requests
+        request.setRefreshPolicy(RefreshPolicy.NONE);
         requests.add(request);
         return this;
     }
@@ -93,6 +98,8 @@ public class BulkDataObjectRequest {
     /**
      * Should this request trigger a refresh ({@linkplain RefreshPolicy#IMMEDIATE}), wait for a refresh (
      * {@linkplain RefreshPolicy#WAIT_UNTIL}), or proceed ignore refreshes entirely ({@linkplain RefreshPolicy#NONE}, the default).
+     * Note this applies to the combined Bulk Request itself, the individual requests all use {@linkplain RefreshPolicy#NONE}.
+     * May not be applicable on all clients. Defaults to {@code IMMEDIATE}.
      * @param refreshPolicy the refresh policy
      * @return the updated request
      */
@@ -104,10 +111,39 @@ public class BulkDataObjectRequest {
     /**
      * Should this request trigger a refresh ({@linkplain RefreshPolicy#IMMEDIATE}), wait for a refresh (
      * {@linkplain RefreshPolicy#WAIT_UNTIL}), or proceed ignore refreshes entirely ({@linkplain RefreshPolicy#NONE}, the default).
+     * Note this applies to the combined Bulk Request itself, the individual requests all use {@linkplain RefreshPolicy#NONE}.
+     * May not be applicable on all clients. Defaults to {@code IMMEDIATE}.
      * @return the refresh policy
      */
     public RefreshPolicy getRefreshPolicy() {
         return refreshPolicy;
+    }
+
+    /**
+     * A timeout to wait if the index operation can't be performed immediately. May not be applicable on all clients. Defaults to {@code 1m}.
+     * @param timeout The timeout to set
+     * @return the request after updating the timeout
+     */
+    public final BulkDataObjectRequest timeout(TimeValue timeout) {
+        this.timeout = timeout;
+        return this;
+    }
+
+    /**
+     * A timeout to wait if the index operation can't be performed immediately. May not be applicable on all clients. Defaults to {@code 1m}.
+     * @param timeout The timeout to set
+     * @return the request after updating the timeout
+     */
+    public final BulkDataObjectRequest timeout(String timeout) {
+        return timeout(TimeValue.parseTimeValue(timeout, null, getClass().getSimpleName() + ".timeout"));
+    }
+
+    /**
+     * A timeout to wait if the index operation can't be performed immediately. May not be applicable on all clients. Defaults to {@code 1m}.
+     * @return the timeout
+     */
+    public TimeValue timeout() {
+        return timeout;
     }
 
     /**

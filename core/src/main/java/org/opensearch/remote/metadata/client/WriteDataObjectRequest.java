@@ -8,15 +8,20 @@
  */
 package org.opensearch.remote.metadata.client;
 
+import org.opensearch.action.support.WriteRequest.RefreshPolicy;
+import org.opensearch.common.unit.TimeValue;
+
 import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_PRIMARY_TERM;
 import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
 
 /**
  * An abstract class for write operations that support sequence numbers and primary terms
  */
-public abstract class WriteDataObjectRequest extends DataObjectRequest {
+public abstract class WriteDataObjectRequest<R extends WriteDataObjectRequest<R>> extends DataObjectRequest {
     protected final Long ifSeqNo;
     protected final Long ifPrimaryTerm;
+    protected RefreshPolicy refreshPolicy = RefreshPolicy.IMMEDIATE;
+    protected TimeValue timeout = TimeValue.timeValueMinutes(1L);
 
     /**
      * Instantiate this request with an index, id, and concurrency information.
@@ -27,6 +32,8 @@ public abstract class WriteDataObjectRequest extends DataObjectRequest {
      * @param tenantId the tenant id
      * @param ifSeqNo the sequence number to match or null if not required
      * @param ifPrimaryTerm the primary term to match or null if not required
+     * @param refreshPolicy when should the written data be refreshed. May not be applicable on all clients. Defaults to {@code IMMEDIATE}.
+     * @param timeout A timeout to wait if the index operation can't be performed immediately. May not be applicable on all clients. Defaults to {@code 1m}.
      * @param isCreateOperation whether this can only create a new document and not overwrite one
      */
     protected WriteDataObjectRequest(
@@ -35,12 +42,20 @@ public abstract class WriteDataObjectRequest extends DataObjectRequest {
         String tenantId,
         Long ifSeqNo,
         Long ifPrimaryTerm,
+        RefreshPolicy refreshPolicy,
+        TimeValue timeout,
         boolean isCreateOperation
     ) {
         super(index, id, tenantId);
         validateSeqNoAndPrimaryTerm(ifSeqNo, ifPrimaryTerm, isCreateOperation);
         this.ifSeqNo = ifSeqNo;
         this.ifPrimaryTerm = ifPrimaryTerm;
+        if (refreshPolicy != null) {
+            this.refreshPolicy = refreshPolicy;
+        }
+        if (timeout != null) {
+            this.timeout = timeout;
+        }
     }
 
     /**
@@ -59,6 +74,53 @@ public abstract class WriteDataObjectRequest extends DataObjectRequest {
         return ifPrimaryTerm;
     }
 
+    /**
+     * Returns the refresh policy.
+     * @return the refresh policy.
+     */
+    public RefreshPolicy getRefreshPolicy() {
+        return refreshPolicy;
+    }
+
+    /**
+     * Sets the refresh policy.
+     * @param refreshPolicy The policy to set
+     * @return a copy of the object after updating
+     */
+    @SuppressWarnings("unchecked")
+    public R setRefreshPolicy(RefreshPolicy refreshPolicy) {
+        this.refreshPolicy = refreshPolicy;
+        return (R) this;
+    }
+
+    /**
+     * A timeout to wait if the index operation can't be performed immediately. May not be applicable on all clients. Defaults to {@code 1m}.
+     * @param timeout The timeout to set
+     * @return the request after updating the timeout
+     */
+    @SuppressWarnings("unchecked")
+    public final R timeout(TimeValue timeout) {
+        this.timeout = timeout;
+        return (R) this;
+    }
+
+    /**
+     * A timeout to wait if the index operation can't be performed immediately. May not be applicable on all clients. Defaults to {@code 1m}.
+     * @param timeout The timeout to set
+     * @return the request after updating the timeout
+     */
+    public final R timeout(String timeout) {
+        return timeout(TimeValue.parseTimeValue(timeout, null, getClass().getSimpleName() + ".timeout"));
+    }
+
+    /**
+     * A timeout to wait if the index operation can't be performed immediately. May not be applicable on all clients. Defaults to {@code 1m}.
+     * @return the timeout
+     */
+    public TimeValue timeout() {
+        return timeout;
+    }
+
     @Override
     public boolean isWriteRequest() {
         return true;
@@ -70,6 +132,8 @@ public abstract class WriteDataObjectRequest extends DataObjectRequest {
     public static abstract class Builder<T extends Builder<T>> extends DataObjectRequest.Builder<T> {
         protected Long ifSeqNo = null;
         protected Long ifPrimaryTerm = null;
+        protected RefreshPolicy refreshPolicy = RefreshPolicy.IMMEDIATE;
+        protected TimeValue timeout = TimeValue.timeValueMinutes(1L);
 
         /**
          * Only perform this request if the document's modification was assigned the given
@@ -98,6 +162,36 @@ public abstract class WriteDataObjectRequest extends DataObjectRequest {
             this.ifPrimaryTerm = term;
             return self();
         }
+
+        /**
+         * Should this request trigger a refresh ({@linkplain RefreshPolicy#IMMEDIATE}), wait for a refresh (
+         * {@linkplain RefreshPolicy#WAIT_UNTIL}), or proceed ignore refreshes entirely ({@linkplain RefreshPolicy#NONE}, the default).
+         * @param refreshPolicy the policy to set
+         * @return the updated builder
+         */
+        public T refreshPolicy(RefreshPolicy refreshPolicy) {
+            this.refreshPolicy = refreshPolicy;
+            return self();
+        }
+
+        /**
+         * A timeout to wait if the index operation can't be performed immediately. Defaults to {@code 1m}.
+         * @param timeout The timeout to set
+         * @return the request after updating the timeout
+         */
+        public T timeout(TimeValue timeout) {
+            this.timeout = timeout;
+            return self();
+        }
+
+        /**
+         * A timeout to wait if the index operation can't be performed immediately. Defaults to {@code 1m}.
+         * @param timeout The timeout to set
+         * @return the request after updating the timeout
+         */
+        public final T timeout(String timeout) {
+            return timeout(TimeValue.parseTimeValue(timeout, null, getClass().getSimpleName() + ".timeout"));
+        }
     }
 
     /**
@@ -125,5 +219,4 @@ public abstract class WriteDataObjectRequest extends DataObjectRequest {
     private static boolean isUnassignedPrimaryTerm(Long primaryTerm) {
         return primaryTerm == null || primaryTerm == UNASSIGNED_PRIMARY_TERM;
     }
-
 }

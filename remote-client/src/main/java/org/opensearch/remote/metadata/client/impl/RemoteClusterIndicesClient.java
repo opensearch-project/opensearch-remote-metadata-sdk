@@ -28,6 +28,7 @@ import org.apache.hc.core5.ssl.SSLContextBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.opensearch.OpenSearchStatusException;
+import org.opensearch.action.support.WriteRequest.RefreshPolicy;
 import org.opensearch.client.json.JsonpMapper;
 import org.opensearch.client.json.JsonpSerializable;
 import org.opensearch.client.json.jackson.JacksonJsonpMapper;
@@ -36,6 +37,7 @@ import org.opensearch.client.opensearch._types.FieldValue;
 import org.opensearch.client.opensearch._types.OpType;
 import org.opensearch.client.opensearch._types.OpenSearchException;
 import org.opensearch.client.opensearch._types.Refresh;
+import org.opensearch.client.opensearch._types.Time;
 import org.opensearch.client.opensearch._types.query_dsl.BoolQuery;
 import org.opensearch.client.opensearch._types.query_dsl.MatchAllQuery;
 import org.opensearch.client.opensearch._types.query_dsl.Query;
@@ -50,6 +52,8 @@ import org.opensearch.client.opensearch.core.bulk.BulkOperation;
 import org.opensearch.client.opensearch.core.bulk.BulkResponseItem;
 import org.opensearch.client.transport.httpclient5.ApacheHttpClient5Transport;
 import org.opensearch.client.transport.httpclient5.ApacheHttpClient5TransportBuilder;
+import org.opensearch.client.util.ObjectBuilder;
+import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.json.JsonXContent;
@@ -91,6 +95,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
+import java.util.function.Function;
 
 import jakarta.json.stream.JsonGenerator;
 import jakarta.json.stream.JsonParser;
@@ -162,7 +167,9 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 IndexRequest.Builder<?> builder = new IndexRequest.Builder<>().index(request.index())
                     .opType(request.overwriteIfExists() ? OpType.Index : OpType.Create)
                     .document(request.dataObject())
-                    .tDocumentSerializer(new JsonTransformer.XContentObjectJsonpSerializer());
+                    .tDocumentSerializer(new JsonTransformer.XContentObjectJsonpSerializer())
+                    .refresh(convertRefreshPolicyToRefresh(request.getRefreshPolicy()))
+                    .timeout(convertTimeValueToTime(request.timeout()));
                 if (shouldUseId(request.id())) {
                     builder.id(request.id());
                 }
@@ -172,7 +179,6 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 if (request.ifPrimaryTerm() != null) {
                     builder.ifPrimaryTerm(request.ifPrimaryTerm());
                 }
-
                 IndexRequest<?> indexRequest = builder.build();
                 log.info("Indexing data object in {}", request.index());
 
@@ -213,6 +219,23 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 );
             }
         });
+    }
+
+    private Refresh convertRefreshPolicyToRefresh(RefreshPolicy refreshPolicy) {
+        switch (refreshPolicy) {
+            case NONE:
+                return Refresh.False;
+            case WAIT_UNTIL:
+                return Refresh.WaitFor;
+            case IMMEDIATE:
+            default:
+                return Refresh.True;
+        }
+    }
+
+    private Function<Time.Builder, ObjectBuilder<Time>> convertTimeValueToTime(TimeValue timeValue) {
+        // We don't expect null but better to use the default here
+        return t -> t.time(timeValue == null ? "1m" : timeValue.toString());
     }
 
     @Override
@@ -302,7 +325,11 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 ).map();
                 UpdateRequest.Builder<Map<String, Object>, Map<String, Object>> updateRequestBuilder = new UpdateRequest.Builder<
                     Map<String, Object>,
-                    Map<String, Object>>().index(request.index()).id(request.id()).doc(docMap);
+                    Map<String, Object>>().index(request.index())
+                    .id(request.id())
+                    .doc(docMap)
+                    .refresh(convertRefreshPolicyToRefresh(request.getRefreshPolicy()))
+                    .timeout(convertTimeValueToTime(request.timeout()));
                 if (request.ifSeqNo() != null) {
                     updateRequestBuilder.ifSeqNo(request.ifSeqNo());
                 }
@@ -364,15 +391,16 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
     ) {
         return doPrivileged(() -> {
             try {
-                DeleteRequest.Builder builder = new DeleteRequest.Builder().index(request.index()).id(request.id());
-
+                DeleteRequest.Builder builder = new DeleteRequest.Builder().index(request.index())
+                    .id(request.id())
+                    .refresh(convertRefreshPolicyToRefresh(request.getRefreshPolicy()))
+                    .timeout(convertTimeValueToTime(request.timeout()));
                 if (request.ifSeqNo() != null) {
                     builder.ifSeqNo(request.ifSeqNo());
                 }
                 if (request.ifPrimaryTerm() != null) {
                     builder.ifPrimaryTerm(request.ifPrimaryTerm());
                 }
-
                 DeleteRequest deleteRequest = builder.build();
                 log.info("Deleting {} from {}", request.id(), request.index());
 
@@ -429,7 +457,10 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 for (DataObjectRequest dataObjectRequest : request.requests()) {
                     addBulkOperation(dataObjectRequest, operations);
                 }
-                BulkRequest bulkRequest = new BulkRequest.Builder().operations(operations).refresh(Refresh.True).build();
+                BulkRequest bulkRequest = new BulkRequest.Builder().operations(operations)
+                    .refresh(convertRefreshPolicyToRefresh(request.getRefreshPolicy()))
+                    .timeout(convertTimeValueToTime(request.timeout()))
+                    .build();
                 return openSearchAsyncClient.bulk(bulkRequest).thenApply(bulkResponse -> {
                     log.info(
                         "Bulk action complete for {} items: {}",
@@ -465,6 +496,7 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
     }
 
     private void addBulkOperation(DataObjectRequest dataObjectRequest, List<BulkOperation> operations) {
+        // These all use RefreshPolicy.NONE and inherit Bulk Request timeout so we can't change here
         if (dataObjectRequest instanceof PutDataObjectRequest) {
             addBulkPutOperation((PutDataObjectRequest) dataObjectRequest, operations);
         } else if (dataObjectRequest instanceof UpdateDataObjectRequest) {
