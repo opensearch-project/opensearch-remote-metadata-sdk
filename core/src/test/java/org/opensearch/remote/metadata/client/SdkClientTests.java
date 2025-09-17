@@ -36,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.timeout;
@@ -425,7 +426,7 @@ public class SdkClientTests {
         Executor executor = Executors.newCachedThreadPool();
         CompletionStage<String> result = sdkClientImpl.executePrivilegedAsync(action, executor);
         CompletableFuture<String> future = result.toCompletableFuture();
-        verify(sdkClientImpl, timeout(1000)).executePrivilegedAsync(any(), any());
+        verify(sdkClientImpl, timeout(1000)).executePrivilegedAsync(eq(action), any());
         assertEquals("Test Result", future.get(5, TimeUnit.SECONDS));
         assertFalse(future.isCompletedExceptionally());
     }
@@ -436,7 +437,7 @@ public class SdkClientTests {
         Executor executor = Executors.newCachedThreadPool();
         CompletionStage<String> result = sdkClientImpl.executePrivilegedAsync(action, executor);
         CompletableFuture<String> future = result.toCompletableFuture();
-        verify(sdkClientImpl, timeout(1000)).executePrivilegedAsync(any(), any());
+        verify(sdkClientImpl, timeout(1000)).executePrivilegedAsync(eq(action), any());
         assertThrows(ExecutionException.class, () -> future.get(5, TimeUnit.SECONDS));
         assertTrue(future.isCompletedExceptionally());
     }
