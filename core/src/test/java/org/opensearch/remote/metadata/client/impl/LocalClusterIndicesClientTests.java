@@ -968,6 +968,7 @@ public class LocalClusterIndicesClientTests {
     public void test_initialize() {
         innerClient.initialize(Map.of(REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY, "1ms"));
         innerClient.initialize(Map.of(REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY, "-1ms"));
+        innerClient.initialize(Map.of(REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY, ""));
     }
 
     @Test
