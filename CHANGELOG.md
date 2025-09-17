@@ -19,3 +19,4 @@ Inspired from [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 ### Refactoring
 - Remove unneeded enum uppercase workaround ([#185](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/185))
 - Update argument type for ThreadContextAccess:doPrivileged ([#250](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/250))
+- Use AccessController instead of ThreadContextAccess as it's for internal use ([#254](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/254))

@@ -59,8 +59,8 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 
 import static org.opensearch.action.support.WriteRequest.RefreshPolicy.IMMEDIATE;
-import static org.opensearch.common.util.concurrent.ThreadContextAccess.doPrivileged;
 import static org.opensearch.core.xcontent.ToXContent.EMPTY_PARAMS;
+import static org.opensearch.secure_sm.AccessController.doPrivileged;
 
 /**
  * An implementation of {@link SdkClient} that stores data in a local OpenSearch
