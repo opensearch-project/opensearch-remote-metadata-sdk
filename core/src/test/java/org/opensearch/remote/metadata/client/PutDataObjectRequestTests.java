@@ -8,6 +8,8 @@
  */
 package org.opensearch.remote.metadata.client;
 
+import org.opensearch.action.support.WriteRequest.RefreshPolicy;
+import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
@@ -62,6 +64,8 @@ public class PutDataObjectRequestTests {
         assertSame(testDataObject, request.dataObject());
         assertNull(request.ifSeqNo());
         assertNull(request.ifPrimaryTerm());
+        assertEquals(RefreshPolicy.IMMEDIATE, request.getRefreshPolicy());
+        assertEquals(TimeValue.timeValueMinutes(1L), request.timeout());
 
         builder.overwriteIfExists(false);
         request = builder.build();
@@ -72,7 +76,13 @@ public class PutDataObjectRequestTests {
     public void testPutDataObjectRequestWithMap() throws IOException {
         Map<String, Object> dataObjectMap = Map.of("key1", "value1", "key2", "value2");
 
-        Builder builder = PutDataObjectRequest.builder().index(testIndex).id(testId).tenantId(testTenantId).dataObject(dataObjectMap);
+        Builder builder = PutDataObjectRequest.builder()
+            .index(testIndex)
+            .id(testId)
+            .tenantId(testTenantId)
+            .dataObject(dataObjectMap)
+            .refreshPolicy(RefreshPolicy.NONE)
+            .timeout("30s");
         PutDataObjectRequest request = builder.build();
 
         // Verify the index, id, tenantId, and overwriteIfExists fields
@@ -82,6 +92,8 @@ public class PutDataObjectRequestTests {
         assertTrue(request.overwriteIfExists());
         assertNull(request.ifSeqNo());
         assertNull(request.ifPrimaryTerm());
+        assertEquals(RefreshPolicy.NONE, request.getRefreshPolicy());
+        assertEquals(TimeValue.timeValueSeconds(30L), request.timeout());
 
         // Verify the dataObject field by converting it back to a Map and comparing
         ToXContentObject dataObject = request.dataObject();
@@ -117,7 +129,7 @@ public class PutDataObjectRequestTests {
         assertThrows(IllegalArgumentException.class, () -> notOverwriteWithSeqNoBuilder.ifSeqNo(testSeqNo).build());
         assertThrows(
             IllegalArgumentException.class,
-            () -> new PutDataObjectRequest(testIndex, testId, testTenantId, 1L, 0L, false, testDataObject)
+            () -> new PutDataObjectRequest(testIndex, testId, testTenantId, 1L, 0L, null, null, false, testDataObject)
         );
         final Builder badSeqNoBuilder = PutDataObjectRequest.builder();
         assertThrows(IllegalArgumentException.class, () -> badSeqNoBuilder.ifSeqNo(-99));

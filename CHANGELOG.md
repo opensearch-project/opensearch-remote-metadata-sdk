@@ -9,6 +9,7 @@ Inspired from [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ### Enhancements
 - Add SeqNo and PrimaryTerm support to Put and Delete requests ([#234](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/234))
+- Add RefreshPolicy and timeout support to Put, Update, Delete, and Bulk requests ([#244](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/244))
 
 ### Bug Fixes
 - Throw exception on empty string for put request ID ([#235](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/235))
