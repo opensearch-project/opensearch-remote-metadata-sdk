@@ -79,6 +79,7 @@ public class GetDataObjectResponse extends DataObjectResponse {
         if (this.getResponse == null) {
             try {
                 this.getResponse = GetResponse.fromXContent(parser());
+                setParserToNull();
                 return this.getResponse;
             } catch (IOException | NullPointerException e) {
                 return null;

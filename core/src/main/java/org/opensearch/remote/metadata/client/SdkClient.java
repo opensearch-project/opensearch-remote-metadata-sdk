@@ -108,7 +108,7 @@ public class SdkClient {
      * @return A completion stage encapsulating the response or exception
      */
     public CompletionStage<GetDataObjectResponse> getDataObjectAsync(GetDataObjectRequest request) {
-        validateTenantId(request.tenantId());
+        validateTenantIdNotNull(request.tenantId());
         return getDataObjectAsync(request, defaultExecutor);
     }
 
@@ -275,7 +275,7 @@ public class SdkClient {
     }
 
     /**
-     * Throw exception if tenantId is null and multitenancy is enabled
+     * Throw exception if tenantId is null and multitenancy is enabled, or the present tenant id equals to global tenant id.
      * @param tenantId The tenantId from the request
      */
     private void validateTenantId(String tenantId) {
@@ -289,8 +289,19 @@ public class SdkClient {
     }
 
     /**
-     * Throw exception if tenantId is null for any bulk request and multitenancy is enabled
+     * Throw exception if tenantId is null and multitenancy is enabled. For specific case, like when {@link SdkClient#isGlobalResource(String, String)}
+     * method been invoked, the tenant id in the request is global tenant id, we shouldn't block these requests.
      * @param tenantId The tenantId from the request
+     */
+    private void validateTenantIdNotNull(String tenantId) {
+        if (Boolean.TRUE.equals(isMultiTenancyEnabled) && Strings.isNullOrEmpty(tenantId)) {
+            throw new IllegalArgumentException("A tenant ID is required when multitenancy is enabled.");
+        }
+    }
+
+    /**
+     * Throw exception if tenantId is null for any bulk request and multitenancy is enabled
+     * @param requests The request contains tenantIds
      */
     private void validateTenantIds(List<DataObjectRequest> requests) {
         if (Boolean.TRUE.equals(isMultiTenancyEnabled)

@@ -17,7 +17,7 @@ import org.opensearch.core.xcontent.XContentParser;
 public abstract class DataObjectResponse {
     private final String index;
     private final String id;
-    private final XContentParser parser;
+    private XContentParser parser;
     private final boolean failed;
     private final Exception cause;
     private final RestStatus status;
@@ -88,6 +88,16 @@ public abstract class DataObjectResponse {
      */
     public RestStatus status() {
         return this.status;
+    }
+
+    /**
+     * The {@link XContentParser} extends {@link java.io.Closeable} so it'll be closed after it's been read.
+     * In {@link GetDataObjectResponse#getResponse()} it's been read, after it's read the parser object
+     * is not null but the content in the parser is set to null. If it's read again e.g. clients who
+     * use parser to deserialize to an object, then a deserialization exception will be thrown.
+     */
+    protected void setParserToNull() {
+        this.parser = null;
     }
 
     /**
