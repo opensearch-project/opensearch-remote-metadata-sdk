@@ -11,6 +11,7 @@ package org.opensearch.remote.metadata.client;
 import org.opensearch.OpenSearchException;
 import org.opensearch.OpenSearchStatusException;
 import org.opensearch.core.rest.RestStatus;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -221,8 +222,8 @@ public class SdkClientTests {
     @Test
     public void testGetDataObjectGlobalTenantId() {
         when(getRequest.tenantId()).thenReturn(GLOBAL_TENANT_ID);
-        OpenSearchStatusException exception = assertThrows(OpenSearchStatusException.class, () -> sdkClient.getDataObject(getRequest));
-        assertEquals(NO_PERMISSION_TO_OPERATE_GLOBAL_RESOURCE, exception.getMessage());
+        GetDataObjectResponse response = sdkClient.getDataObject(getRequest);
+        Assertions.assertNotNull(response);
     }
 
     @Test

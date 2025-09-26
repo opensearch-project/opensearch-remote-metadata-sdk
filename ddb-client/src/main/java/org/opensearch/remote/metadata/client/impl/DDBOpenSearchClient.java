@@ -294,7 +294,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         // fetch resource with user tenant id.
         CompletionStage<GetDataObjectResponse> getDataFromDynamoDB = innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
         return getDataFromDynamoDB.thenCompose(response -> {
-            // return the document if it's not exist.
+            // return the document if it's exist under user tenant id.
             if (Optional.ofNullable(response).map(GetDataObjectResponse::getResponse).map(GetResponse::isExists).orElse(false)) {
                 return CompletableFuture.completedFuture(response);
             }
