@@ -77,9 +77,8 @@ public class GetDataObjectResponse extends DataObjectResponse {
      */
     public @Nullable GetResponse getResponse() {
         if (this.getResponse == null) {
-            try {
-                this.getResponse = GetResponse.fromXContent(parser());
-                setParserToNull();
+            try (XContentParser parser = parser()) {
+                this.getResponse = GetResponse.fromXContent(parser);
                 return this.getResponse;
             } catch (IOException | NullPointerException e) {
                 return null;
@@ -90,7 +89,7 @@ public class GetDataObjectResponse extends DataObjectResponse {
 
     @Override
     public XContentParser parser() {
-        if (super.parser() == null) {
+        if (super.parser() == null || super.parser().isClosed()) {
             try {
                 return SdkClientUtils.createParser(this.getResponse);
             } catch (IOException | NullPointerException e) {
