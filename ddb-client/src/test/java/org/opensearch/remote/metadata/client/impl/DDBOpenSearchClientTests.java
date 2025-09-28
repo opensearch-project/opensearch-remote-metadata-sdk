@@ -1316,6 +1316,34 @@ public class DDBOpenSearchClientTests {
     }
 
     @Test
+    public void testGetDataObject_globalTenantIdEnabled_resourceNotFound() {
+        GetDataObjectRequest getRequest = GetDataObjectRequest.builder().index(TEST_INDEX).id("unExistId").tenantId(TEST_TENANT_ID).build();
+        Map<String, AttributeValue> itemResponse = new HashMap<>();
+        GetItemResponse getItemResponse = GetItemResponse.builder().item(itemResponse).build();
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
+        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(
+            new DDBOpenSearchClient(
+                dynamoDbAsyncClient,
+                aosOpenSearchClient,
+                Map.of(
+                    TENANT_ID_FIELD_KEY,
+                    TEST_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                    GLOBAL_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                    TEST_GLOBAL_RESOURCE_CACHE_TTL
+                )
+            ),
+            true,
+            GLOBAL_TENANT_ID
+        );
+        GetDataObjectResponse getDataObjectResponse = sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(TEST_THREAD_POOL))
+            .toCompletableFuture()
+            .join(); // Read from cache.
+        assertFalse(getDataObjectResponse.getResponse().isExists());
+    }
+
+    @Test
     public void testIsGlobalResource_globalTenantIdEnabled_foundGlobalResourceFromDDB() {
         Map<String, AttributeValue> itemResponse = new HashMap<>();
         itemResponse.put(

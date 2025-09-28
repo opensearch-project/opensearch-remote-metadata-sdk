@@ -139,6 +139,10 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
         CompletionStage<GetDataObjectResponse> dataFetchedWithGlobalTenantId
     ) {
         return dataFetchedWithGlobalTenantId.thenCompose(res -> {
+            GetResponse getResponse = res.getResponse();
+            if (getResponse == null || !getResponse.isExists()) {
+                return CompletableFuture.completedFuture(res);
+            }
             if (globalResourceCacheTTL.getMillis() == 0) {
                 return CompletableFuture.completedFuture(replaceGlobalTenantId(request, res));
             }
@@ -168,14 +172,9 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
     }
 
     private GetDataObjectResponse replaceGlobalTenantId(GetDataObjectRequest request, GetDataObjectResponse response) {
-        response.source().put(TENANT_ID_FIELD_KEY, request.tenantId());
         GetResponse getResponse = response.getResponse();
-        if (getResponse == null) {
-            throw new OpenSearchStatusException(
-                "Cached response is null, please check configuration with system admin!",
-                RestStatus.INTERNAL_SERVER_ERROR
-            );
-        }
+        assert getResponse != null : "GetResponse shouldn't be null";
+        response.source().put(TENANT_ID_FIELD_KEY, request.tenantId());
         try {
             JsonNode jsonNode = OBJECT_MAPPER.readTree(getResponse.toString());
             ((ObjectNode) jsonNode.get("_source")).put(TENANT_ID_FIELD_KEY, Optional.ofNullable(request.tenantId()).orElse(DEFAULT_TENANT));

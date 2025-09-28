@@ -11,6 +11,7 @@ package org.opensearch.remote.metadata.client;
 import org.opensearch.action.get.GetResponse;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.XContentParser;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -90,5 +91,25 @@ public class GetDataObjectResponseTests {
         GetDataObjectResponse response = new GetDataObjectResponse(testGetResponse);
 
         assertEquals(Collections.emptyMap(), response.source());
+    }
+
+    @Test
+    public void test_parser_nullOrClosed() {
+        GetDataObjectResponse response1 = new GetDataObjectResponse(testIndex, testId, null, testFailed, testCause, testStatus, testSource);
+        XContentParser parser1 = response1.parser();
+        Assertions.assertNull(parser1);
+
+        when(testParser.isClosed()).thenReturn(true);
+        GetDataObjectResponse response2 = new GetDataObjectResponse(
+            testIndex,
+            testId,
+            testParser,
+            testFailed,
+            testCause,
+            testStatus,
+            testSource
+        );
+        XContentParser parser2 = response2.parser();
+        Assertions.assertNull(parser2);
     }
 }
