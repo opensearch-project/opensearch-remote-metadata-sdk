@@ -11,7 +11,6 @@ package org.opensearch.remote.metadata.client;
 import org.opensearch.OpenSearchException;
 import org.opensearch.OpenSearchStatusException;
 import org.opensearch.core.rest.RestStatus;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -33,6 +32,7 @@ import static org.opensearch.remote.metadata.client.SdkClient.NO_PERMISSION_TO_O
 import static org.junit.Assert.assertSame;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -223,7 +223,7 @@ public class SdkClientTests {
     public void testGetDataObjectGlobalTenantId() {
         when(getRequest.tenantId()).thenReturn(GLOBAL_TENANT_ID);
         GetDataObjectResponse response = sdkClient.getDataObject(getRequest);
-        Assertions.assertNotNull(response);
+        assertNotNull(response);
     }
 
     @Test
