@@ -195,7 +195,7 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
 
     @Override
     public CompletionStage<Boolean> isGlobalResource(String index, String id, Executor executor, Boolean isMultiTenancyEnabled) {
-        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
+        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || Strings.isNullOrEmpty(globalTenantId)) {
             return CompletableFuture.completedFuture(false);
         }
         GetDataObjectRequest request = GetDataObjectRequest.builder().index(index).id(id).tenantId(globalTenantId).build();

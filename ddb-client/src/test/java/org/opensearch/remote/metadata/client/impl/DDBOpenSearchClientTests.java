@@ -1237,6 +1237,19 @@ public class DDBOpenSearchClientTests {
     }
 
     @Test
+    public void testGetDataObject_globalTenantIdDisabled_fetchNonExistsResource_noException() {
+        GetDataObjectRequest getRequest = GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build();
+        Map<String, AttributeValue> itemResponse = new HashMap<>();
+        GetItemResponse getItemResponse = GetItemResponse.builder().item(itemResponse).build();
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
+        GetDataObjectResponse getDataObjectResponse = sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(TEST_THREAD_POOL))
+            .toCompletableFuture()
+            .join();
+        verify(dynamoDbAsyncClient, times(1)).getItem(getItemRequestArgumentCaptor.capture());
+        assertFalse(getDataObjectResponse.getResponse().isExists());
+    }
+
+    @Test
     public void testGetDataObject_globalTenantIdEnabled_foundGlobalResourceFromCache() {
         GetDataObjectRequest getRequest = GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build();
         GetItemResponse itemNotExistResponse = GetItemResponse.builder().build();

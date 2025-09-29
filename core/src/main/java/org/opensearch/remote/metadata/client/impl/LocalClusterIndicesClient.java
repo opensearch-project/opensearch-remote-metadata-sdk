@@ -166,7 +166,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Boolean isMultiTenancyEnabled
     ) {
         return doPrivileged(() -> {
-            if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
+            if (Boolean.FALSE.equals(isMultiTenancyEnabled) || Strings.isNullOrEmpty(globalTenantId)) {
                 return innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
             }
 
