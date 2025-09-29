@@ -283,7 +283,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
+        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || Strings.isNullOrEmpty(globalTenantId)) {
             return innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
         }
         // Try fetch from global cache.

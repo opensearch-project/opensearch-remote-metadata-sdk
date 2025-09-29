@@ -244,7 +244,7 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || globalTenantId == null) {
+        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || Strings.isNullOrEmpty(globalTenantId)) {
             return innerGetDataObjectAsync(request, executor, isMultiTenancyEnabled);
         }
         // First check cache for global resource
