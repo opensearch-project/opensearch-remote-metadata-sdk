@@ -53,6 +53,33 @@ public class PutDataObjectRequest extends WriteDataObjectRequest<PutDataObjectRe
     }
 
     /**
+     * Instantiate this request with an index and data object.
+     * <p>
+     * For data storage implementations other than OpenSearch, an index may be referred to as a table and the data object may be referred to as an item.
+     * @param index the index location to put the object
+     * @param id the document id
+     * @param tenantId the tenant id
+     * @param ifSeqNo the sequence number to match or null if not required
+     * @param ifPrimaryTerm the primary term to match or null if not required
+     * @param overwriteIfExists whether to overwrite the document if it exists (update)
+     * @param dataObject the data object
+     */
+    public PutDataObjectRequest(
+            String index,
+            String id,
+            String tenantId,
+            Long ifSeqNo,
+            Long ifPrimaryTerm,
+            boolean overwriteIfExists,
+            ToXContentObject dataObject,
+            String cmkRoleArn
+    ) {
+        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, !overwriteIfExists, cmkRoleArn);
+        this.overwriteIfExists = overwriteIfExists;
+        this.dataObject = dataObject;
+    }
+
+    /**
      * Returns whether to overwrite an existing document (upsert)
      * @return true if this request should overwrite
      */
@@ -133,7 +160,8 @@ public class PutDataObjectRequest extends WriteDataObjectRequest<PutDataObjectRe
                 this.refreshPolicy,
                 this.timeout,
                 this.overwriteIfExists,
-                this.dataObject
+                this.dataObject,
+                this.cmkRoleArn
             );
         }
     }

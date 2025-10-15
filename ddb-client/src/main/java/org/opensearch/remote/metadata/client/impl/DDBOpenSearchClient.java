@@ -18,6 +18,8 @@ import software.amazon.awssdk.auth.credentials.AwsCredentialsProviderChain;
 import software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.http.nio.netty.NettyNioAsyncHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
@@ -73,14 +75,20 @@ import org.opensearch.remote.metadata.client.SearchDataObjectResponse;
 import org.opensearch.remote.metadata.client.UpdateDataObjectRequest;
 import org.opensearch.remote.metadata.client.UpdateDataObjectResponse;
 import org.opensearch.remote.metadata.common.SdkClientUtils;
+import software.amazon.awssdk.services.kms.KmsClient;
+import software.amazon.awssdk.services.kms.model.DecryptResponse;
+import software.amazon.awssdk.services.kms.model.EncryptRequest;
+import software.amazon.awssdk.services.kms.model.EncryptResponse;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -180,6 +188,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         Boolean isMultiTenancyEnabled
     ) {
         final String id = shouldUseId(request.id()) ? request.id() : UUID.randomUUID().toString();
+
         // Validate parameters and data object body
         try (XContentBuilder sourceBuilder = XContentFactory.jsonBuilder()) {
             IndexRequest indexRequest = new IndexRequest(request.index()).opType(request.overwriteIfExists() ? OpType.INDEX : OpType.CREATE)
@@ -207,7 +216,9 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 }
 
                 Long sequenceNumber = initOrIncrementSeqNo(getItemResponse);
-                String source = Strings.toString(MediaTypeRegistry.JSON, request.dataObject());
+                String source = (request.cmkRoleArn() != null)
+                        ? encrypt(request.cmkRoleArn(), Strings.toString(MediaTypeRegistry.JSON, request.dataObject()))
+                        : Strings.toString(MediaTypeRegistry.JSON, request.dataObject());
                 JsonNode jsonNode = OBJECT_MAPPER.readTree(source);
                 Map<String, AttributeValue> sourceMap = DDBJsonTransformer.convertJsonObjectToDDBAttributeMap(jsonNode);
                 if (request.tenantId() != null) {
@@ -343,7 +354,9 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                         sequenceNumberString = getItemResponse.item().get(SEQ_NO_KEY).n();
                     }
                 }
-                final String source = OBJECT_MAPPER.writeValueAsString(sourceObject);
+                final String source = (request.cmkRoleArn() != null)
+                        ? decrypt(request.cmkRoleArn(), OBJECT_MAPPER.writeValueAsString(sourceObject))
+                        : OBJECT_MAPPER.writeValueAsString(sourceObject);
                 final Long sequenceNumber = sequenceNumberString == null || sequenceNumberString.isEmpty()
                     ? null
                     : Long.parseLong(sequenceNumberString);
@@ -831,5 +844,40 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         if (aosOpenSearchClient != null) {
             aosOpenSearchClient.close();
         }
+    }
+
+    public String encrypt(String cmkRoleArn, String content) {
+        SdkBytes plaintext = SdkBytes.fromUtf8String(content);
+        EncryptRequest encryptRequest = EncryptRequest.builder()
+                .keyId(cmkRoleArn)
+                .plaintext(plaintext)
+                .build();
+
+
+
+        KmsClient kmsClient = KmsClient.builder()
+                .region(Region.US_EAST_1)
+                .credentialsProvider(createCredentialsProvider())
+                .build();
+
+        EncryptResponse encryptResponse = kmsClient.encrypt(encryptRequest);
+        SdkBytes cipherText = encryptResponse.ciphertextBlob();
+        return Base64.getEncoder().encodeToString(cipherText.asByteArray());
+    }
+
+    public String decrypt(String cmkRoleArn, String b64) {
+        KmsClient kmsClient = KmsClient.builder()
+                .region(Region.US_EAST_1)
+                .credentialsProvider(createCredentialsProvider())
+                .build();
+
+        byte[] decoded = Base64.getDecoder().decode(b64);
+
+        SdkBytes cipherBlob = SdkBytes.fromByteArray(decoded);
+
+        DecryptResponse dec = kmsClient.decrypt(b -> b.ciphertextBlob(cipherBlob));
+
+        String decString = dec.plaintext().asUtf8String();
+        return decString;
     }
 }
