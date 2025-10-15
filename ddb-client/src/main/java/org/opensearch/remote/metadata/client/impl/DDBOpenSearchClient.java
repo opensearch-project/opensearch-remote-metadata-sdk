@@ -14,6 +14,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.DynamoDbItemEncryptor;
+import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.model.DecryptItemInput;
+import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.model.DynamoDbItemEncryptorConfig;
+import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.model.EncryptItemInput;
+import software.amazon.cryptography.materialproviders.IKeyring;
+import software.amazon.cryptography.materialproviders.Keyring;
+import software.amazon.cryptography.materialproviders.Keyring.*;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProviderChain;
 import software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider;
@@ -79,6 +86,11 @@ import software.amazon.awssdk.services.kms.KmsClient;
 import software.amazon.awssdk.services.kms.model.DecryptResponse;
 import software.amazon.awssdk.services.kms.model.EncryptRequest;
 import software.amazon.awssdk.services.kms.model.EncryptResponse;
+import software.amazon.cryptography.dbencryptionsdk.dynamodb.model.DynamoDbTableEncryptionConfig;
+import software.amazon.cryptography.dbencryptionsdk.structuredencryption.model.CryptoAction;
+import software.amazon.cryptography.materialproviders.MaterialProviders;
+import software.amazon.cryptography.materialproviders.model.CreateAwsKmsMrkMultiKeyringInput;
+import software.amazon.cryptography.materialproviders.model.MaterialProvidersConfig;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -216,9 +228,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 }
 
                 Long sequenceNumber = initOrIncrementSeqNo(getItemResponse);
-                String source = (request.cmkRoleArn() != null)
-                        ? encrypt(request.cmkRoleArn(), Strings.toString(MediaTypeRegistry.JSON, request.dataObject()))
-                        : Strings.toString(MediaTypeRegistry.JSON, request.dataObject());
+                String source = Strings.toString(MediaTypeRegistry.JSON, request.dataObject());
                 JsonNode jsonNode = OBJECT_MAPPER.readTree(source);
                 Map<String, AttributeValue> sourceMap = DDBJsonTransformer.convertJsonObjectToDDBAttributeMap(jsonNode);
                 if (request.tenantId() != null) {
@@ -229,6 +239,11 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 item.put(RANGE_KEY, AttributeValue.builder().s(id).build());
                 item.put(SOURCE, AttributeValue.builder().m(sourceMap).build());
                 item.put(SEQ_NO_KEY, AttributeValue.builder().n(sequenceNumber.toString()).build());
+                if (request.cmkRoleArn() != null) {
+                    final DynamoDbItemEncryptor enc = getEncryptorForTable(tableName, request.cmkRoleArn());
+                    item = enc.EncryptItem(EncryptItemInput.builder().plaintextItem(item).build()).encryptedItem();
+                }
+
                 PutItemRequest.Builder builder = PutItemRequest.builder().tableName(tableName).item(item);
 
                 // Protect against race condition if another thread just created this
@@ -349,14 +364,18 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                     sourceObject = null;
                 } else {
                     found = true;
-                    sourceObject = DDBJsonTransformer.convertDDBAttributeValueMapToObjectNode(getItemResponse.item().get(SOURCE).m());
+                    Map<String, AttributeValue> resultItems = getItemResponse.item();
+                    if (Objects.isNull(request.cmkRoleArn())) {
+                        DynamoDbItemEncryptor dynamoDbItemEncryptor = getEncryptorForTable(getItemRequest.tableName(),  request.cmkRoleArn());
+                        resultItems = dynamoDbItemEncryptor.DecryptItem(DecryptItemInput.builder().encryptedItem(getItemResponse.item()).build()).plaintextItem();
+                    }
+
+                    sourceObject = DDBJsonTransformer.convertDDBAttributeValueMapToObjectNode(resultItems.get(SOURCE).m());
                     if (getItemResponse.item().containsKey(SEQ_NO_KEY)) {
                         sequenceNumberString = getItemResponse.item().get(SEQ_NO_KEY).n();
                     }
                 }
-                final String source = (request.cmkRoleArn() != null)
-                        ? decrypt(request.cmkRoleArn(), OBJECT_MAPPER.writeValueAsString(sourceObject))
-                        : OBJECT_MAPPER.writeValueAsString(sourceObject);
+                final String source = OBJECT_MAPPER.writeValueAsString(sourceObject);
                 final Long sequenceNumber = sequenceNumberString == null || sequenceNumberString.isEmpty()
                     ? null
                     : Long.parseLong(sequenceNumberString);
@@ -880,4 +899,35 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         String decString = dec.plaintext().asUtf8String();
         return decString;
     }
+
+    private DynamoDbItemEncryptor getEncryptorForTable(String tableName, String kmsKeyArn) {
+        MaterialProviders matProv = MaterialProviders.builder()
+                .MaterialProvidersConfig(MaterialProvidersConfig.builder().build())
+                .build();
+
+        IKeyring kmsKeyring = matProv.CreateAwsKmsMrkMultiKeyring(
+                CreateAwsKmsMrkMultiKeyringInput.builder()
+                        .generator(kmsKeyArn)
+                        .build()
+        );
+
+        Map<String, CryptoAction> actions = new HashMap<>();
+        actions.put(HASH_KEY, CryptoAction.SIGN_ONLY);
+        actions.put(RANGE_KEY, CryptoAction.SIGN_ONLY);
+        actions.put(SOURCE,   CryptoAction.ENCRYPT_AND_SIGN);
+        actions.put(SEQ_NO_KEY, CryptoAction.SIGN_ONLY);
+
+        DynamoDbItemEncryptorConfig itemConfig =DynamoDbItemEncryptorConfig.builder()
+                .logicalTableName(tableName)
+                .partitionKeyName(HASH_KEY)
+                .sortKeyName(RANGE_KEY)
+                .attributeActionsOnEncrypt(actions)
+                .allowedUnsignedAttributePrefix(":")
+                .keyring(kmsKeyring)
+                .build();
+        return DynamoDbItemEncryptor.builder()
+                .DynamoDbItemEncryptorConfig(itemConfig)
+                .build();
+    }
+
 }

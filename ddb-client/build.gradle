@@ -12,5 +12,7 @@ dependencies {
     implementation(platform("software.amazon.awssdk:bom:${versions.aws}"))
     implementation("software.amazon.awssdk:kms:2.35.6")
     implementation "software.amazon.awssdk:dynamodb"
+    implementation group: 'software.amazon.cryptography', name: 'aws-database-encryption-sdk-dynamodb', version: '3.9.0'
+    implementation group: 'software.amazon.cryptography', name: 'aws-cryptographic-material-providers', version: '1.11.0'
     implementation "software.amazon.awssdk:netty-nio-client"
 }
