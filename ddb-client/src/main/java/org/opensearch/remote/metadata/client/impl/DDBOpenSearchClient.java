@@ -865,9 +865,9 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         }
     }
 
-    final class FixedCredsKmsClientSupplier implements IClientSupplier {
+    static final class FixedCredsKmsClientSupplier implements IClientSupplier {
         private final AwsCredentialsProvider creds;
-        private final Region region;                       // 你传入的 region
+        private final Region region;
         private final Map<String, KmsClient> cache = new ConcurrentHashMap<>();
 
         FixedCredsKmsClientSupplier(AwsCredentialsProvider creds, Region region) {
