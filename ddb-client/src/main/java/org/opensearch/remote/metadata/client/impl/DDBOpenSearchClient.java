@@ -18,7 +18,6 @@ import software.amazon.awssdk.auth.credentials.AwsCredentialsProviderChain;
 import software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider;
-import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.http.nio.netty.NettyNioAsyncHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
@@ -30,9 +29,6 @@ import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 import software.amazon.awssdk.services.kms.KmsClient;
-import software.amazon.awssdk.services.kms.model.DecryptResponse;
-import software.amazon.awssdk.services.kms.model.EncryptRequest;
-import software.amazon.awssdk.services.kms.model.EncryptResponse;
 import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.DynamoDbItemEncryptor;
 import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.model.DecryptItemInput;
 import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.model.DynamoDbItemEncryptorConfig;
@@ -94,7 +90,6 @@ import org.opensearch.remote.metadata.common.SdkClientUtils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -242,8 +237,6 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 if (request.cmkRoleArn() != null) {
                     final DynamoDbItemEncryptor enc = getEncryptorForTable(tableName, request.cmkRoleArn());
                     item = enc.EncryptItem(EncryptItemInput.builder().plaintextItem(item).build()).encryptedItem();
-                    // Map<String, AttributeValue> de =
-                    // enc.DecryptItem(DecryptItemInput.builder().encryptedItem(item).build()).plaintextItem();
                 }
 
                 PutItemRequest.Builder builder = PutItemRequest.builder().tableName(tableName).item(item);
@@ -870,30 +863,6 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         if (aosOpenSearchClient != null) {
             aosOpenSearchClient.close();
         }
-    }
-
-    public String encrypt(String cmkRoleArn, String content) {
-        SdkBytes plaintext = SdkBytes.fromUtf8String(content);
-        EncryptRequest encryptRequest = EncryptRequest.builder().keyId(cmkRoleArn).plaintext(plaintext).build();
-
-        KmsClient kmsClient = KmsClient.builder().region(Region.US_EAST_1).credentialsProvider(createCredentialsProvider()).build();
-
-        EncryptResponse encryptResponse = kmsClient.encrypt(encryptRequest);
-        SdkBytes cipherText = encryptResponse.ciphertextBlob();
-        return Base64.getEncoder().encodeToString(cipherText.asByteArray());
-    }
-
-    public String decrypt(String cmkRoleArn, String b64) {
-        KmsClient kmsClient = KmsClient.builder().region(Region.US_EAST_1).credentialsProvider(createCredentialsProvider()).build();
-
-        byte[] decoded = Base64.getDecoder().decode(b64);
-
-        SdkBytes cipherBlob = SdkBytes.fromByteArray(decoded);
-
-        DecryptResponse dec = kmsClient.decrypt(b -> b.ciphertextBlob(cipherBlob));
-
-        String decString = dec.plaintext().asUtf8String();
-        return decString;
     }
 
     final class FixedCredsKmsClientSupplier implements IClientSupplier {

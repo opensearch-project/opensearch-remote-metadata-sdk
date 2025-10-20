@@ -25,20 +25,7 @@ public class GetDataObjectRequest extends DataObjectRequest {
      * @param id the document id
      * @param tenantId the tenant id
      * @param fetchSourceContext the context to use when fetching _source
-     */
-    public GetDataObjectRequest(String index, String id, String tenantId, FetchSourceContext fetchSourceContext) {
-        super(index, id, tenantId);
-        this.fetchSourceContext = fetchSourceContext;
-    }
-
-    /**
-     * Instantiate this request with an index and id
-     * <p>
-     * For data storage implementations other than OpenSearch, an index may be referred to as a table and the id may be referred to as a primary key.
-     * @param index the index location to get the object
-     * @param id the document id
-     * @param tenantId the tenant id
-     * @param fetchSourceContext the context to use when fetching _source
+     * @param cmkRoleArn the cmk arn role to encrypt/decrypt
      */
     public GetDataObjectRequest(String index, String id, String tenantId, FetchSourceContext fetchSourceContext, String cmkRoleArn) {
         super(index, id, tenantId, cmkRoleArn);
