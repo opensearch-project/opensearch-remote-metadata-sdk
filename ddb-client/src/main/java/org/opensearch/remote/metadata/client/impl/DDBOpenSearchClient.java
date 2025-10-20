@@ -36,7 +36,6 @@ import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.model
 import software.amazon.cryptography.dbencryptionsdk.structuredencryption.model.CryptoAction;
 import software.amazon.cryptography.materialproviders.IClientSupplier;
 import software.amazon.cryptography.materialproviders.IKeyring;
-import software.amazon.cryptography.materialproviders.Keyring.*;
 import software.amazon.cryptography.materialproviders.MaterialProviders;
 import software.amazon.cryptography.materialproviders.model.CreateAwsKmsMrkMultiKeyringInput;
 import software.amazon.cryptography.materialproviders.model.GetClientInput;
@@ -100,7 +99,6 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
