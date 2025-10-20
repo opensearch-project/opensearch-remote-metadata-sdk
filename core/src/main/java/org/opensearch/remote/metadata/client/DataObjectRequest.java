@@ -16,9 +16,7 @@ public abstract class DataObjectRequest {
     private String index;
     private final String id;
     private String tenantId;
-
-    // ===== NEW: optional CMK role ARN (default null) =====
-    private final String cmkRoleArn; // nullable; not required
+    private final String cmkRoleArn;
 
     /**
      * Instantiate this request with an index and id.
@@ -47,7 +45,7 @@ public abstract class DataObjectRequest {
         this.index = index;
         this.id = id;
         this.tenantId = tenantId;
-        this.cmkRoleArn = cmkRoleArn; // may be null
+        this.cmkRoleArn = cmkRoleArn;
     }
 
     /**
@@ -150,7 +148,6 @@ public abstract class DataObjectRequest {
             return self();
         }
 
-        // ===== NEW: builder setter for cmkRoleArn =====
         /**
          * Add an optional CMK role ARN to this builder (nullable).
          * @param cmkRoleArn CMK role ARN or null

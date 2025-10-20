@@ -865,10 +865,12 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         }
     }
 
+    /**
+     * A supplier to provide KMS client by credential and region
+     */
     static final class FixedCredsKmsClientSupplier implements IClientSupplier {
         private final AwsCredentialsProvider creds;
         private final Region region;
-        private final Map<String, KmsClient> cache = new ConcurrentHashMap<>();
 
         FixedCredsKmsClientSupplier(AwsCredentialsProvider creds, Region region) {
             this.creds = creds;
@@ -877,12 +879,19 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
 
         @Override
         public KmsClient GetClient(GetClientInput input) {
-            return cache.computeIfAbsent(region.id(), r -> KmsClient.builder().region(region).credentialsProvider(creds).build());
+            return KmsClient.builder().region(region).credentialsProvider(creds).build();
         }
     }
 
+    /**
+     * Create the item encryptor by table name and kms role.
+     * @param tableName the table name
+     * @param kmsKeyArn the kms arn role
+     * @return encryptor to encrypt and decrypt
+     */
     private DynamoDbItemEncryptor getEncryptorForTable(String tableName, String kmsKeyArn) {
-        IClientSupplier supplier = new FixedCredsKmsClientSupplier(createCredentialsProvider(), Region.US_EAST_1);
+        String[] arnParts = kmsKeyArn.split(":", 6);
+        IClientSupplier supplier = new FixedCredsKmsClientSupplier(createCredentialsProvider(), Region.of(arnParts[3]));
 
         MaterialProviders matProv = MaterialProviders.builder().MaterialProvidersConfig(MaterialProvidersConfig.builder().build()).build();
 
