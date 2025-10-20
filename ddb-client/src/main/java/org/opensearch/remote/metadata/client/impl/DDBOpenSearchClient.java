@@ -14,18 +14,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
-import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.DynamoDbItemEncryptor;
-import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.model.DecryptItemInput;
-import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.model.DynamoDbItemEncryptorConfig;
-import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.model.EncryptItemInput;
-import software.amazon.cryptography.materialproviders.IKeyring;
-import software.amazon.cryptography.materialproviders.Keyring;
-import software.amazon.cryptography.materialproviders.Keyring.*;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProviderChain;
 import software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.http.nio.netty.NettyNioAsyncHttpClient;
 import software.amazon.awssdk.regions.Region;
@@ -37,6 +29,22 @@ import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
+import software.amazon.awssdk.services.kms.KmsClient;
+import software.amazon.awssdk.services.kms.model.DecryptResponse;
+import software.amazon.awssdk.services.kms.model.EncryptRequest;
+import software.amazon.awssdk.services.kms.model.EncryptResponse;
+import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.DynamoDbItemEncryptor;
+import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.model.DecryptItemInput;
+import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.model.DynamoDbItemEncryptorConfig;
+import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.model.EncryptItemInput;
+import software.amazon.cryptography.dbencryptionsdk.structuredencryption.model.CryptoAction;
+import software.amazon.cryptography.materialproviders.IClientSupplier;
+import software.amazon.cryptography.materialproviders.IKeyring;
+import software.amazon.cryptography.materialproviders.Keyring.*;
+import software.amazon.cryptography.materialproviders.MaterialProviders;
+import software.amazon.cryptography.materialproviders.model.CreateAwsKmsMrkMultiKeyringInput;
+import software.amazon.cryptography.materialproviders.model.GetClientInput;
+import software.amazon.cryptography.materialproviders.model.MaterialProvidersConfig;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -82,15 +90,6 @@ import org.opensearch.remote.metadata.client.SearchDataObjectResponse;
 import org.opensearch.remote.metadata.client.UpdateDataObjectRequest;
 import org.opensearch.remote.metadata.client.UpdateDataObjectResponse;
 import org.opensearch.remote.metadata.common.SdkClientUtils;
-import software.amazon.awssdk.services.kms.KmsClient;
-import software.amazon.awssdk.services.kms.model.DecryptResponse;
-import software.amazon.awssdk.services.kms.model.EncryptRequest;
-import software.amazon.awssdk.services.kms.model.EncryptResponse;
-import software.amazon.cryptography.dbencryptionsdk.dynamodb.model.DynamoDbTableEncryptionConfig;
-import software.amazon.cryptography.dbencryptionsdk.structuredencryption.model.CryptoAction;
-import software.amazon.cryptography.materialproviders.MaterialProviders;
-import software.amazon.cryptography.materialproviders.model.CreateAwsKmsMrkMultiKeyringInput;
-import software.amazon.cryptography.materialproviders.model.MaterialProvidersConfig;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -106,6 +105,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -242,6 +242,8 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 if (request.cmkRoleArn() != null) {
                     final DynamoDbItemEncryptor enc = getEncryptorForTable(tableName, request.cmkRoleArn());
                     item = enc.EncryptItem(EncryptItemInput.builder().plaintextItem(item).build()).encryptedItem();
+                    // Map<String, AttributeValue> de =
+                    // enc.DecryptItem(DecryptItemInput.builder().encryptedItem(item).build()).plaintextItem();
                 }
 
                 PutItemRequest.Builder builder = PutItemRequest.builder().tableName(tableName).item(item);
@@ -365,9 +367,14 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 } else {
                     found = true;
                     Map<String, AttributeValue> resultItems = getItemResponse.item();
-                    if (Objects.isNull(request.cmkRoleArn())) {
-                        DynamoDbItemEncryptor dynamoDbItemEncryptor = getEncryptorForTable(getItemRequest.tableName(),  request.cmkRoleArn());
-                        resultItems = dynamoDbItemEncryptor.DecryptItem(DecryptItemInput.builder().encryptedItem(getItemResponse.item()).build()).plaintextItem();
+                    if (!Objects.isNull(request.cmkRoleArn())) {
+                        DynamoDbItemEncryptor dynamoDbItemEncryptor = getEncryptorForTable(
+                            getItemRequest.tableName(),
+                            request.cmkRoleArn()
+                        );
+                        resultItems = dynamoDbItemEncryptor.DecryptItem(
+                            DecryptItemInput.builder().encryptedItem(getItemResponse.item()).build()
+                        ).plaintextItem();
                     }
 
                     sourceObject = DDBJsonTransformer.convertDDBAttributeValueMapToObjectNode(resultItems.get(SOURCE).m());
@@ -867,17 +874,9 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
 
     public String encrypt(String cmkRoleArn, String content) {
         SdkBytes plaintext = SdkBytes.fromUtf8String(content);
-        EncryptRequest encryptRequest = EncryptRequest.builder()
-                .keyId(cmkRoleArn)
-                .plaintext(plaintext)
-                .build();
+        EncryptRequest encryptRequest = EncryptRequest.builder().keyId(cmkRoleArn).plaintext(plaintext).build();
 
-
-
-        KmsClient kmsClient = KmsClient.builder()
-                .region(Region.US_EAST_1)
-                .credentialsProvider(createCredentialsProvider())
-                .build();
+        KmsClient kmsClient = KmsClient.builder().region(Region.US_EAST_1).credentialsProvider(createCredentialsProvider()).build();
 
         EncryptResponse encryptResponse = kmsClient.encrypt(encryptRequest);
         SdkBytes cipherText = encryptResponse.ciphertextBlob();
@@ -885,10 +884,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
     }
 
     public String decrypt(String cmkRoleArn, String b64) {
-        KmsClient kmsClient = KmsClient.builder()
-                .region(Region.US_EAST_1)
-                .credentialsProvider(createCredentialsProvider())
-                .build();
+        KmsClient kmsClient = KmsClient.builder().region(Region.US_EAST_1).credentialsProvider(createCredentialsProvider()).build();
 
         byte[] decoded = Base64.getDecoder().decode(b64);
 
@@ -900,34 +896,46 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         return decString;
     }
 
+    final class FixedCredsKmsClientSupplier implements IClientSupplier {
+        private final AwsCredentialsProvider creds;
+        private final Region region;                       // 你传入的 region
+        private final Map<String, KmsClient> cache = new ConcurrentHashMap<>();
+
+        FixedCredsKmsClientSupplier(AwsCredentialsProvider creds, Region region) {
+            this.creds = creds;
+            this.region = region;
+        }
+
+        @Override
+        public KmsClient GetClient(GetClientInput input) {
+            return cache.computeIfAbsent(region.id(), r -> KmsClient.builder().region(region).credentialsProvider(creds).build());
+        }
+    }
+
     private DynamoDbItemEncryptor getEncryptorForTable(String tableName, String kmsKeyArn) {
-        MaterialProviders matProv = MaterialProviders.builder()
-                .MaterialProvidersConfig(MaterialProvidersConfig.builder().build())
-                .build();
+        IClientSupplier supplier = new FixedCredsKmsClientSupplier(createCredentialsProvider(), Region.US_EAST_1);
+
+        MaterialProviders matProv = MaterialProviders.builder().MaterialProvidersConfig(MaterialProvidersConfig.builder().build()).build();
 
         IKeyring kmsKeyring = matProv.CreateAwsKmsMrkMultiKeyring(
-                CreateAwsKmsMrkMultiKeyringInput.builder()
-                        .generator(kmsKeyArn)
-                        .build()
+            CreateAwsKmsMrkMultiKeyringInput.builder().generator(kmsKeyArn).clientSupplier(supplier).build()
         );
 
         Map<String, CryptoAction> actions = new HashMap<>();
         actions.put(HASH_KEY, CryptoAction.SIGN_ONLY);
         actions.put(RANGE_KEY, CryptoAction.SIGN_ONLY);
-        actions.put(SOURCE,   CryptoAction.ENCRYPT_AND_SIGN);
+        actions.put(SOURCE, CryptoAction.ENCRYPT_AND_SIGN);
         actions.put(SEQ_NO_KEY, CryptoAction.SIGN_ONLY);
 
-        DynamoDbItemEncryptorConfig itemConfig =DynamoDbItemEncryptorConfig.builder()
-                .logicalTableName(tableName)
-                .partitionKeyName(HASH_KEY)
-                .sortKeyName(RANGE_KEY)
-                .attributeActionsOnEncrypt(actions)
-                .allowedUnsignedAttributePrefix(":")
-                .keyring(kmsKeyring)
-                .build();
-        return DynamoDbItemEncryptor.builder()
-                .DynamoDbItemEncryptorConfig(itemConfig)
-                .build();
+        DynamoDbItemEncryptorConfig itemConfig = DynamoDbItemEncryptorConfig.builder()
+            .logicalTableName(tableName)
+            .partitionKeyName(HASH_KEY)
+            .sortKeyName(RANGE_KEY)
+            .attributeActionsOnEncrypt(actions)
+            .allowedUnsignedAttributePrefix(":")
+            .keyring(kmsKeyring)
+            .build();
+        return DynamoDbItemEncryptor.builder().DynamoDbItemEncryptorConfig(itemConfig).build();
     }
 
 }

@@ -161,7 +161,6 @@ public abstract class DataObjectRequest {
             return self();
         }
 
-
         /**
          * Returns this builder as the parameterized type.
          * @return the builder cast to its correct type

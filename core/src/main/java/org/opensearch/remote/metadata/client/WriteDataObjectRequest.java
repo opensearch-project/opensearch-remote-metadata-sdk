@@ -67,21 +67,31 @@ public abstract class WriteDataObjectRequest<R extends WriteDataObjectRequest<R>
      * @param tenantId the tenant id
      * @param ifSeqNo the sequence number to match or null if not required
      * @param ifPrimaryTerm the primary term to match or null if not required
+     * @param refreshPolicy when should the written data be refreshed. May not be applicable on all clients. Defaults to {@code IMMEDIATE}.
+     * @param timeout A timeout to wait if the index operation can't be performed immediately. May not be applicable on all clients. Defaults to {@code 1m}.
      * @param isCreateOperation whether this can only create a new document and not overwrite one
      */
     protected WriteDataObjectRequest(
-            String index,
-            String id,
-            String tenantId,
-            Long ifSeqNo,
-            Long ifPrimaryTerm,
-            boolean isCreateOperation,
-            String cmkRoleArn
+        String index,
+        String id,
+        String tenantId,
+        Long ifSeqNo,
+        Long ifPrimaryTerm,
+        RefreshPolicy refreshPolicy,
+        TimeValue timeout,
+        boolean isCreateOperation,
+        String cmkRoleArn
     ) {
         super(index, id, tenantId, cmkRoleArn);
         validateSeqNoAndPrimaryTerm(ifSeqNo, ifPrimaryTerm, isCreateOperation);
         this.ifSeqNo = ifSeqNo;
         this.ifPrimaryTerm = ifPrimaryTerm;
+        if (refreshPolicy != null) {
+            this.refreshPolicy = refreshPolicy;
+        }
+        if (timeout != null) {
+            this.timeout = timeout;
+        }
     }
 
     /**

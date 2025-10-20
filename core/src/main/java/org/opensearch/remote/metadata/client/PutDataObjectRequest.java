@@ -61,20 +61,24 @@ public class PutDataObjectRequest extends WriteDataObjectRequest<PutDataObjectRe
      * @param tenantId the tenant id
      * @param ifSeqNo the sequence number to match or null if not required
      * @param ifPrimaryTerm the primary term to match or null if not required
+     * @param refreshPolicy when should the written data be refreshed. May not be applicable on all clients. Defaults to {@code IMMEDIATE}.
+     * @param timeout A timeout to wait if the index operation can't be performed immediately. May not be applicable on all clients. Defaults to {@code 1m}.
      * @param overwriteIfExists whether to overwrite the document if it exists (update)
      * @param dataObject the data object
      */
     public PutDataObjectRequest(
-            String index,
-            String id,
-            String tenantId,
-            Long ifSeqNo,
-            Long ifPrimaryTerm,
-            boolean overwriteIfExists,
-            ToXContentObject dataObject,
-            String cmkRoleArn
+        String index,
+        String id,
+        String tenantId,
+        Long ifSeqNo,
+        Long ifPrimaryTerm,
+        RefreshPolicy refreshPolicy,
+        TimeValue timeout,
+        boolean overwriteIfExists,
+        ToXContentObject dataObject,
+        String cmkRoleArn
     ) {
-        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, !overwriteIfExists, cmkRoleArn);
+        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, !overwriteIfExists, cmkRoleArn);
         this.overwriteIfExists = overwriteIfExists;
         this.dataObject = dataObject;
     }
