@@ -129,7 +129,7 @@ public class PutDataObjectRequestTests {
         assertThrows(IllegalArgumentException.class, () -> notOverwriteWithSeqNoBuilder.ifSeqNo(testSeqNo).build());
         assertThrows(
             IllegalArgumentException.class,
-            () -> new PutDataObjectRequest(testIndex, testId, testTenantId, 1L, 0L, null, null, false, testDataObject)
+            () -> new PutDataObjectRequest(testIndex, testId, testTenantId, 1L, 0L, null, null, false, testDataObject, null)
         );
         final Builder badSeqNoBuilder = PutDataObjectRequest.builder();
         assertThrows(IllegalArgumentException.class, () -> badSeqNoBuilder.ifSeqNo(-99));
