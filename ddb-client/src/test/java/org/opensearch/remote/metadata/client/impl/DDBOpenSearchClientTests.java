@@ -1536,4 +1536,22 @@ public class DDBOpenSearchClientTests {
 
         assertEquals("You don't have permission to operate on this resource!", ex.getMessage());
     }
+
+    @Test
+    public void testGetEncryptorForTable() {
+        DDBOpenSearchClient ddbOpenSearchClient = new DDBOpenSearchClient(
+            dynamoDbAsyncClient,
+            aosOpenSearchClient,
+            Map.of(
+                TENANT_ID_FIELD_KEY,
+                TEST_TENANT_ID,
+                REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                GLOBAL_TENANT_ID,
+                REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                TEST_GLOBAL_RESOURCE_CACHE_TTL
+            )
+        );
+        ddbOpenSearchClient.getEncryptorForTable("test_table_name", "arn:aws:kms:us-east-1:demo-id:key/demo-key");
+    }
+
 }

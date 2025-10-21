@@ -887,7 +887,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
      * @param kmsKeyArn the kms arn role
      * @return encryptor to encrypt and decrypt
      */
-    private DynamoDbItemEncryptor getEncryptorForTable(String tableName, String kmsKeyArn) {
+    public DynamoDbItemEncryptor getEncryptorForTable(String tableName, String kmsKeyArn) {
         String[] arnParts = kmsKeyArn.split(":", 6);
         IClientSupplier supplier = new FixedCredsKmsClientSupplier(createCredentialsProvider(), Region.of(arnParts[3]));
 
