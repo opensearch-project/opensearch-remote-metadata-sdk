@@ -22,6 +22,9 @@ import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemResponse;
 import software.amazon.awssdk.utils.ImmutableMap;
+import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.DynamoDbItemEncryptor;
+import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.model.DecryptItemOutput;
+import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.model.EncryptItemOutput;
 
 import org.opensearch.OpenSearchStatusException;
 import org.opensearch.action.DocWriteResponse;
@@ -80,6 +83,7 @@ import java.util.concurrent.TimeUnit;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
@@ -1552,6 +1556,123 @@ public class DDBOpenSearchClientTests {
             )
         );
         ddbOpenSearchClient.getEncryptorForTable("test_table_name", "arn:aws:kms:us-east-1:demo-id:key/demo-key");
+    }
+
+    @Test
+    public void testPutDataObject_HappyCaseWithCMK() throws IOException {
+        DynamoDbItemEncryptor mockEncryptor = Mockito.mock(DynamoDbItemEncryptor.class);
+        Map<String, AttributeValue> encryptedPlaintext = Map.of(
+            SOURCE,
+            AttributeValue.builder().m(Map.of("data", AttributeValue.builder().s("foo").build())).build(),
+            SEQ_NUM,
+            AttributeValue.builder().n("0").build(),
+            RANGE_KEY,
+            AttributeValue.builder().s(TEST_ID).build(),
+            HASH_KEY,
+            AttributeValue.builder().s(TENANT_ID).build()
+        );
+
+        Mockito.when(mockEncryptor.EncryptItem(Mockito.any()))
+            .thenReturn(EncryptItemOutput.builder().encryptedItem(encryptedPlaintext).build());
+
+        DDBOpenSearchClient delegateSpy = Mockito.spy(new DDBOpenSearchClient(dynamoDbAsyncClient, aosOpenSearchClient, TENANT_ID_FIELD));
+        Mockito.doReturn(mockEncryptor).when(delegateSpy).getEncryptorForTable(Mockito.eq(TEST_INDEX), Mockito.any());
+
+        sdkClient = SdkClientFactory.wrapSdkClientDelegate(delegateSpy, true, null);
+
+        PutDataObjectRequest putRequest = PutDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TENANT_ID)
+            .overwriteIfExists(false)
+            .cmkRoleArn("arn:aws:kms:us-east-1:demo-id:key/demo-key")
+            .dataObject(testDataObject)
+            .build();
+
+        Mockito.when(dynamoDbAsyncClient.putItem(Mockito.any(PutItemRequest.class)))
+            .thenReturn(CompletableFuture.completedFuture(PutItemResponse.builder().build()));
+
+        PutDataObjectResponse response = sdkClient.putDataObjectAsync(putRequest, testThreadPool.executor(TEST_THREAD_POOL))
+            .toCompletableFuture()
+            .join();
+
+        Mockito.verify(dynamoDbAsyncClient, Mockito.times(1)).putItem(putItemRequestArgumentCaptor.capture());
+        assertEquals(TEST_ID, response.id());
+
+        IndexResponse indexActionResponse = IndexResponse.fromXContent(response.parser());
+        assertEquals(TEST_ID, indexActionResponse.getId());
+        assertEquals(DocWriteResponse.Result.CREATED, indexActionResponse.getResult());
+        assertEquals(0, indexActionResponse.getSeqNo());
+
+        PutItemRequest putItemRequest = putItemRequestArgumentCaptor.getValue();
+        assertEquals(TEST_INDEX, putItemRequest.tableName());
+        assertEquals(TEST_ID, putItemRequest.item().get(RANGE_KEY).s());
+        assertEquals(TENANT_ID, putItemRequest.item().get(HASH_KEY).s());
+        assertEquals("0", putItemRequest.item().get(SEQ_NUM).n());
+        assertEquals("foo", putItemRequest.item().get(SOURCE).m().get("data").s());
+
+    }
+
+    @Test
+    public void testGetDataObject_HappyCaseWithCMK() throws IOException {
+        DDBOpenSearchClient delegateSpy = Mockito.spy(new DDBOpenSearchClient(dynamoDbAsyncClient, aosOpenSearchClient, TENANT_ID_FIELD));
+        DynamoDbItemEncryptor mockEncryptor = Mockito.mock(DynamoDbItemEncryptor.class);
+        Mockito.doReturn(mockEncryptor).when(delegateSpy).getEncryptorForTable(Mockito.eq(TEST_INDEX), Mockito.any());
+
+        sdkClient = SdkClientFactory.wrapSdkClientDelegate(delegateSpy, true, null);
+        Map<String, AttributeValue> decryptedPlaintext = Map.of(
+            SOURCE,
+            AttributeValue.builder().m(Map.of("data", AttributeValue.builder().s("foo").build())).build(),
+            SEQ_NUM,
+            AttributeValue.builder().n("0").build(),
+            RANGE_KEY,
+            AttributeValue.builder().s(TEST_ID).build(),
+            HASH_KEY,
+            AttributeValue.builder().s(TENANT_ID).build()
+        );
+
+        Mockito.when(mockEncryptor.DecryptItem(Mockito.any()))
+            .thenReturn(DecryptItemOutput.builder().plaintextItem(decryptedPlaintext).build());
+
+        GetDataObjectRequest getRequest = GetDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TENANT_ID)
+            .cmkRoleArn("arn:aws:kms:us-east-1:demo-id:key/demo-key")
+            .build();
+        GetItemResponse getItemResponse = GetItemResponse.builder()
+            .item(
+                Map.ofEntries(
+                    Map.entry(
+                        SOURCE,
+                        AttributeValue.builder().m(Map.ofEntries(Map.entry("data", AttributeValue.builder().s("foo").build()))).build()
+                    ),
+                    Map.entry(SEQ_NUM, AttributeValue.builder().n("1").build())
+                )
+            )
+            .build();
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
+        GetDataObjectResponse response = sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(TEST_THREAD_POOL))
+            .toCompletableFuture()
+            .join();
+        verify(dynamoDbAsyncClient).getItem(getItemRequestArgumentCaptor.capture());
+        GetItemRequest getItemRequest = getItemRequestArgumentCaptor.getValue();
+        assertEquals(TEST_INDEX, getItemRequest.tableName());
+        assertEquals(TENANT_ID, getItemRequest.key().get(HASH_KEY).s());
+        assertEquals(TEST_ID, getItemRequest.key().get(RANGE_KEY).s());
+        assertEquals(TEST_ID, response.id());
+        assertEquals("foo", response.source().get("data"));
+        XContentParser parser = response.parser();
+        GetResponse getResponse = GetResponse.fromXContent(parser);
+        assertEquals(1, getResponse.getSeqNo());
+        XContentParser dataParser = XContentHelper.createParser(
+            NamedXContentRegistry.EMPTY,
+            LoggingDeprecationHandler.INSTANCE,
+            getResponse.getSourceAsBytesRef(),
+            XContentType.JSON
+        );
+        ensureExpectedToken(XContentParser.Token.START_OBJECT, dataParser.nextToken(), dataParser);
+        assertEquals("foo", TestDataObject.parse(dataParser).data());
     }
 
 }
