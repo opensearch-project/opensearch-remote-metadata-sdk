@@ -11,4 +11,10 @@ dependencies {
 
     implementation(platform("software.amazon.awssdk:bom:${aws_sdk_version}"))
     implementation "software.amazon.awssdk:dynamodb"
+
+    implementation "software.amazon.awssdk:netty-nio-client:2.32.29"
+    implementation "io.netty:netty-codec-http:4.1.125.Final"
+    implementation "io.netty:netty-codec-http2:4.1.125.Final"
+    implementation "io.netty:netty-codec:4.1.125.Final"
+
 }
