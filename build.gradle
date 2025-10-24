@@ -114,6 +114,10 @@ subprojects {
         testImplementation.extendsFrom testFixtures
     }
 
+    configurations.all {
+        resolutionStrategy.force "io.netty:netty-codec-http2:${versions.netty}"
+    }
+
     test {
         include '**/*Tests.class'
         systemProperty 'tests.security.manager', 'false'
