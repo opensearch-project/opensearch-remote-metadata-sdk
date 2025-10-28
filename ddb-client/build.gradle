@@ -14,5 +14,8 @@ dependencies {
     implementation "software.amazon.awssdk:dynamodb"
     implementation group: 'software.amazon.cryptography', name: 'aws-database-encryption-sdk-dynamodb', version: '3.9.0'
     implementation group: 'software.amazon.cryptography', name: 'aws-cryptographic-material-providers', version: '1.11.0'
-    implementation "software.amazon.awssdk:netty-nio-client"
+    implementation "software.amazon.awssdk:netty-nio-client:${versions.aws}"
+    implementation "io.netty:netty-codec-http:${versions.netty}"
+    implementation "io.netty:netty-codec-http2:${versions.netty}"
+    implementation "io.netty:netty-codec:${versions.netty}"
 }
