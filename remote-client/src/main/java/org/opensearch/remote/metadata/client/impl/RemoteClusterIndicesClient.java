@@ -162,6 +162,7 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
+        verifyCMK(request);
         return doPrivileged(() -> {
             try {
                 IndexRequest.Builder<?> builder = new IndexRequest.Builder<>().index(request.index())
@@ -270,6 +271,7 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         Boolean isMultiTenancyEnabled
     ) {
         return doPrivileged(() -> {
+            verifyCMK(request);
             try {
                 GetRequest getRequest = new GetRequest.Builder().index(request.index()).id(request.id()).build();
                 log.info("Getting {} from {}", request.id(), request.index());

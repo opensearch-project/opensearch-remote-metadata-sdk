@@ -92,6 +92,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
+        verifyCMK(request);
         CompletableFuture<PutDataObjectResponse> future = new CompletableFuture<>();
         return doPrivileged(() -> {
             try {
@@ -193,6 +194,7 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
+        verifyCMK(request);
         CompletableFuture<GetDataObjectResponse> future = new CompletableFuture<>();
         return doPrivileged(() -> {
             GetRequest getRequest = createGetRequest(request);

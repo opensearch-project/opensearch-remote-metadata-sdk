@@ -248,4 +248,14 @@ public abstract class AbstractSdkClient implements SdkClientDelegate {
             .map(y -> Objects.equals(y, globalTenantId))
             .orElse(false);
     }
+
+    /**
+     * Throw exception when the request containing cmk. It should be used in Opensearch client.
+     * @param objectRequest The candidate request.
+     */
+    protected void verifyCMK(DataObjectRequest objectRequest) {
+        if (!Objects.isNull(objectRequest.cmkRoleArn())) {
+            throw new IllegalArgumentException("cmkRoleArn should be null since current client doesn't support cmk");
+        }
+    }
 }

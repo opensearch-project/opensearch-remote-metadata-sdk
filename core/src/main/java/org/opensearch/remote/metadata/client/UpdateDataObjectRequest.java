@@ -49,7 +49,7 @@ public class UpdateDataObjectRequest extends WriteDataObjectRequest<UpdateDataOb
         int retryOnConflict,
         ToXContentObject dataObject
     ) {
-        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, false);
+        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, false, null);
         this.retryOnConflict = retryOnConflict;
         this.dataObject = dataObject;
     }
