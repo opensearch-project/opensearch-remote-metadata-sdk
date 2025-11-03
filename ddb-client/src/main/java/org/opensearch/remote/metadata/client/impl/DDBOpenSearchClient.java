@@ -232,7 +232,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 item.put(RANGE_KEY, AttributeValue.builder().s(id).build());
                 item.put(SOURCE, AttributeValue.builder().m(sourceMap).build());
                 item.put(SEQ_NO_KEY, AttributeValue.builder().n(sequenceNumber.toString()).build());
-                if (request.cmkRoleArn() != null) {
+                if (!Objects.isNull(request.cmkRoleArn())) {
                     final DynamoDbItemEncryptor enc = getEncryptorForTable(tableName, request.cmkRoleArn());
                     item = enc.EncryptItem(EncryptItemInput.builder().plaintextItem(item).build()).encryptedItem();
                 }
