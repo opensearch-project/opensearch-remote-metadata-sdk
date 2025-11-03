@@ -54,6 +54,7 @@ import org.opensearch.transport.client.Client;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
@@ -92,7 +93,9 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        verifyCMK(request);
+        if (!Objects.isNull(request.cmkRoleArn())) {
+            throw new IllegalArgumentException("Local cluster client doesn't support cmk.");
+        }
         CompletableFuture<PutDataObjectResponse> future = new CompletableFuture<>();
         return doPrivileged(() -> {
             try {
@@ -194,7 +197,9 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        verifyCMK(request);
+        if (!Objects.isNull(request.cmkRoleArn())) {
+            throw new IllegalArgumentException("Local cluster client doesn't support cmk.");
+        }
         CompletableFuture<GetDataObjectResponse> future = new CompletableFuture<>();
         return doPrivileged(() -> {
             GetRequest getRequest = createGetRequest(request);

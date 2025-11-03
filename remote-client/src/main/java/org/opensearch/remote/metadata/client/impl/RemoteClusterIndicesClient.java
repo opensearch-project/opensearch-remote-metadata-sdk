@@ -91,6 +91,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
@@ -162,7 +163,9 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        verifyCMK(request);
+        if (!Objects.isNull(request.cmkRoleArn())) {
+            throw new IllegalArgumentException("Remote cluster client doesn't support cmk.");
+        }
         return doPrivileged(() -> {
             try {
                 IndexRequest.Builder<?> builder = new IndexRequest.Builder<>().index(request.index())
@@ -271,7 +274,9 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         Boolean isMultiTenancyEnabled
     ) {
         return doPrivileged(() -> {
-            verifyCMK(request);
+            if (!Objects.isNull(request.cmkRoleArn())) {
+                throw new IllegalArgumentException("Remote cluster client doesn't support cmk.");
+            }
             try {
                 GetRequest getRequest = new GetRequest.Builder().index(request.index()).id(request.id()).build();
                 log.info("Getting {} from {}", request.id(), request.index());

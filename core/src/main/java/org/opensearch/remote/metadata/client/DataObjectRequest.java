@@ -27,10 +27,7 @@ public abstract class DataObjectRequest {
      * @param tenantId the tenant id
      */
     protected DataObjectRequest(String index, String id, String tenantId) {
-        this.index = index;
-        this.id = id;
-        this.tenantId = tenantId;
-        this.cmkRoleArn = null;
+        this(index, id, tenantId, null);
     }
 
     /**
