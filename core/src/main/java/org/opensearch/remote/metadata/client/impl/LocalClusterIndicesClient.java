@@ -93,9 +93,6 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        if (!Objects.isNull(request.cmkRoleArn())) {
-            throw new IllegalArgumentException("Local cluster client doesn't support cmk.");
-        }
         CompletableFuture<PutDataObjectResponse> future = new CompletableFuture<>();
         return doPrivileged(() -> {
             try {
@@ -197,9 +194,6 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        if (!Objects.isNull(request.cmkRoleArn())) {
-            throw new IllegalArgumentException("Local cluster client doesn't support cmk.");
-        }
         CompletableFuture<GetDataObjectResponse> future = new CompletableFuture<>();
         return doPrivileged(() -> {
             GetRequest getRequest = createGetRequest(request);

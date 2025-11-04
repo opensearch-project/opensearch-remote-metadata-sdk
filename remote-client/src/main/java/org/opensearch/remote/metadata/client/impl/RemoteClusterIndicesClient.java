@@ -163,9 +163,6 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        if (!Objects.isNull(request.cmkRoleArn())) {
-            throw new IllegalArgumentException("Remote cluster client doesn't support cmk.");
-        }
         return doPrivileged(() -> {
             try {
                 IndexRequest.Builder<?> builder = new IndexRequest.Builder<>().index(request.index())
@@ -274,9 +271,6 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
         Boolean isMultiTenancyEnabled
     ) {
         return doPrivileged(() -> {
-            if (!Objects.isNull(request.cmkRoleArn())) {
-                throw new IllegalArgumentException("Remote cluster client doesn't support cmk.");
-            }
             try {
                 GetRequest getRequest = new GetRequest.Builder().index(request.index()).id(request.id()).build();
                 log.info("Getting {} from {}", request.id(), request.index());
