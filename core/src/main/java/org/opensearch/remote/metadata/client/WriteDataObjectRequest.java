@@ -35,6 +35,7 @@ public abstract class WriteDataObjectRequest<R extends WriteDataObjectRequest<R>
      * @param refreshPolicy when should the written data be refreshed. May not be applicable on all clients. Defaults to {@code IMMEDIATE}.
      * @param timeout A timeout to wait if the index operation can't be performed immediately. May not be applicable on all clients. Defaults to {@code 1m}.
      * @param isCreateOperation whether this can only create a new document and not overwrite one
+     * @param cmkRoleArn the cmk arn role to encrypt/decrypt
      */
     protected WriteDataObjectRequest(
         String index,
@@ -44,9 +45,10 @@ public abstract class WriteDataObjectRequest<R extends WriteDataObjectRequest<R>
         Long ifPrimaryTerm,
         RefreshPolicy refreshPolicy,
         TimeValue timeout,
-        boolean isCreateOperation
+        boolean isCreateOperation,
+        String cmkRoleArn
     ) {
-        super(index, id, tenantId);
+        super(index, id, tenantId, cmkRoleArn);
         validateSeqNoAndPrimaryTerm(ifSeqNo, ifPrimaryTerm, isCreateOperation);
         this.ifSeqNo = ifSeqNo;
         this.ifPrimaryTerm = ifPrimaryTerm;

@@ -37,7 +37,7 @@ public class DeleteDataObjectRequest extends WriteDataObjectRequest<DeleteDataOb
         RefreshPolicy refreshPolicy,
         TimeValue timeout
     ) {
-        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, false);
+        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, false, null);
     }
 
     /**

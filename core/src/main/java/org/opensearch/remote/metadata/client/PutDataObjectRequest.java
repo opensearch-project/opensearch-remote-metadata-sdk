@@ -35,6 +35,7 @@ public class PutDataObjectRequest extends WriteDataObjectRequest<PutDataObjectRe
      * @param timeout A timeout to wait if the index operation can't be performed immediately. May not be applicable on all clients. Defaults to {@code 1m}.
      * @param overwriteIfExists whether to overwrite the document if it exists (update)
      * @param dataObject the data object
+     * @param cmkRoleArn the cmk arn role to encrypt/decrypt
      */
     public PutDataObjectRequest(
         String index,
@@ -45,9 +46,10 @@ public class PutDataObjectRequest extends WriteDataObjectRequest<PutDataObjectRe
         RefreshPolicy refreshPolicy,
         TimeValue timeout,
         boolean overwriteIfExists,
-        ToXContentObject dataObject
+        ToXContentObject dataObject,
+        String cmkRoleArn
     ) {
-        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, !overwriteIfExists);
+        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, !overwriteIfExists, cmkRoleArn);
         this.overwriteIfExists = overwriteIfExists;
         this.dataObject = dataObject;
     }
@@ -133,7 +135,8 @@ public class PutDataObjectRequest extends WriteDataObjectRequest<PutDataObjectRe
                 this.refreshPolicy,
                 this.timeout,
                 this.overwriteIfExists,
-                this.dataObject
+                this.dataObject,
+                this.cmkRoleArn
             );
         }
     }
