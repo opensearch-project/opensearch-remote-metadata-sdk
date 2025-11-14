@@ -48,7 +48,7 @@ import static org.opensearch.secure_sm.AccessController.doPrivileged;
 public abstract class AbstractSdkClient implements SdkClientDelegate {
 
     // TENANT_ID hash key requires non-null value
-    protected static final String DEFAULT_TENANT = "DEFAULT_TENANT";
+    public static final String DEFAULT_TENANT = "DEFAULT_TENANT";
     public static final TimeValue DEFAULT_GLOBAL_RESOURCE_CACHE_TTL = TimeValue.timeValueMillis(5 * 60 * 1000);
     protected static final Map<String, Tuple<GetDataObjectResponse, Long>> GLOBAL_RESOURCES_CACHE = new ConcurrentHashMap<>();
     protected static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();

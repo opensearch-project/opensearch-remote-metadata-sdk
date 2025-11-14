@@ -439,20 +439,23 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         } catch (IOException e) {
             throw new OpenSearchStatusException("Request body validation failed.", RestStatus.BAD_REQUEST, e);
         }
-        if (Boolean.FALSE.equals(isMultiTenancyEnabled) || Strings.isNullOrEmpty(globalTenantId)) {
-            return updateItem(request, request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT);
-        } else {
-            return isGlobalResource(request.index(), request.id(), executor, isMultiTenancyEnabled).thenCompose(isGlobalResource -> {
-                if (isGlobalResource) {
-                    return updateItem(request, globalTenantId);
-                } else {
-                    return updateItem(request, request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT);
-                }
-            }).exceptionally(t -> {
-                log.error("Failed to check the resource type, aborting the update", t);
-                throw new OpenSearchStatusException("Failed to find the resource.", RestStatus.INTERNAL_SERVER_ERROR, t);
-            });
-        }
+        return isGlobalResource(request.index(), request.id(), executor, isMultiTenancyEnabled).thenCompose(isGlobalResource -> {
+            if (isGlobalResource) {
+                return updateItem(request, globalTenantId);
+            } else {
+                return updateItem(request, request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT);
+            }
+        }).exceptionally(t -> {
+            log.error("Failed to check the resource type, aborting the update", t);
+            Throwable cause = t.getCause() != null ? t.getCause() : t;
+            if (cause instanceof OpenSearchStatusException) {
+                throw (OpenSearchStatusException) cause;
+            } else if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            } else {
+                throw new CompletionException("Failed to get the item.", cause);
+            }
+        });
     }
 
     private CompletionStage<UpdateDataObjectResponse> updateItem(UpdateDataObjectRequest request, String tenantId) {
