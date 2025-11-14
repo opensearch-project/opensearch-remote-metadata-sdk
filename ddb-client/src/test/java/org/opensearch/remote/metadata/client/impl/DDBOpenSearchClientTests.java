@@ -717,6 +717,121 @@ public class DDBOpenSearchClientTests {
     }
 
     @Test
+    public void testUpdateDataObjectAsync_HappyCase_globalResource() {
+        UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
+            .id(TEST_ID)
+            .index(TEST_INDEX)
+            .tenantId(TENANT_ID)
+            .retryOnConflict(1)
+            .dataObject(testDataObject)
+            .build();
+        GetItemResponse getItemResponse = GetItemResponse.builder()
+            .item(
+                Map.ofEntries(
+                    Map.entry(SEQ_NUM, AttributeValue.builder().n("0").build()),
+                    Map.entry(
+                        SOURCE,
+                        AttributeValue.builder()
+                            .m(
+                                Map.of(
+                                    "old_key",
+                                    AttributeValue.builder().s("old_value").build(),
+                                    TENANT_ID_FIELD,
+                                    AttributeValue.builder().s(GLOBAL_TENANT_ID).build()
+                                )
+                            )
+                            .build()
+                    )
+                )
+            )
+            .build();
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
+        when(dynamoDbAsyncClient.updateItem(updateItemRequestArgumentCaptor.capture())).thenReturn(
+            CompletableFuture.completedFuture(UpdateItemResponse.builder().build())
+        );
+        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(
+            new DDBOpenSearchClient(
+                dynamoDbAsyncClient,
+                aosOpenSearchClient,
+                Map.of(
+                    TENANT_ID_FIELD_KEY,
+                    TEST_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                    GLOBAL_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                    TEST_GLOBAL_RESOURCE_CACHE_TTL
+                )
+            ),
+            true,
+            GLOBAL_TENANT_ID
+        );
+        UpdateDataObjectResponse updateResponse = sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(TEST_THREAD_POOL))
+            .toCompletableFuture()
+            .join();
+        assertEquals(TEST_ID, updateResponse.id());
+        UpdateItemRequest updateItemRequest = updateItemRequestArgumentCaptor.getValue();
+        assertEquals(TEST_ID, updateRequest.id());
+        assertEquals(TEST_INDEX, updateItemRequest.tableName());
+        assertEquals(TEST_ID, updateItemRequest.key().get(RANGE_KEY).s());
+        assertEquals(GLOBAL_TENANT_ID, updateItemRequest.key().get(HASH_KEY).s());
+        assertEquals("foo", updateItemRequest.expressionAttributeValues().get(":source").m().get("data").s());
+        assertEquals("old_value", updateItemRequest.expressionAttributeValues().get(":source").m().get("old_key").s());
+    }
+
+    @Test
+    public void testUpdateDataObjectAsync_HappyCase_notGlobalResource() {
+        UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
+            .id(TEST_ID)
+            .index(TEST_INDEX)
+            .tenantId(TENANT_ID)
+            .retryOnConflict(1)
+            .dataObject(testDataObject)
+            .build();
+        GetItemResponse getItemResponse = GetItemResponse.builder()
+            .item(
+                Map.ofEntries(
+                    Map.entry(SEQ_NUM, AttributeValue.builder().n("0").build()),
+                    Map.entry(
+                        SOURCE,
+                        AttributeValue.builder().m(Map.of("old_key", AttributeValue.builder().s("old_value").build())).build()
+                    )
+                )
+            )
+            .build();
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
+        when(dynamoDbAsyncClient.updateItem(updateItemRequestArgumentCaptor.capture())).thenReturn(
+            CompletableFuture.completedFuture(UpdateItemResponse.builder().build())
+        );
+        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(
+            new DDBOpenSearchClient(
+                dynamoDbAsyncClient,
+                aosOpenSearchClient,
+                Map.of(
+                    TENANT_ID_FIELD_KEY,
+                    TEST_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                    GLOBAL_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                    TEST_GLOBAL_RESOURCE_CACHE_TTL
+                )
+            ),
+            true,
+            GLOBAL_TENANT_ID
+        );
+        UpdateDataObjectResponse updateResponse = sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(TEST_THREAD_POOL))
+            .toCompletableFuture()
+            .join();
+        assertEquals(TEST_ID, updateResponse.id());
+        UpdateItemRequest updateItemRequest = updateItemRequestArgumentCaptor.getValue();
+        assertEquals(TEST_ID, updateRequest.id());
+        assertEquals(TEST_INDEX, updateItemRequest.tableName());
+        assertEquals(TEST_ID, updateItemRequest.key().get(RANGE_KEY).s());
+        assertEquals(TENANT_ID, updateItemRequest.key().get(HASH_KEY).s());
+        assertEquals("foo", updateItemRequest.expressionAttributeValues().get(":source").m().get("data").s());
+        assertEquals("old_value", updateItemRequest.expressionAttributeValues().get(":source").m().get("old_key").s());
+    }
+
+    @Test
     public void testUpdateDataObjectAsync_HappyCaseWithMap() throws Exception {
         UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
             .id(TEST_ID)
