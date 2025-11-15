@@ -107,6 +107,7 @@ import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_PRIMARY_TERM
 import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
 import static org.opensearch.remote.metadata.common.CommonValue.AWS_DYNAMO_DB;
 import static org.opensearch.remote.metadata.common.CommonValue.VALID_AWS_OPENSEARCH_SERVICE_NAMES;
+import static org.opensearch.remote.metadata.common.SdkClientUtils.createParser;
 import static org.opensearch.secure_sm.AccessController.doPrivileged;
 
 /**
@@ -262,7 +263,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                             sequenceNumber,
                             Map.of("result", "created")
                         );
-                        return PutDataObjectResponse.builder().id(id).parser(SdkClientUtils.createParser(simulatedIndexResponse)).build();
+                        return PutDataObjectResponse.builder().id(id).parser(createParser(simulatedIndexResponse)).build();
                     } catch (IOException e) {
                         throw new OpenSearchStatusException("Failed to create parser for response", RestStatus.INTERNAL_SERVER_ERROR, e);
                     }
@@ -438,7 +439,24 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         } catch (IOException e) {
             throw new OpenSearchStatusException("Request body validation failed.", RestStatus.BAD_REQUEST, e);
         }
-        final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
+        return isGlobalResource(request.index(), request.id(), executor, isMultiTenancyEnabled).thenCompose(isGlobalResource -> {
+            if (isGlobalResource) {
+                return updateItem(request, globalTenantId);
+            } else {
+                return updateItem(request, request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT);
+            }
+        }).exceptionally(t -> {
+            log.error("Failed to check the resource type, aborting the update", t);
+            Throwable cause = t.getCause() != null ? t.getCause() : t;
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            } else {
+                throw new CompletionException("Failed to get the item.", cause);
+            }
+        });
+    }
+
+    private CompletionStage<UpdateDataObjectResponse> updateItem(UpdateDataObjectRequest request, String tenantId) {
         return doPrivileged(() -> {
             try {
                 String source = Strings.toString(MediaTypeRegistry.JSON, request.dataObject());
@@ -453,10 +471,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                             sequenceNumber,
                             Map.of("result", "updated")
                         );
-                        return UpdateDataObjectResponse.builder()
-                            .id(request.id())
-                            .parser(SdkClientUtils.createParser(simulatedUpdateResponse))
-                            .build();
+                        return UpdateDataObjectResponse.builder().id(request.id()).parser(createParser(simulatedUpdateResponse)).build();
                     } catch (IOException e) {
                         throw new OpenSearchStatusException("Parsing error creating update response", RestStatus.INTERNAL_SERVER_ERROR, e);
                     }
@@ -591,10 +606,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                     sequenceNumber,
                     Map.of("result", "deleted")
                 );
-                return DeleteDataObjectResponse.builder()
-                    .id(request.id())
-                    .parser(SdkClientUtils.createParser(simulatedDeleteResponse))
-                    .build();
+                return DeleteDataObjectResponse.builder().id(request.id()).parser(createParser(simulatedDeleteResponse)).build();
             } catch (IOException e) {
                 // Rethrow unchecked exception on XContent parsing error
                 throw new OpenSearchStatusException("Failed to parse response", RestStatus.INTERNAL_SERVER_ERROR);
@@ -707,7 +719,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                     responses.toArray(new DataObjectResponse[0]),
                     tookMillis,
                     br.hasFailures(),
-                    SdkClientUtils.createParser(builder.toString())
+                    createParser(builder.toString())
                 )
             );
         } catch (IOException e) {

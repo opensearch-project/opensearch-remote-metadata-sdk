@@ -93,6 +93,7 @@ import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_
 import static org.opensearch.remote.metadata.common.CommonValue.TENANT_ID_FIELD_KEY;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -377,7 +378,7 @@ public class DDBOpenSearchClientTests {
         verify(dynamoDbAsyncClient).putItem(putItemRequestArgumentCaptor.capture());
 
         PutItemRequest putItemRequest = putItemRequestArgumentCaptor.getValue();
-        assertNotNull(putItemRequest.item().get(RANGE_KEY).s());
+        assertNotNull(putItemRequest.item().get(RANGE_KEY));
         assertNotNull(response.id());
     }
 
@@ -717,6 +718,162 @@ public class DDBOpenSearchClientTests {
     }
 
     @Test
+    public void testUpdateDataObjectAsync_HappyCase_globalResource() {
+        UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
+            .id(TEST_ID)
+            .index(TEST_INDEX)
+            .tenantId(TENANT_ID)
+            .retryOnConflict(1)
+            .dataObject(testDataObject)
+            .build();
+        GetItemResponse getItemResponse = GetItemResponse.builder()
+            .item(
+                Map.ofEntries(
+                    Map.entry(SEQ_NUM, AttributeValue.builder().n("0").build()),
+                    Map.entry(
+                        SOURCE,
+                        AttributeValue.builder()
+                            .m(
+                                Map.of(
+                                    "old_key",
+                                    AttributeValue.builder().s("old_value").build(),
+                                    TENANT_ID_FIELD,
+                                    AttributeValue.builder().s(GLOBAL_TENANT_ID).build()
+                                )
+                            )
+                            .build()
+                    )
+                )
+            )
+            .build();
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
+        when(dynamoDbAsyncClient.updateItem(updateItemRequestArgumentCaptor.capture())).thenReturn(
+            CompletableFuture.completedFuture(UpdateItemResponse.builder().build())
+        );
+        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(
+            new DDBOpenSearchClient(
+                dynamoDbAsyncClient,
+                aosOpenSearchClient,
+                Map.of(
+                    TENANT_ID_FIELD_KEY,
+                    TEST_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                    GLOBAL_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                    TEST_GLOBAL_RESOURCE_CACHE_TTL
+                )
+            ),
+            true,
+            GLOBAL_TENANT_ID
+        );
+        UpdateDataObjectResponse updateResponse = sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(TEST_THREAD_POOL))
+            .toCompletableFuture()
+            .join();
+        assertEquals(TEST_ID, updateResponse.id());
+        UpdateItemRequest updateItemRequest = updateItemRequestArgumentCaptor.getValue();
+        assertEquals(TEST_ID, updateRequest.id());
+        assertEquals(TEST_INDEX, updateItemRequest.tableName());
+        assertEquals(TEST_ID, updateItemRequest.key().get(RANGE_KEY).s());
+        assertEquals(GLOBAL_TENANT_ID, updateItemRequest.key().get(HASH_KEY).s());
+        assertEquals("foo", updateItemRequest.expressionAttributeValues().get(":source").m().get("data").s());
+        assertEquals("old_value", updateItemRequest.expressionAttributeValues().get(":source").m().get("old_key").s());
+    }
+
+    @Test
+    public void testUpdateDataObjectAsync_HappyCase_notGlobalResource() {
+        UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
+            .id(TEST_ID)
+            .index(TEST_INDEX)
+            .tenantId(TENANT_ID)
+            .retryOnConflict(1)
+            .dataObject(testDataObject)
+            .build();
+        GetItemResponse getItemResponse = GetItemResponse.builder()
+            .item(
+                Map.ofEntries(
+                    Map.entry(SEQ_NUM, AttributeValue.builder().n("0").build()),
+                    Map.entry(
+                        SOURCE,
+                        AttributeValue.builder().m(Map.of("old_key", AttributeValue.builder().s("old_value").build())).build()
+                    )
+                )
+            )
+            .build();
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(CompletableFuture.completedFuture(getItemResponse));
+        when(dynamoDbAsyncClient.updateItem(updateItemRequestArgumentCaptor.capture())).thenReturn(
+            CompletableFuture.completedFuture(UpdateItemResponse.builder().build())
+        );
+        SdkClient multiTenancyNotEnabledClient = SdkClientFactory.wrapSdkClientDelegate(
+            new DDBOpenSearchClient(dynamoDbAsyncClient, aosOpenSearchClient, Map.of()),
+            false,
+            null
+        );
+        SdkClient globalResourceEnabledClient = SdkClientFactory.wrapSdkClientDelegate(
+            new DDBOpenSearchClient(
+                dynamoDbAsyncClient,
+                aosOpenSearchClient,
+                Map.of(
+                    TENANT_ID_FIELD_KEY,
+                    TEST_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                    GLOBAL_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                    TEST_GLOBAL_RESOURCE_CACHE_TTL
+                )
+            ),
+            true,
+            GLOBAL_TENANT_ID
+        );
+        // multi-tenancy not enabled case, the update is successful.
+        UpdateDataObjectResponse multiTenancyNotEnabledResponse = multiTenancyNotEnabledClient.updateDataObjectAsync(
+            updateRequest,
+            testThreadPool.executor(TEST_THREAD_POOL)
+        ).toCompletableFuture().join();
+        assertEquals(TEST_ID, multiTenancyNotEnabledResponse.id());
+        UpdateItemRequest updateItemRequest1 = updateItemRequestArgumentCaptor.getValue();
+        assertEquals(TEST_ID, updateRequest.id());
+        assertEquals(TEST_INDEX, updateItemRequest1.tableName());
+        assertEquals(TEST_ID, updateItemRequest1.key().get(RANGE_KEY).s());
+        assertEquals(TENANT_ID, updateItemRequest1.key().get(HASH_KEY).s());
+        assertEquals("foo", updateItemRequest1.expressionAttributeValues().get(":source").m().get("data").s());
+        assertEquals("old_value", updateItemRequest1.expressionAttributeValues().get(":source").m().get("old_key").s());
+
+        // multi-tenancy not enabled and tenant id null case, the update is successful and tenant id is default tenant id.
+        UpdateDataObjectRequest tenantIdNullRequest = UpdateDataObjectRequest.builder()
+            .id(TEST_ID)
+            .index(TEST_INDEX)
+            .retryOnConflict(1)
+            .dataObject(testDataObject)
+            .build();
+        UpdateDataObjectResponse multiTenancyNotEnabledTenantNullResponse = multiTenancyNotEnabledClient.updateDataObjectAsync(
+            tenantIdNullRequest,
+            testThreadPool.executor(TEST_THREAD_POOL)
+        ).toCompletableFuture().join();
+        assertEquals(TEST_ID, multiTenancyNotEnabledTenantNullResponse.id());
+        UpdateItemRequest updateItemRequest2 = updateItemRequestArgumentCaptor.getValue();
+        assertEquals(TEST_ID, tenantIdNullRequest.id());
+        assertEquals(TEST_INDEX, updateItemRequest2.tableName());
+        assertEquals(TEST_ID, updateItemRequest2.key().get(RANGE_KEY).s());
+        assertNotNull(updateItemRequest2.key().get(HASH_KEY));
+        assertEquals("foo", updateItemRequest2.expressionAttributeValues().get(":source").m().get("data").s());
+        assertEquals("old_value", updateItemRequest2.expressionAttributeValues().get(":source").m().get("old_key").s());
+
+        // global resource enabled case, the update is also successful.
+        UpdateDataObjectResponse globalResourceEnabledResponse = globalResourceEnabledClient.updateDataObjectAsync(
+            updateRequest,
+            testThreadPool.executor(TEST_THREAD_POOL)
+        ).toCompletableFuture().join();
+        assertEquals(TEST_ID, globalResourceEnabledResponse.id());
+        UpdateItemRequest updateItemRequest3 = updateItemRequestArgumentCaptor.getValue();
+        assertEquals(TEST_ID, tenantIdNullRequest.id());
+        assertEquals(TEST_INDEX, updateItemRequest3.tableName());
+        assertEquals(TEST_ID, updateItemRequest3.key().get(RANGE_KEY).s());
+        assertEquals(TENANT_ID, updateItemRequest3.key().get(HASH_KEY).s());
+        assertEquals("foo", updateItemRequest3.expressionAttributeValues().get(":source").m().get("data").s());
+        assertEquals("old_value", updateItemRequest3.expressionAttributeValues().get(":source").m().get("old_key").s());
+    }
+
+    @Test
     public void testUpdateDataObjectAsync_HappyCaseWithMap() throws Exception {
         UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
             .id(TEST_ID)
@@ -762,6 +919,42 @@ public class DDBOpenSearchClientTests {
         UpdateResponse response = UpdateResponse.fromXContent(updateResponse.parser());
         assertEquals(5, response.getSeqNo());
 
+    }
+
+    @Test
+    public void testUpdateDataObjectAsync_getItemException_failToUpdate() {
+        UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
+            .id(TEST_ID)
+            .index(TEST_INDEX)
+            .tenantId(TENANT_ID)
+            .retryOnConflict(1)
+            .dataObject(testDataObject)
+            .build();
+        when(dynamoDbAsyncClient.getItem(any(GetItemRequest.class))).thenReturn(
+            CompletableFuture.failedFuture(new RuntimeException("Failed to get item"))
+        );
+        SdkClient sdkClient = SdkClientFactory.wrapSdkClientDelegate(
+            new DDBOpenSearchClient(
+                dynamoDbAsyncClient,
+                aosOpenSearchClient,
+                Map.of(
+                    TENANT_ID_FIELD_KEY,
+                    TEST_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                    GLOBAL_TENANT_ID,
+                    REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                    TEST_GLOBAL_RESOURCE_CACHE_TTL
+                )
+            ),
+            true,
+            GLOBAL_TENANT_ID
+        );
+        CompletionException exception = assertThrows(
+            CompletionException.class,
+            () -> sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join()
+        );
+        assertInstanceOf(RuntimeException.class, exception);
+        assertEquals("java.lang.RuntimeException: Failed to get item", exception.getMessage());
     }
 
     @Test
