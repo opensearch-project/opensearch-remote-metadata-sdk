@@ -448,9 +448,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         }).exceptionally(t -> {
             log.error("Failed to check the resource type, aborting the update", t);
             Throwable cause = t.getCause() != null ? t.getCause() : t;
-            if (cause instanceof OpenSearchStatusException) {
-                throw (OpenSearchStatusException) cause;
-            } else if (cause instanceof RuntimeException) {
+            if (cause instanceof RuntimeException) {
                 throw (RuntimeException) cause;
             } else {
                 throw new CompletionException("Failed to get the item.", cause);

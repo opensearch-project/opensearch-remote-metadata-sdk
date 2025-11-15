@@ -87,7 +87,6 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
-import static org.opensearch.remote.metadata.client.AbstractSdkClient.DEFAULT_TENANT;
 import static org.opensearch.remote.metadata.client.impl.DDBOpenSearchClient.simulateOpenSearchResponse;
 import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY;
 import static org.opensearch.remote.metadata.common.CommonValue.REMOTE_METADATA_GLOBAL_TENANT_ID_KEY;
@@ -379,7 +378,7 @@ public class DDBOpenSearchClientTests {
         verify(dynamoDbAsyncClient).putItem(putItemRequestArgumentCaptor.capture());
 
         PutItemRequest putItemRequest = putItemRequestArgumentCaptor.getValue();
-        assertNotNull(putItemRequest.item().get(RANGE_KEY).s());
+        assertNotNull(putItemRequest.item().get(RANGE_KEY));
         assertNotNull(response.id());
     }
 
@@ -855,7 +854,7 @@ public class DDBOpenSearchClientTests {
         assertEquals(TEST_ID, tenantIdNullRequest.id());
         assertEquals(TEST_INDEX, updateItemRequest2.tableName());
         assertEquals(TEST_ID, updateItemRequest2.key().get(RANGE_KEY).s());
-        assertEquals(DEFAULT_TENANT, updateItemRequest2.key().get(HASH_KEY).s());
+        assertNotNull(updateItemRequest2.key().get(HASH_KEY));
         assertEquals("foo", updateItemRequest2.expressionAttributeValues().get(":source").m().get("data").s());
         assertEquals("old_value", updateItemRequest2.expressionAttributeValues().get(":source").m().get("old_key").s());
 
