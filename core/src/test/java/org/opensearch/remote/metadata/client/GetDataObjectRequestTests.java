@@ -20,6 +20,8 @@ public class GetDataObjectRequestTests {
     private String testIndex;
     private String testId;
     private String testTenantId;
+    private String testCMKRole;
+    private String testAssumeRole;
     private FetchSourceContext testFetchSourceContext;
 
     @BeforeEach
@@ -27,6 +29,8 @@ public class GetDataObjectRequestTests {
         testIndex = "test-index";
         testId = "test-id";
         testTenantId = "test-tenant-id";
+        testCMKRole = "test-cmk-role";
+        testAssumeRole = "test-assume-role";
         testFetchSourceContext = mock(FetchSourceContext.class);
     }
 
@@ -37,11 +41,15 @@ public class GetDataObjectRequestTests {
             .id(testId)
             .tenantId(testTenantId)
             .fetchSourceContext(testFetchSourceContext)
+            .cmkRoleArn(testCMKRole)
+            .assumeRoleArn(testAssumeRole)
             .build();
 
         assertEquals(testIndex, request.index());
         assertEquals(testId, request.id());
         assertEquals(testTenantId, request.tenantId());
         assertEquals(testFetchSourceContext, request.fetchSourceContext());
+        assertEquals(testCMKRole, request.cmkRoleArn());
+        assertEquals(testAssumeRole, request.assumeRoleArn());
     }
 }

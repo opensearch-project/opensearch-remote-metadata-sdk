@@ -36,6 +36,7 @@ public class PutDataObjectRequest extends WriteDataObjectRequest<PutDataObjectRe
      * @param overwriteIfExists whether to overwrite the document if it exists (update)
      * @param dataObject the data object
      * @param cmkRoleArn the cmk arn role to encrypt/decrypt
+     * @param assumeRoleArn A role to assume for cmk
      */
     public PutDataObjectRequest(
         String index,
@@ -47,9 +48,10 @@ public class PutDataObjectRequest extends WriteDataObjectRequest<PutDataObjectRe
         TimeValue timeout,
         boolean overwriteIfExists,
         ToXContentObject dataObject,
-        String cmkRoleArn
+        String cmkRoleArn,
+        String assumeRoleArn
     ) {
-        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, !overwriteIfExists, cmkRoleArn);
+        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, !overwriteIfExists, cmkRoleArn, assumeRoleArn);
         this.overwriteIfExists = overwriteIfExists;
         this.dataObject = dataObject;
     }
@@ -136,7 +138,8 @@ public class PutDataObjectRequest extends WriteDataObjectRequest<PutDataObjectRe
                 this.timeout,
                 this.overwriteIfExists,
                 this.dataObject,
-                this.cmkRoleArn
+                this.cmkRoleArn,
+                this.assumeRoleArn
             );
         }
     }

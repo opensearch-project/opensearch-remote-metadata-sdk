@@ -1748,7 +1748,28 @@ public class DDBOpenSearchClientTests {
                 TEST_GLOBAL_RESOURCE_CACHE_TTL
             )
         );
-        ddbOpenSearchClient.getEncryptorForTable("test_table_name", "arn:aws:kms:us-east-1:demo-id:key/demo-key");
+        ddbOpenSearchClient.getEncryptorForTable("test_table_name", "arn:aws:kms:us-east-1:demo-id:key/demo-key", null);
+    }
+
+    @Test
+    public void testGetEncryptorForTableWithAssumeRole() {
+        DDBOpenSearchClient ddbOpenSearchClient = new DDBOpenSearchClient(
+            dynamoDbAsyncClient,
+            aosOpenSearchClient,
+            Map.of(
+                TENANT_ID_FIELD_KEY,
+                TEST_TENANT_ID,
+                REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                GLOBAL_TENANT_ID,
+                REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                TEST_GLOBAL_RESOURCE_CACHE_TTL
+            )
+        );
+        ddbOpenSearchClient.getEncryptorForTable(
+            "test_table_name",
+            "arn:aws:kms:us-east-1:demo-id:key/demo-key",
+            "arn:aws:kms:us-east-1:demo-id:key/demo-role"
+        );
     }
 
     @Test
@@ -1769,7 +1790,7 @@ public class DDBOpenSearchClientTests {
             .thenReturn(EncryptItemOutput.builder().encryptedItem(encryptedPlaintext).build());
 
         DDBOpenSearchClient delegateSpy = Mockito.spy(new DDBOpenSearchClient(dynamoDbAsyncClient, aosOpenSearchClient, TENANT_ID_FIELD));
-        Mockito.doReturn(mockEncryptor).when(delegateSpy).getEncryptorForTable(Mockito.eq(TEST_INDEX), Mockito.any());
+        Mockito.doReturn(mockEncryptor).when(delegateSpy).getEncryptorForTable(Mockito.eq(TEST_INDEX), Mockito.any(), Mockito.any());
 
         sdkClient = SdkClientFactory.wrapSdkClientDelegate(delegateSpy, true, null);
 
@@ -1810,7 +1831,7 @@ public class DDBOpenSearchClientTests {
     public void testGetDataObject_HappyCaseWithCMK() throws IOException {
         DDBOpenSearchClient delegateSpy = Mockito.spy(new DDBOpenSearchClient(dynamoDbAsyncClient, aosOpenSearchClient, TENANT_ID_FIELD));
         DynamoDbItemEncryptor mockEncryptor = Mockito.mock(DynamoDbItemEncryptor.class);
-        Mockito.doReturn(mockEncryptor).when(delegateSpy).getEncryptorForTable(Mockito.eq(TEST_INDEX), Mockito.any());
+        Mockito.doReturn(mockEncryptor).when(delegateSpy).getEncryptorForTable(Mockito.eq(TEST_INDEX), Mockito.any(), Mockito.any());
 
         sdkClient = SdkClientFactory.wrapSdkClientDelegate(delegateSpy, true, null);
         Map<String, AttributeValue> decryptedPlaintext = Map.of(

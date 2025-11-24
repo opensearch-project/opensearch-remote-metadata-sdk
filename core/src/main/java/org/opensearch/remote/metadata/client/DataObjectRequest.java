@@ -17,6 +17,7 @@ public abstract class DataObjectRequest {
     private final String id;
     private String tenantId;
     private final String cmkRoleArn;
+    private final String assumeRoleArn;
 
     /**
      * Instantiate this request with an index and id.
@@ -27,7 +28,7 @@ public abstract class DataObjectRequest {
      * @param tenantId the tenant id
      */
     protected DataObjectRequest(String index, String id, String tenantId) {
-        this(index, id, tenantId, null);
+        this(index, id, tenantId, null, null);
     }
 
     /**
@@ -39,10 +40,24 @@ public abstract class DataObjectRequest {
      * @param cmkRoleArn optional CMK role ARN (nullable)
      */
     protected DataObjectRequest(String index, String id, String tenantId, String cmkRoleArn) {
+        this(index, id, tenantId, cmkRoleArn, null);
+    }
+
+    /**
+     * Overloaded constructor allowing optional CMK role ARN.
+     * Existing subclasses can continue using the 3-arg constructor.
+     * @param index the index location to delete the object
+     * @param id the document id
+     * @param tenantId the tenant id
+     * @param cmkRoleArn optional CMK role ARN (nullable)
+     * @param assumeRoleArn optional role ARN to assume (nullable)
+     */
+    protected DataObjectRequest(String index, String id, String tenantId, String cmkRoleArn, String assumeRoleArn) {
         this.index = index;
         this.id = id;
         this.tenantId = tenantId;
         this.cmkRoleArn = cmkRoleArn;
+        this.assumeRoleArn = assumeRoleArn;
     }
 
     /**
@@ -94,6 +109,14 @@ public abstract class DataObjectRequest {
     }
 
     /**
+     * Returns the optional assume role for CMK (may be null).
+     * @return assumeRoleArn or null if not set
+     */
+    public String assumeRoleArn() {
+        return this.assumeRoleArn;
+    }
+
+    /**
      * Returns whether the subclass can be used in a {@link BulkDataObjectRequest}
      * @return whether the subclass is a write request
      */
@@ -109,6 +132,7 @@ public abstract class DataObjectRequest {
         protected String id = null;
         protected String tenantId = null;
         protected String cmkRoleArn = null;
+        protected String assumeRoleArn = null;
 
         /**
          * Empty constructor to initialize
@@ -152,6 +176,16 @@ public abstract class DataObjectRequest {
          */
         public T cmkRoleArn(String cmkRoleArn) {
             this.cmkRoleArn = cmkRoleArn;
+            return self();
+        }
+
+        /**
+         * Add an optional assume role ARN for cmk to this builder (nullable).
+         * @param assumeRoleArn assume role ARN for cmk or null
+         * @return the updated builder
+         */
+        public T assumeRoleArn(String assumeRoleArn) {
+            this.assumeRoleArn = assumeRoleArn;
             return self();
         }
 

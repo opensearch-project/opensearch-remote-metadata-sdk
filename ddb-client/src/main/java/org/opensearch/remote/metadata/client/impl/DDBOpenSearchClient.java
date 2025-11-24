@@ -29,6 +29,8 @@ import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 import software.amazon.awssdk.services.kms.KmsClient;
+import software.amazon.awssdk.services.sts.StsClient;
+import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider;
 import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.DynamoDbItemEncryptor;
 import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.model.DecryptItemInput;
 import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.model.DynamoDbItemEncryptorConfig;
@@ -103,6 +105,8 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static java.util.Objects.isNull;
+import static java.util.Objects.nonNull;
 import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_PRIMARY_TERM;
 import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
 import static org.opensearch.remote.metadata.common.CommonValue.AWS_DYNAMO_DB;
@@ -233,8 +237,8 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 item.put(RANGE_KEY, AttributeValue.builder().s(id).build());
                 item.put(SOURCE, AttributeValue.builder().m(sourceMap).build());
                 item.put(SEQ_NO_KEY, AttributeValue.builder().n(sequenceNumber.toString()).build());
-                if (!Objects.isNull(request.cmkRoleArn())) {
-                    final DynamoDbItemEncryptor enc = getEncryptorForTable(tableName, request.cmkRoleArn());
+                if (Objects.nonNull(request.cmkRoleArn())) {
+                    final DynamoDbItemEncryptor enc = getEncryptorForTable(tableName, request.cmkRoleArn(), request.assumeRoleArn());
                     item = enc.EncryptItem(EncryptItemInput.builder().plaintextItem(item).build()).encryptedItem();
                 }
 
@@ -359,10 +363,11 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 } else {
                     found = true;
                     Map<String, AttributeValue> resultItems = getItemResponse.item();
-                    if (!Objects.isNull(request.cmkRoleArn())) {
+                    if (nonNull(request.cmkRoleArn())) {
                         DynamoDbItemEncryptor dynamoDbItemEncryptor = getEncryptorForTable(
                             getItemRequest.tableName(),
-                            request.cmkRoleArn()
+                            request.cmkRoleArn(),
+                            request.assumeRoleArn()
                         );
                         resultItems = dynamoDbItemEncryptor.DecryptItem(
                             DecryptItemInput.builder().encryptedItem(getItemResponse.item()).build()
@@ -865,6 +870,23 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
             .build();
     }
 
+    private static AwsCredentialsProvider createCredentialsByAssumeRole(String assumeRoleArn) {
+        AwsCredentialsProvider baseProvider = createCredentialsProvider();
+        if (isNull(assumeRoleArn)) {
+            return baseProvider;
+        }
+        StsClient stsClient = StsClient.builder().credentialsProvider(baseProvider).region(Region.AWS_GLOBAL).build();
+
+        AwsCredentialsProvider assumeRoleProvider = StsAssumeRoleCredentialsProvider.builder()
+            .stsClient(stsClient)
+            .refreshRequest(req -> req.roleArn(assumeRoleArn).roleSessionName("kms-assume-session"))
+            .build();
+        return AwsCredentialsProviderChain.builder()
+            .addCredentialsProvider(assumeRoleProvider)
+            .addCredentialsProvider(baseProvider)
+            .build();
+    }
+
     @Override
     public void close() throws Exception {
         if (dynamoDbAsyncClient != null) {
@@ -897,11 +919,12 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
      * Create the item encryptor by table name and kms role.
      * @param tableName the table name
      * @param kmsKeyArn the kms arn role
+     * @param assumeRoleArn A role to assume for cmk
      * @return encryptor to encrypt and decrypt
      */
-    public DynamoDbItemEncryptor getEncryptorForTable(String tableName, String kmsKeyArn) {
+    public DynamoDbItemEncryptor getEncryptorForTable(String tableName, String kmsKeyArn, String assumeRoleArn) {
         String[] arnParts = kmsKeyArn.split(":", 6);
-        IClientSupplier supplier = new FixedCredsKmsClientSupplier(createCredentialsProvider(), Region.of(arnParts[3]));
+        IClientSupplier supplier = new FixedCredsKmsClientSupplier(createCredentialsByAssumeRole(assumeRoleArn), Region.of(arnParts[3]));
 
         MaterialProviders matProv = MaterialProviders.builder().MaterialProvidersConfig(MaterialProvidersConfig.builder().build()).build();
 
