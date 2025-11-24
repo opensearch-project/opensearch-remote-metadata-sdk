@@ -46,9 +46,10 @@ public abstract class WriteDataObjectRequest<R extends WriteDataObjectRequest<R>
         RefreshPolicy refreshPolicy,
         TimeValue timeout,
         boolean isCreateOperation,
-        String cmkRoleArn
+        String cmkRoleArn,
+        String assumeRoleArn
     ) {
-        super(index, id, tenantId, cmkRoleArn);
+        super(index, id, tenantId, cmkRoleArn, assumeRoleArn);
         validateSeqNoAndPrimaryTerm(ifSeqNo, ifPrimaryTerm, isCreateOperation);
         this.ifSeqNo = ifSeqNo;
         this.ifPrimaryTerm = ifPrimaryTerm;

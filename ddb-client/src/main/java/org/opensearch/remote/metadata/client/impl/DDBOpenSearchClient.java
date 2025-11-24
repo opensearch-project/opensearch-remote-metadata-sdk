@@ -18,6 +18,9 @@ import software.amazon.awssdk.auth.credentials.AwsCredentialsProviderChain;
 import software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider;
+import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.sts.StsClient;
 import software.amazon.awssdk.http.nio.netty.NettyNioAsyncHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
@@ -234,7 +237,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 item.put(SOURCE, AttributeValue.builder().m(sourceMap).build());
                 item.put(SEQ_NO_KEY, AttributeValue.builder().n(sequenceNumber.toString()).build());
                 if (!Objects.isNull(request.cmkRoleArn())) {
-                    final DynamoDbItemEncryptor enc = getEncryptorForTable(tableName, request.cmkRoleArn());
+                    final DynamoDbItemEncryptor enc = getEncryptorForTable(tableName, request.cmkRoleArn(), request.assumeRoleArn());
                     item = enc.EncryptItem(EncryptItemInput.builder().plaintextItem(item).build()).encryptedItem();
                 }
 
@@ -362,7 +365,8 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                     if (!Objects.isNull(request.cmkRoleArn())) {
                         DynamoDbItemEncryptor dynamoDbItemEncryptor = getEncryptorForTable(
                             getItemRequest.tableName(),
-                            request.cmkRoleArn()
+                            request.cmkRoleArn(),
+                                request.assumeRoleArn()
                         );
                         resultItems = dynamoDbItemEncryptor.DecryptItem(
                             DecryptItemInput.builder().encryptedItem(getItemResponse.item()).build()
@@ -865,6 +869,29 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
             .build();
     }
 
+    private static AwsCredentialsProvider createCredentialsByAssumeRole(String assumeRoleArn) {
+        AwsCredentialsProvider baseProvider = createCredentialsProvider();
+        if (Objects.isNull(assumeRoleArn)) {
+            return baseProvider;
+        }
+        StsClient stsClient = StsClient.builder()
+                .credentialsProvider(baseProvider)
+                .region(Region.AWS_GLOBAL)
+                .build();
+
+        AwsCredentialsProvider assumeRoleProvider =
+                StsAssumeRoleCredentialsProvider.builder()
+                        .stsClient(stsClient)
+                        .refreshRequest(req -> req
+                                .roleArn(assumeRoleArn)
+                                .roleSessionName("kms-assume-session"))
+                        .build();
+        return AwsCredentialsProviderChain.builder()
+                .addCredentialsProvider(assumeRoleProvider)
+                .addCredentialsProvider(baseProvider)
+                .build();
+    }
+
     @Override
     public void close() throws Exception {
         if (dynamoDbAsyncClient != null) {
@@ -899,9 +926,9 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
      * @param kmsKeyArn the kms arn role
      * @return encryptor to encrypt and decrypt
      */
-    public DynamoDbItemEncryptor getEncryptorForTable(String tableName, String kmsKeyArn) {
+    public DynamoDbItemEncryptor getEncryptorForTable(String tableName, String kmsKeyArn, String assumeRoleArn) {
         String[] arnParts = kmsKeyArn.split(":", 6);
-        IClientSupplier supplier = new FixedCredsKmsClientSupplier(createCredentialsProvider(), Region.of(arnParts[3]));
+        IClientSupplier supplier = new FixedCredsKmsClientSupplier(createCredentialsByAssumeRole(assumeRoleArn), Region.of(arnParts[3]));
 
         MaterialProviders matProv = MaterialProviders.builder().MaterialProvidersConfig(MaterialProvidersConfig.builder().build()).build();
 
