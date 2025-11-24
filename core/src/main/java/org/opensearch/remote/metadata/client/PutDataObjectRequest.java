@@ -36,6 +36,7 @@ public class PutDataObjectRequest extends WriteDataObjectRequest<PutDataObjectRe
      * @param overwriteIfExists whether to overwrite the document if it exists (update)
      * @param dataObject the data object
      * @param cmkRoleArn the cmk arn role to encrypt/decrypt
+     * @param assumeRoleArn A role to assume for cmk
      */
     public PutDataObjectRequest(
         String index,

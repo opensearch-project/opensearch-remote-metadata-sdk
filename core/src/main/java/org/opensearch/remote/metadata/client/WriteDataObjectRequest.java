@@ -36,6 +36,7 @@ public abstract class WriteDataObjectRequest<R extends WriteDataObjectRequest<R>
      * @param timeout A timeout to wait if the index operation can't be performed immediately. May not be applicable on all clients. Defaults to {@code 1m}.
      * @param isCreateOperation whether this can only create a new document and not overwrite one
      * @param cmkRoleArn the cmk arn role to encrypt/decrypt
+     * @param assumeRoleArn A role to assume for cmk
      */
     protected WriteDataObjectRequest(
         String index,

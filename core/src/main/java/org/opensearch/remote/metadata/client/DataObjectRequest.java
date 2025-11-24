@@ -175,6 +175,11 @@ public abstract class DataObjectRequest {
             return self();
         }
 
+        /**
+         * Add an optional assume role ARN for cmk to this builder (nullable).
+         * @param assumeRoleArn assume role ARN for cmk or null
+         * @return the updated builder
+         */
         public T assumeRoleArn(String assumeRoleArn) {
             this.assumeRoleArn = assumeRoleArn;
             return self();

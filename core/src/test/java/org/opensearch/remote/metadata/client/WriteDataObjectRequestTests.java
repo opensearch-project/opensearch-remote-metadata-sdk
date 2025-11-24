@@ -37,7 +37,7 @@ public class WriteDataObjectRequestTests {
             RefreshPolicy refreshPolicy,
             TimeValue timeout
         ) {
-            super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, false, null);
+            super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, false, null, null);
         }
 
         public static class Builder extends WriteDataObjectRequest.Builder<Builder> {
