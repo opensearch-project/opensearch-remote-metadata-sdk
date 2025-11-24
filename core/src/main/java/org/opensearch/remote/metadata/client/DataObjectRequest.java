@@ -109,7 +109,7 @@ public abstract class DataObjectRequest {
     }
 
     /**
-     * Returns the optional assume role for CMK (maybe null).
+     * Returns the optional assume role for CMK (may be null).
      * @return assumeRoleArn or null if not set
      */
     public String assumeRoleArn() {
