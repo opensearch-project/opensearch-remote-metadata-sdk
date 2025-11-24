@@ -105,6 +105,8 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static java.util.Objects.isNull;
+import static java.util.Objects.nonNull;
 import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_PRIMARY_TERM;
 import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
 import static org.opensearch.remote.metadata.common.CommonValue.AWS_DYNAMO_DB;
@@ -235,7 +237,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 item.put(RANGE_KEY, AttributeValue.builder().s(id).build());
                 item.put(SOURCE, AttributeValue.builder().m(sourceMap).build());
                 item.put(SEQ_NO_KEY, AttributeValue.builder().n(sequenceNumber.toString()).build());
-                if (!Objects.isNull(request.cmkRoleArn())) {
+                if (Objects.nonNull(request.cmkRoleArn())) {
                     final DynamoDbItemEncryptor enc = getEncryptorForTable(tableName, request.cmkRoleArn(), request.assumeRoleArn());
                     item = enc.EncryptItem(EncryptItemInput.builder().plaintextItem(item).build()).encryptedItem();
                 }
@@ -361,7 +363,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 } else {
                     found = true;
                     Map<String, AttributeValue> resultItems = getItemResponse.item();
-                    if (!Objects.isNull(request.cmkRoleArn())) {
+                    if (nonNull(request.cmkRoleArn())) {
                         DynamoDbItemEncryptor dynamoDbItemEncryptor = getEncryptorForTable(
                             getItemRequest.tableName(),
                             request.cmkRoleArn(),
@@ -870,7 +872,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
 
     private static AwsCredentialsProvider createCredentialsByAssumeRole(String assumeRoleArn) {
         AwsCredentialsProvider baseProvider = createCredentialsProvider();
-        if (Objects.isNull(assumeRoleArn)) {
+        if (isNull(assumeRoleArn)) {
             return baseProvider;
         }
         StsClient stsClient = StsClient.builder().credentialsProvider(baseProvider).region(Region.AWS_GLOBAL).build();
