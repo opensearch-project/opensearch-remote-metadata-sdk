@@ -28,7 +28,7 @@ public abstract class DataObjectRequest {
      * @param tenantId the tenant id
      */
     protected DataObjectRequest(String index, String id, String tenantId) {
-        this(index, id, tenantId, null);
+        this(index, id, tenantId, null, null);
     }
 
     /**

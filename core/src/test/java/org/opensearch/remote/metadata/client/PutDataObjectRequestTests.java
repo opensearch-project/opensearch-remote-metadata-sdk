@@ -38,6 +38,8 @@ public class PutDataObjectRequestTests {
     private String testIndex;
     private String testId;
     private String testTenantId;
+    private String testCMKRole;
+    private String testAssumeRole;
     private ToXContentObject testDataObject;
     private Long testSeqNo;
     private Long testPrimaryTerm;
@@ -47,6 +49,8 @@ public class PutDataObjectRequestTests {
         testIndex = "test-index";
         testId = "test-id";
         testTenantId = "test-tenant-id";
+        testCMKRole = "test-cmk-role";
+        testAssumeRole = "test-assume-role";
         testDataObject = mock(ToXContentObject.class);
         testSeqNo = 42L;
         testPrimaryTerm = 6L;
@@ -54,7 +58,13 @@ public class PutDataObjectRequestTests {
 
     @Test
     public void testPutDataObjectRequest() {
-        Builder builder = PutDataObjectRequest.builder().index(testIndex).id(testId).tenantId(testTenantId).dataObject(testDataObject);
+        Builder builder = PutDataObjectRequest.builder()
+            .index(testIndex)
+            .id(testId)
+            .tenantId(testTenantId)
+            .dataObject(testDataObject)
+            .cmkRoleArn(testCMKRole)
+            .assumeRoleArn(testAssumeRole);
         PutDataObjectRequest request = builder.build();
 
         assertEquals(testIndex, request.index());
@@ -66,6 +76,8 @@ public class PutDataObjectRequestTests {
         assertNull(request.ifPrimaryTerm());
         assertEquals(RefreshPolicy.IMMEDIATE, request.getRefreshPolicy());
         assertEquals(TimeValue.timeValueMinutes(1L), request.timeout());
+        assertEquals(testCMKRole, request.cmkRoleArn());
+        assertEquals(testAssumeRole, request.assumeRoleArn());
 
         builder.overwriteIfExists(false);
         request = builder.build();

@@ -1752,6 +1752,27 @@ public class DDBOpenSearchClientTests {
     }
 
     @Test
+    public void testGetEncryptorForTableWithAssumeRole() {
+        DDBOpenSearchClient ddbOpenSearchClient = new DDBOpenSearchClient(
+            dynamoDbAsyncClient,
+            aosOpenSearchClient,
+            Map.of(
+                TENANT_ID_FIELD_KEY,
+                TEST_TENANT_ID,
+                REMOTE_METADATA_GLOBAL_TENANT_ID_KEY,
+                GLOBAL_TENANT_ID,
+                REMOTE_METADATA_GLOBAL_RESOURCE_CACHE_TTL_KEY,
+                TEST_GLOBAL_RESOURCE_CACHE_TTL
+            )
+        );
+        ddbOpenSearchClient.getEncryptorForTable(
+            "test_table_name",
+            "arn:aws:kms:us-east-1:demo-id:key/demo-key",
+            "arn:aws:kms:us-east-1:demo-id:key/demo-role"
+        );
+    }
+
+    @Test
     public void testPutDataObject_HappyCaseWithCMK() throws IOException {
         DynamoDbItemEncryptor mockEncryptor = Mockito.mock(DynamoDbItemEncryptor.class);
         Map<String, AttributeValue> encryptedPlaintext = Map.of(
