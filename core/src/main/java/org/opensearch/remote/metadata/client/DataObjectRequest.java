@@ -108,7 +108,9 @@ public abstract class DataObjectRequest {
         return this.cmkRoleArn;
     }
 
-    public String assumeRoleArn() {return this.assumeRoleArn; }
+    public String assumeRoleArn() {
+        return this.assumeRoleArn;
+    }
 
     /**
      * Returns whether the subclass can be used in a {@link BulkDataObjectRequest}

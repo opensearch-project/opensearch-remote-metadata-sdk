@@ -27,7 +27,14 @@ public class GetDataObjectRequest extends DataObjectRequest {
      * @param fetchSourceContext the context to use when fetching _source
      * @param cmkRoleArn the cmk arn role to encrypt/decrypt
      */
-    public GetDataObjectRequest(String index, String id, String tenantId, FetchSourceContext fetchSourceContext, String cmkRoleArn, String assumeRoleArn) {
+    public GetDataObjectRequest(
+        String index,
+        String id,
+        String tenantId,
+        FetchSourceContext fetchSourceContext,
+        String cmkRoleArn,
+        String assumeRoleArn
+    ) {
         super(index, id, tenantId, cmkRoleArn, assumeRoleArn);
         this.fetchSourceContext = fetchSourceContext;
     }
@@ -74,7 +81,14 @@ public class GetDataObjectRequest extends DataObjectRequest {
          * @return A {@link GetDataObjectRequest}
          */
         public GetDataObjectRequest build() {
-            return new GetDataObjectRequest(this.index, this.id, this.tenantId, this.fetchSourceContext, this.cmkRoleArn, this.assumeRoleArn);
+            return new GetDataObjectRequest(
+                this.index,
+                this.id,
+                this.tenantId,
+                this.fetchSourceContext,
+                this.cmkRoleArn,
+                this.assumeRoleArn
+            );
         }
     }
 }

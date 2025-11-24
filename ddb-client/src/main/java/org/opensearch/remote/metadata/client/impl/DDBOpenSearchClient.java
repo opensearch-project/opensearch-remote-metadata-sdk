@@ -18,9 +18,6 @@ import software.amazon.awssdk.auth.credentials.AwsCredentialsProviderChain;
 import software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider;
-import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.sts.StsClient;
 import software.amazon.awssdk.http.nio.netty.NettyNioAsyncHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
@@ -32,6 +29,8 @@ import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 import software.amazon.awssdk.services.kms.KmsClient;
+import software.amazon.awssdk.services.sts.StsClient;
+import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider;
 import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.DynamoDbItemEncryptor;
 import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.model.DecryptItemInput;
 import software.amazon.cryptography.dbencryptionsdk.dynamodb.itemencryptor.model.DynamoDbItemEncryptorConfig;
@@ -366,7 +365,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                         DynamoDbItemEncryptor dynamoDbItemEncryptor = getEncryptorForTable(
                             getItemRequest.tableName(),
                             request.cmkRoleArn(),
-                                request.assumeRoleArn()
+                            request.assumeRoleArn()
                         );
                         resultItems = dynamoDbItemEncryptor.DecryptItem(
                             DecryptItemInput.builder().encryptedItem(getItemResponse.item()).build()
@@ -874,22 +873,16 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         if (Objects.isNull(assumeRoleArn)) {
             return baseProvider;
         }
-        StsClient stsClient = StsClient.builder()
-                .credentialsProvider(baseProvider)
-                .region(Region.AWS_GLOBAL)
-                .build();
+        StsClient stsClient = StsClient.builder().credentialsProvider(baseProvider).region(Region.AWS_GLOBAL).build();
 
-        AwsCredentialsProvider assumeRoleProvider =
-                StsAssumeRoleCredentialsProvider.builder()
-                        .stsClient(stsClient)
-                        .refreshRequest(req -> req
-                                .roleArn(assumeRoleArn)
-                                .roleSessionName("kms-assume-session"))
-                        .build();
+        AwsCredentialsProvider assumeRoleProvider = StsAssumeRoleCredentialsProvider.builder()
+            .stsClient(stsClient)
+            .refreshRequest(req -> req.roleArn(assumeRoleArn).roleSessionName("kms-assume-session"))
+            .build();
         return AwsCredentialsProviderChain.builder()
-                .addCredentialsProvider(assumeRoleProvider)
-                .addCredentialsProvider(baseProvider)
-                .build();
+            .addCredentialsProvider(assumeRoleProvider)
+            .addCredentialsProvider(baseProvider)
+            .build();
     }
 
     @Override
