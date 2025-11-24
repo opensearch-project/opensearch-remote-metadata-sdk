@@ -26,6 +26,7 @@ public class GetDataObjectRequest extends DataObjectRequest {
      * @param tenantId the tenant id
      * @param fetchSourceContext the context to use when fetching _source
      * @param cmkRoleArn the cmk arn role to encrypt/decrypt
+     * @param assumeRoleArn A role to assume for cmk
      */
     public GetDataObjectRequest(
         String index,

@@ -101,13 +101,17 @@ public abstract class DataObjectRequest {
     }
 
     /**
-     * Returns the optional CMK role ARN (may be null).
+     * Returns the optional CMK role ARN (maybe null).
      * @return cmkRoleArn or null if not set
      */
     public String cmkRoleArn() {
         return this.cmkRoleArn;
     }
 
+    /**
+     * Returns the optional assume role for CMK (maybe null).
+     * @return assumeRoleArn or null if not set
+     */
     public String assumeRoleArn() {
         return this.assumeRoleArn;
     }
