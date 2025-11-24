@@ -917,6 +917,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
      * Create the item encryptor by table name and kms role.
      * @param tableName the table name
      * @param kmsKeyArn the kms arn role
+     * @param assumeRoleArn A role to assume for cmk
      * @return encryptor to encrypt and decrypt
      */
     public DynamoDbItemEncryptor getEncryptorForTable(String tableName, String kmsKeyArn, String assumeRoleArn) {
