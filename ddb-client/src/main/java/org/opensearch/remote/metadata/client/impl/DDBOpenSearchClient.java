@@ -95,7 +95,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -237,7 +236,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                 item.put(RANGE_KEY, AttributeValue.builder().s(id).build());
                 item.put(SOURCE, AttributeValue.builder().m(sourceMap).build());
                 item.put(SEQ_NO_KEY, AttributeValue.builder().n(sequenceNumber.toString()).build());
-                if (Objects.nonNull(request.cmkRoleArn())) {
+                if (nonNull(request.cmkRoleArn())) {
                     final DynamoDbItemEncryptor enc = getEncryptorForTable(tableName, request.cmkRoleArn(), request.assumeRoleArn());
                     item = enc.EncryptItem(EncryptItemInput.builder().plaintextItem(item).build()).encryptedItem();
                 }
