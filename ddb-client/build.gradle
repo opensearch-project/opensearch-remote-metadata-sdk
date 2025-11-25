@@ -14,7 +14,7 @@ dependencies {
     implementation "software.amazon.awssdk:dynamodb"
     implementation "software.amazon.cryptography:aws-database-encryption-sdk-dynamodb:${rootProject.ext.aws_database_encryption_sdk_dynamodb_version}"
     implementation "software.amazon.cryptography:aws-cryptographic-material-providers:${rootProject.ext.aws_crypto_material_providers_version}"
-    implementation "software.amazon.awssdk:sts:${rootProject.ext.aws_crypto_material_providers_version}"
+    implementation "software.amazon.awssdk:sts:${rootProject.ext.aws_sts_version}"
     implementation "software.amazon.awssdk:netty-nio-client:${versions.aws}"
     implementation "io.netty:netty-codec-http:${versions.netty}"
     implementation "io.netty:netty-codec-http2:${versions.netty}"
