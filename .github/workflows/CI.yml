@@ -71,7 +71,7 @@ jobs:
                              echo "Publish to Maven Local" && ./gradlew publishToMavenLocal'
     - name: Upload Coverage Report Artifacts
       if: contains(matrix.java, '25')
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: coverage-report-linux-jdk${{ matrix.java }}
         path: '**/build/reports/jacoco/test/jacocoTestReport.xml'
@@ -84,7 +84,7 @@ jobs:
       # see: https://github.com/codecov/codecov-action/issues/1801
       - uses: actions/checkout@v6
       - name: Download Coverage Report Artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-report-linux-jdk25
           path: ./coverage-reports
