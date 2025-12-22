@@ -8,7 +8,7 @@ import org.opensearch.gradle.VersionProperties
 buildscript {
     ext {
         opensearch_group = "org.opensearch"
-        opensearch_version = System.getProperty("opensearch.version", "2.19.4-SNAPSHOT")
+        opensearch_version = System.getProperty("opensearch.version", "2.19.5-SNAPSHOT")
         is_snapshot = "true" == System.getProperty("build.snapshot", "true")
         build_version_qualifier = System.getProperty("build.version_qualifier", "")
 
