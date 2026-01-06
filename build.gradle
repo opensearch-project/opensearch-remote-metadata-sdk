@@ -23,8 +23,8 @@ buildscript {
 
         opensearch_java_version = '3.4.0'
         aws_sdk_version = '2.30.18'
-        junit_version = '5.14.1' // version catalog is 4.x
-        junit_platform_version = '1.14.1' // version catalog brings in earlier
+        junit_version = '5.14.2' // version catalog is 4.x
+        junit_platform_version = '1.14.2' // version catalog brings in earlier
         aws_crypto_material_providers_version = '1.11.0' // version for crypto material provider
         aws_database_encryption_sdk_dynamodb_version = '3.9.0' // version for ddb encrypt
     }
