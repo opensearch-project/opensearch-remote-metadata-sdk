@@ -103,6 +103,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 public class DDBOpenSearchClientTests {
@@ -1299,6 +1300,82 @@ public class DDBOpenSearchClientTests {
         assertEquals(searchDataObjectResponse, searchResponse);
         verify(aosOpenSearchClient).searchDataObjectAsync(searchDataObjectRequestArgumentCaptor.capture(), any(), anyBoolean());
         assertEquals("test_index", searchDataObjectRequestArgumentCaptor.getValue().indices()[0]);
+    }
+
+    @Test
+    public void searchDataObjectAsync_DdbNativeSearch() throws Exception {
+        SearchSourceBuilder searchSourceBuilder = SearchSourceBuilder.searchSource().from(0).size(10);
+        SearchDataObjectRequest searchDataObjectRequest = SearchDataObjectRequest.builder()
+            .indices(TEST_INDEX)
+            .tenantId(TENANT_ID)
+            .searchSourceBuilder(searchSourceBuilder)
+            .searchRemoteReplica(false)
+            .build();
+
+        Map<String, AttributeValue> item = Map.of(
+            "_tenant_id",
+            AttributeValue.builder().s(TENANT_ID).build(),
+            "_id",
+            AttributeValue.builder().s("test-id-1").build(),
+            "_source",
+            AttributeValue.builder()
+                .m(Map.of("config", AttributeValue.builder().m(Map.of("name", AttributeValue.builder().s("test").build())).build()))
+                .build()
+        );
+        software.amazon.awssdk.services.dynamodb.model.QueryResponse queryResponse =
+            software.amazon.awssdk.services.dynamodb.model.QueryResponse.builder().items(item).build();
+        when(dynamoDbAsyncClient.query(any(software.amazon.awssdk.services.dynamodb.model.QueryRequest.class))).thenReturn(
+            CompletableFuture.completedFuture(queryResponse)
+        );
+
+        CompletionStage<SearchDataObjectResponse> searchResponse = sdkClient.searchDataObjectAsync(searchDataObjectRequest);
+        SearchDataObjectResponse response = searchResponse.toCompletableFuture().join();
+
+        assertNotNull(response);
+        verify(dynamoDbAsyncClient).query(any(software.amazon.awssdk.services.dynamodb.model.QueryRequest.class));
+        verifyNoInteractions(aosOpenSearchClient);
+    }
+
+    @Test
+    public void searchDataObjectAsync_DdbNativeSearch_EmptyResult() throws Exception {
+        SearchSourceBuilder searchSourceBuilder = SearchSourceBuilder.searchSource().from(0).size(10);
+        SearchDataObjectRequest searchDataObjectRequest = SearchDataObjectRequest.builder()
+            .indices(TEST_INDEX)
+            .tenantId(TENANT_ID)
+            .searchSourceBuilder(searchSourceBuilder)
+            .searchRemoteReplica(false)
+            .build();
+
+        software.amazon.awssdk.services.dynamodb.model.QueryResponse queryResponse =
+            software.amazon.awssdk.services.dynamodb.model.QueryResponse.builder().items(Collections.emptyList()).build();
+        when(dynamoDbAsyncClient.query(any(software.amazon.awssdk.services.dynamodb.model.QueryRequest.class))).thenReturn(
+            CompletableFuture.completedFuture(queryResponse)
+        );
+
+        CompletionStage<SearchDataObjectResponse> searchResponse = sdkClient.searchDataObjectAsync(searchDataObjectRequest);
+        SearchDataObjectResponse response = searchResponse.toCompletableFuture().join();
+
+        assertNotNull(response);
+        verifyNoInteractions(aosOpenSearchClient);
+    }
+
+    @Test
+    public void searchDataObjectAsync_RemoteReplicaTrue_DelegatesToAos() {
+        SearchSourceBuilder searchSourceBuilder = SearchSourceBuilder.searchSource();
+        SearchDataObjectRequest searchDataObjectRequest = SearchDataObjectRequest.builder()
+            .indices(TEST_INDEX)
+            .tenantId(TENANT_ID)
+            .searchSourceBuilder(searchSourceBuilder)
+            .searchRemoteReplica(true)
+            .build();
+        @SuppressWarnings("unchecked")
+        CompletionStage<SearchDataObjectResponse> searchDataObjectResponse = mock(CompletionStage.class);
+        when(aosOpenSearchClient.searchDataObjectAsync(any(), any(), anyBoolean())).thenReturn(searchDataObjectResponse);
+
+        CompletionStage<SearchDataObjectResponse> searchResponse = sdkClient.searchDataObjectAsync(searchDataObjectRequest);
+
+        assertEquals(searchDataObjectResponse, searchResponse);
+        verify(aosOpenSearchClient).searchDataObjectAsync(any(), any(), anyBoolean());
     }
 
     private Map<String, AttributeValue> getComplexDataSource() {
