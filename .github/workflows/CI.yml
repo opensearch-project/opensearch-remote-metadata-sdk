@@ -94,7 +94,7 @@ jobs:
           REPORTS=$(find ./coverage-reports -name "jacocoTestReport.xml" | tr '\n' ',' | sed 's/,$//')
           echo "report_files=$REPORTS" >> $GITHUB_OUTPUT
       - name: Upload Coverage Report
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ${{ steps.find-jacoco-reports.outputs.report_files }}
