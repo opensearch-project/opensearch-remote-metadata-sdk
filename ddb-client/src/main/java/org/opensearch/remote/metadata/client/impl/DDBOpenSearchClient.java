@@ -27,6 +27,7 @@ import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 import software.amazon.awssdk.services.kms.KmsClient;
 import software.amazon.awssdk.services.sts.StsClient;
@@ -761,7 +762,8 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
 
     /**
      * DDB data needs to be synced with opensearch cluster. {@link RemoteClusterIndicesClient} will then be used to
-     * search data in opensearch cluster.
+     * Searches data. When {@code searchRemoteReplica} is true (default), delegates to the AOS/AOSS
+     * remote collection. When false, queries DynamoDB directly using the tenant partition key.
      *
      * {@inheritDoc}
      */
@@ -771,14 +773,95 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         Executor executor,
         Boolean isMultiTenancyEnabled
     ) {
-        List<String> indices = Arrays.stream(request.indices()).map(this::getIndexName).collect(Collectors.toList());
+        if (!request.searchRemoteReplica()) {
+            return searchDynamoDb(request);
+        }
 
+        List<String> indices = Arrays.stream(request.indices()).map(this::getIndexName).collect(Collectors.toList());
         SearchDataObjectRequest searchDataObjectRequest = new SearchDataObjectRequest(
             indices.toArray(new String[0]),
             request.tenantId(),
             request.searchSourceBuilder()
         );
         return this.aosOpenSearchClient.searchDataObjectAsync(searchDataObjectRequest, executor, isMultiTenancyEnabled);
+    }
+
+    private CompletionStage<SearchDataObjectResponse> searchDynamoDb(SearchDataObjectRequest request) {
+        final String tenantId = request.tenantId() != null ? request.tenantId() : DEFAULT_TENANT;
+        final String tableName = request.indices()[0];
+        final int size = request.searchSourceBuilder() != null && request.searchSourceBuilder().size() >= 0
+            ? request.searchSourceBuilder().size()
+            : 100;
+        final int from = request.searchSourceBuilder() != null ? request.searchSourceBuilder().from() : 0;
+
+        return doPrivileged(() -> queryAllItems(tableName, tenantId).thenApply(allItems -> {
+            try {
+                int totalHits = allItems.size();
+                int fromIndex = Math.min(from, totalHits);
+                int toIndex = Math.min(fromIndex + size, totalHits);
+                List<Map<String, AttributeValue>> pageItems = allItems.subList(fromIndex, toIndex);
+                String searchResponseJson = simulateSearchResponse(tableName, pageItems, totalHits);
+                return SearchDataObjectResponse.builder().parser(createParser(searchResponseJson)).build();
+            } catch (IOException e) {
+                throw new OpenSearchStatusException("Failed to create search response", RestStatus.INTERNAL_SERVER_ERROR, e);
+            }
+        }));
+    }
+
+    private CompletionStage<List<Map<String, AttributeValue>>> queryAllItems(String tableName, String tenantId) {
+        return queryItemsRecursive(tableName, tenantId, null, new ArrayList<>());
+    }
+
+    private CompletionStage<List<Map<String, AttributeValue>>> queryItemsRecursive(
+        String tableName,
+        String tenantId,
+        Map<String, AttributeValue> exclusiveStartKey,
+        List<Map<String, AttributeValue>> accumulator
+    ) {
+        QueryRequest.Builder builder = QueryRequest.builder()
+            .tableName(tableName)
+            .keyConditionExpression("#hk = :tenantId")
+            .expressionAttributeNames(Map.of("#hk", HASH_KEY))
+            .expressionAttributeValues(Map.of(":tenantId", AttributeValue.builder().s(tenantId).build()));
+        if (exclusiveStartKey != null) {
+            builder.exclusiveStartKey(exclusiveStartKey);
+        }
+        return dynamoDbAsyncClient.query(builder.build()).thenCompose(response -> {
+            accumulator.addAll(response.items());
+            if (response.hasLastEvaluatedKey() && !response.lastEvaluatedKey().isEmpty()) {
+                return queryItemsRecursive(tableName, tenantId, response.lastEvaluatedKey(), accumulator);
+            }
+            return CompletableFuture.completedFuture(accumulator);
+        });
+    }
+
+    static String simulateSearchResponse(String index, List<Map<String, AttributeValue>> items, int totalHits)
+        throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        List<Map<String, Object>> hits = new ArrayList<>();
+        for (Map<String, AttributeValue> item : items) {
+            Map<String, Object> hit = new LinkedHashMap<>();
+            hit.put("_index", index);
+            hit.put("_id", item.containsKey(RANGE_KEY) ? item.get(RANGE_KEY).s() : "");
+            hit.put("_score", 1.0);
+            if (item.containsKey(SOURCE)) {
+                hit.put("_source", DDBJsonTransformer.convertDDBAttributeValueMapToObjectNode(item.get(SOURCE).m()));
+            }
+            hits.add(hit);
+        }
+        Map<String, Object> response = new LinkedHashMap<>();
+        Map<String, Object> hitsWrapper = new LinkedHashMap<>();
+        Map<String, Object> total = new LinkedHashMap<>();
+        total.put("value", totalHits);
+        total.put("relation", "eq");
+        hitsWrapper.put("total", total);
+        hitsWrapper.put("max_score", 1.0);
+        hitsWrapper.put("hits", hits);
+        response.put("took", 0);
+        response.put("timed_out", false);
+        response.put("_shards", Map.of("total", 1, "successful", 1, "skipped", 0, "failed", 0));
+        response.put("hits", hitsWrapper);
+        return mapper.writeValueAsString(response);
     }
 
     private String getIndexName(String index) {
