@@ -36,7 +36,29 @@ public class GetDataObjectRequest extends DataObjectRequest {
         String cmkRoleArn,
         String assumeRoleArn
     ) {
-        super(index, id, tenantId, cmkRoleArn, assumeRoleArn);
+        this(index, id, tenantId, fetchSourceContext, cmkRoleArn, assumeRoleArn, null);
+    }
+
+    /**
+     * Overloaded constructor with routing support.
+     * @param index the index location
+     * @param id the document id
+     * @param tenantId the tenant id
+     * @param fetchSourceContext the context for fetching source
+     * @param cmkRoleArn optional CMK role ARN (nullable)
+     * @param assumeRoleArn optional role ARN to assume (nullable)
+     * @param routing optional routing value for shard selection (nullable)
+     */
+    public GetDataObjectRequest(
+        String index,
+        String id,
+        String tenantId,
+        FetchSourceContext fetchSourceContext,
+        String cmkRoleArn,
+        String assumeRoleArn,
+        String routing
+    ) {
+        super(index, id, tenantId, cmkRoleArn, assumeRoleArn, routing);
         this.fetchSourceContext = fetchSourceContext;
     }
 
@@ -88,7 +110,8 @@ public class GetDataObjectRequest extends DataObjectRequest {
                 this.tenantId,
                 this.fetchSourceContext,
                 this.cmkRoleArn,
-                this.assumeRoleArn
+                this.assumeRoleArn,
+                this.routing
             );
         }
     }
