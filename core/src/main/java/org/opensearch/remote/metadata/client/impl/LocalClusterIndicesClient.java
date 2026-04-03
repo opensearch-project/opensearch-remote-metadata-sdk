@@ -145,6 +145,9 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
             if (shouldUseId(putDataObjectRequest.id())) {
                 indexRequest.id(putDataObjectRequest.id());
             }
+            if (putDataObjectRequest.routing() != null) {
+                indexRequest.routing(putDataObjectRequest.routing());
+            }
             return setSeqNoAndPrimaryTerm(indexRequest, putDataObjectRequest);
         }
     }
@@ -214,7 +217,11 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
     }
 
     private GetRequest createGetRequest(GetDataObjectRequest request) {
-        return new GetRequest(request.index(), request.id()).fetchSourceContext(request.fetchSourceContext());
+        GetRequest getRequest = new GetRequest(request.index(), request.id()).fetchSourceContext(request.fetchSourceContext());
+        if (request.routing() != null) {
+            getRequest.routing(request.routing());
+        }
+        return getRequest;
     }
 
     @Override
@@ -278,6 +285,9 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
             if (updateDataObjectRequest.retryOnConflict() > 0) {
                 updateRequest.retryOnConflict(updateDataObjectRequest.retryOnConflict());
             }
+            if (updateDataObjectRequest.routing() != null) {
+                updateRequest.routing(updateDataObjectRequest.routing());
+            }
             return setSeqNoAndPrimaryTerm(updateRequest, updateDataObjectRequest);
         }
     }
@@ -324,6 +334,9 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         DeleteRequest deleteRequest = new DeleteRequest(deleteDataObjectRequest.index(), deleteDataObjectRequest.id()).setRefreshPolicy(
             deleteDataObjectRequest.getRefreshPolicy()
         ).timeout(deleteDataObjectRequest.timeout());
+        if (deleteDataObjectRequest.routing() != null) {
+            deleteRequest.routing(deleteDataObjectRequest.routing());
+        }
         return setSeqNoAndPrimaryTerm(deleteRequest, deleteDataObjectRequest);
     }
 
@@ -396,6 +409,9 @@ public class LocalClusterIndicesClient extends AbstractSdkClient {
         log.info("Searching {}", Arrays.toString(request.indices()));
         return doPrivileged(() -> {
             SearchRequest searchRequest = new SearchRequest(request.indices(), searchSource);
+            if (request.routing() != null) {
+                searchRequest.routing(request.routing());
+            }
             client.search(searchRequest, ActionListener.wrap(searchResponse -> {
                 log.info("Search returned {} hits", searchResponse.getHits().getTotalHits());
                 future.complete(new SearchDataObjectResponse(searchResponse));

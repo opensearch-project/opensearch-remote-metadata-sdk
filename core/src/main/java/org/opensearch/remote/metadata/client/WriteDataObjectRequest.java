@@ -50,7 +50,37 @@ public abstract class WriteDataObjectRequest<R extends WriteDataObjectRequest<R>
         String cmkRoleArn,
         String assumeRoleArn
     ) {
-        super(index, id, tenantId, cmkRoleArn, assumeRoleArn);
+        this(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, isCreateOperation, cmkRoleArn, assumeRoleArn, null);
+    }
+
+    /**
+     * Overloaded constructor with routing support.
+     * @param index the index location
+     * @param id the document id
+     * @param tenantId the tenant id
+     * @param ifSeqNo the sequence number to match or null if not required
+     * @param ifPrimaryTerm the primary term to match or null if not required
+     * @param refreshPolicy when should the written data be refreshed
+     * @param timeout A timeout to wait if the index operation can't be performed immediately
+     * @param isCreateOperation whether this can only create a new document and not overwrite one
+     * @param cmkRoleArn the cmk arn role to encrypt/decrypt
+     * @param assumeRoleArn A role to assume for cmk
+     * @param routing optional routing value for shard selection (nullable)
+     */
+    protected WriteDataObjectRequest(
+        String index,
+        String id,
+        String tenantId,
+        Long ifSeqNo,
+        Long ifPrimaryTerm,
+        RefreshPolicy refreshPolicy,
+        TimeValue timeout,
+        boolean isCreateOperation,
+        String cmkRoleArn,
+        String assumeRoleArn,
+        String routing
+    ) {
+        super(index, id, tenantId, cmkRoleArn, assumeRoleArn, routing);
         validateSeqNoAndPrimaryTerm(ifSeqNo, ifPrimaryTerm, isCreateOperation);
         this.ifSeqNo = ifSeqNo;
         this.ifPrimaryTerm = ifPrimaryTerm;

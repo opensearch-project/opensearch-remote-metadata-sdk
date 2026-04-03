@@ -776,7 +776,8 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         SearchDataObjectRequest searchDataObjectRequest = new SearchDataObjectRequest(
             indices.toArray(new String[0]),
             request.tenantId(),
-            request.searchSourceBuilder()
+            request.searchSourceBuilder(),
+            request.routing()
         );
         return this.aosOpenSearchClient.searchDataObjectAsync(searchDataObjectRequest, executor, isMultiTenancyEnabled);
     }
