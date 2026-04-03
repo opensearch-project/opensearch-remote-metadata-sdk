@@ -51,7 +51,52 @@ public class PutDataObjectRequest extends WriteDataObjectRequest<PutDataObjectRe
         String cmkRoleArn,
         String assumeRoleArn
     ) {
-        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, !overwriteIfExists, cmkRoleArn, assumeRoleArn);
+        this(
+            index,
+            id,
+            tenantId,
+            ifSeqNo,
+            ifPrimaryTerm,
+            refreshPolicy,
+            timeout,
+            overwriteIfExists,
+            dataObject,
+            cmkRoleArn,
+            assumeRoleArn,
+            null
+        );
+    }
+
+    /**
+     * Overloaded constructor with routing support.
+     * @param index the index location
+     * @param id the document id
+     * @param tenantId the tenant id
+     * @param ifSeqNo the sequence number to match or null if not required
+     * @param ifPrimaryTerm the primary term to match or null if not required
+     * @param refreshPolicy when should the written data be refreshed
+     * @param timeout A timeout to wait if the index operation can't be performed immediately
+     * @param overwriteIfExists whether to overwrite the document if it exists
+     * @param dataObject the data object
+     * @param cmkRoleArn the cmk arn role to encrypt/decrypt
+     * @param assumeRoleArn A role to assume for cmk
+     * @param routing optional routing value for shard selection (nullable)
+     */
+    public PutDataObjectRequest(
+        String index,
+        String id,
+        String tenantId,
+        Long ifSeqNo,
+        Long ifPrimaryTerm,
+        RefreshPolicy refreshPolicy,
+        TimeValue timeout,
+        boolean overwriteIfExists,
+        ToXContentObject dataObject,
+        String cmkRoleArn,
+        String assumeRoleArn,
+        String routing
+    ) {
+        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, !overwriteIfExists, cmkRoleArn, assumeRoleArn, routing);
         this.overwriteIfExists = overwriteIfExists;
         this.dataObject = dataObject;
     }
@@ -128,7 +173,7 @@ public class PutDataObjectRequest extends WriteDataObjectRequest<PutDataObjectRe
                 // createOperation = true when overwriteIfExists is false
                 !this.overwriteIfExists
             );
-            return new PutDataObjectRequest(
+            PutDataObjectRequest request = new PutDataObjectRequest(
                 this.index,
                 this.id,
                 this.tenantId,
@@ -139,8 +184,10 @@ public class PutDataObjectRequest extends WriteDataObjectRequest<PutDataObjectRe
                 this.overwriteIfExists,
                 this.dataObject,
                 this.cmkRoleArn,
-                this.assumeRoleArn
+                this.assumeRoleArn,
+                this.routing
             );
+            return request;
         }
     }
 }
