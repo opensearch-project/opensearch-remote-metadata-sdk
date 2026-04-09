@@ -118,4 +118,27 @@ public class UpdateDataObjectRequestTests {
         final Builder onlyPrimaryTermBuilder = UpdateDataObjectRequest.builder().ifPrimaryTerm(testPrimaryTerm);
         assertThrows(IllegalArgumentException.class, () -> onlyPrimaryTermBuilder.build());
     }
+
+    @Test
+    public void testUpdateDataObjectRequestWithRouting() {
+        String testRouting = "test-routing";
+        UpdateDataObjectRequest request = UpdateDataObjectRequest.builder()
+            .index(testIndex)
+            .id(testId)
+            .tenantId(testTenantId)
+            .routing(testRouting)
+            .dataObject(testDataObject)
+            .build();
+
+        assertEquals(testRouting, request.routing());
+        assertNull(
+            UpdateDataObjectRequest.builder()
+                .index(testIndex)
+                .id(testId)
+                .tenantId(testTenantId)
+                .dataObject(testDataObject)
+                .build()
+                .routing()
+        );
+    }
 }
