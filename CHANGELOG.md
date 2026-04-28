@@ -9,6 +9,7 @@ Inspired from [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 ### Enhancements
 ### Bug Fixes
 ### Infrastructure
+- Add daily check for upstream version catalog changes ([#359](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/359))
 ### Documentation
 ### Maintenance
 ### Refactoring

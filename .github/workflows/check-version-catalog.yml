@@ -1,0 +1,51 @@
+name: Check for upstream version catalog changes
+
+on:
+  schedule:
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+jobs:
+  check-and-publish:
+    if: github.repository == 'opensearch-project/opensearch-remote-metadata-sdk'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for relevant version catalog changes
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Get commits touching versions.toml in the last 25 hours
+          SINCE=$(date -u -d '25 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          COMMITS=$(gh api "repos/opensearch-project/OpenSearch/commits?path=gradle/libs.versions.toml&since=${SINCE}&per_page=1" --jq 'length')
+
+          if [ "$COMMITS" -eq 0 ]; then
+            echo "No changes to versions.toml in the last 25 hours"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Fetch the file and check if any keys we depend on changed
+          DIFF=$(gh api "repos/opensearch-project/OpenSearch/commits?path=gradle/libs.versions.toml&since=${SINCE}&per_page=5" \
+            --jq '.[].sha' | while read -r sha; do
+              gh api "repos/opensearch-project/OpenSearch/commits/${sha}" \
+                --jq '.files[] | select(.filename == "gradle/libs.versions.toml") | .patch // empty'
+            done)
+
+          # Keys from versions.toml that this repo uses
+          WATCHED_KEYS="httpclient5|httpcore5|jackson_annotations|jackson_databind|log4j|mockito"
+
+          if echo "$DIFF" | grep -qE "^[+-].*(${WATCHED_KEYS})"; then
+            echo "Relevant dependency version changed"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "versions.toml changed but not for our dependencies"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Trigger snapshot publish
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run publish-snapshots.yml --repo opensearch-project/opensearch-remote-metadata-sdk
