@@ -22,6 +22,7 @@ jobs:
         with:
           java-version: 25
           distribution: temurin
+          cache: gradle
       - name: Spotless Check
         run: ./gradlew spotlessCheck
   javadoc:
@@ -33,6 +34,7 @@ jobs:
         with:
           java-version: 25
           distribution: temurin
+          cache: gradle
       - name: Javadoc CheckStyle
         run: ./gradlew checkstyleMain
       - name: Javadoc Check
@@ -62,6 +64,7 @@ jobs:
       with:
         java-version: ${{ matrix.java }}
         distribution: temurin
+        cache: gradle
     - name: Build and Run Tests
       id: step-build-test-linux
       run: |
@@ -116,6 +119,7 @@ jobs:
       with:
         java-version: ${{ matrix.java }}
         distribution: temurin
+        cache: gradle
     - name: Build and Run Tests
       run: |
         ./gradlew build
