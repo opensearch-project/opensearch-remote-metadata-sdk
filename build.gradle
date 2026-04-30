@@ -120,6 +120,13 @@ subprojects {
         testImplementation.extendsFrom testFixtures
     }
 
+    configurations.all {
+        resolutionStrategy {
+            force "net.bytebuddy:byte-buddy:${versions.bytebuddy}"
+            force "net.bytebuddy:byte-buddy-agent:${versions.bytebuddy}"
+        }
+    }
+
     test {
         include '**/*Tests.class'
         systemProperty 'tests.security.manager', 'false'
