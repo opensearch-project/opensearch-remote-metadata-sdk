@@ -8,11 +8,6 @@
  */
 package org.opensearch.remote.metadata.client.impl;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProviderChain;
 import software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider;
@@ -103,6 +98,11 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
@@ -284,7 +284,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                         }
                         throw new CompletionException(e);
                     });
-            } catch (IOException e) {
+            } catch (JacksonException e) {
                 throw new OpenSearchStatusException("Failed to parse data object " + request.id(), RestStatus.BAD_REQUEST, e);
             }
         }));
@@ -480,9 +480,9 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
                         throw new OpenSearchStatusException("Parsing error creating update response", RestStatus.INTERNAL_SERVER_ERROR, e);
                     }
                 });
-            } catch (IOException e) {
+            } catch (JacksonException e) {
                 log.error("Error updating {} in {}: {}", request.id(), request.index(), e.getMessage(), e);
-                // Rethrow unchecked exception on update IOException
+                // Rethrow unchecked exception on update JacksonException
                 throw new OpenSearchStatusException(
                     "Parsing error updating data object " + request.id() + " in index " + request.index(),
                     RestStatus.BAD_REQUEST
@@ -816,7 +816,7 @@ public class DDBOpenSearchClient extends AbstractSdkClient {
         String source,
         Long sequenceNumber,
         Map<String, Object> additionalFields
-    ) throws JsonProcessingException {
+    ) throws JacksonException {
         ObjectMapper mapper = new ObjectMapper();
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("_index", index);

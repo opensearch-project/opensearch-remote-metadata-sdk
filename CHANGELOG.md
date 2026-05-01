@@ -11,4 +11,5 @@ Inspired from [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 ### Infrastructure
 ### Documentation
 ### Maintenance
+- Support Jackson 3.x release line ([#358](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/358))
 ### Refactoring

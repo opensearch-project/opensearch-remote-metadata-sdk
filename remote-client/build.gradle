@@ -8,4 +8,9 @@ dependencies {
     testImplementation testFixtures(project(':opensearch-remote-metadata-sdk-core'))
 
     implementation "org.opensearch.client:opensearch-java:${opensearch_java_version}"
+
+    // Jackson 2.x required by opensearch-java JacksonJsonpMapper until opensearch-java migrates to 3.x
+    implementation("com.fasterxml.jackson.core:jackson-databind:${versions.jackson_databind}")
+    implementation "com.fasterxml.jackson.core:jackson-core:${versions.jackson_databind}"
+    implementation "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:${versions.jackson_databind}"
 }
