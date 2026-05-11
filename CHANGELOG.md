@@ -9,6 +9,7 @@ Inspired from [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 ### Enhancements
 ### Bug Fixes
 ### Infrastructure
+- Add Gradle cache to setup-java steps in GitHub Actions workflows ([#364](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/364))
 ### Documentation
 ### Maintenance
 ### Security
