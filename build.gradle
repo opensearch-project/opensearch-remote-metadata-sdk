@@ -123,6 +123,7 @@ subprojects {
         resolutionStrategy {
             force "net.bytebuddy:byte-buddy:${versions.bytebuddy}"
             force "net.bytebuddy:byte-buddy-agent:${versions.bytebuddy}"
+            force "org.codehaus.plexus:plexus-utils:3.6.1"
         }
     }
 
