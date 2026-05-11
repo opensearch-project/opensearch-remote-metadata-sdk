@@ -12,6 +12,7 @@ Inspired from [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Add Gradle cache to setup-java steps in GitHub Actions workflows ([#364](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/364))
 ### Documentation
 ### Maintenance
+- Support Jackson 3.x release line ([#358](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/358))
 ### Security
 - Bump plexus-utils from 3.3.0 to 3.6.1 to address CVE-2025-67030 ([#371](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/371))
 ### Refactoring
