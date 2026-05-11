@@ -11,4 +11,6 @@ Inspired from [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 ### Infrastructure
 ### Documentation
 ### Maintenance
+### Security
+- Bump plexus-utils from 3.3.0 to 3.6.1 to address CVE-2025-67030 ([#371](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/371))
 ### Refactoring
