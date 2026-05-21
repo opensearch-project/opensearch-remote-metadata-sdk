@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
 
 public class GetDataObjectRequestTests {
@@ -51,5 +52,19 @@ public class GetDataObjectRequestTests {
         assertEquals(testFetchSourceContext, request.fetchSourceContext());
         assertEquals(testCMKRole, request.cmkRoleArn());
         assertEquals(testAssumeRole, request.assumeRoleArn());
+    }
+
+    @Test
+    public void testGetDataObjectRequestWithRouting() {
+        String testRouting = "test-routing";
+        GetDataObjectRequest request = GetDataObjectRequest.builder()
+            .index(testIndex)
+            .id(testId)
+            .tenantId(testTenantId)
+            .routing(testRouting)
+            .build();
+
+        assertEquals(testRouting, request.routing());
+        assertNull(GetDataObjectRequest.builder().index(testIndex).id(testId).tenantId(testTenantId).build().routing());
     }
 }

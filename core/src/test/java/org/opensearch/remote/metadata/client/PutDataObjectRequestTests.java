@@ -85,6 +85,29 @@ public class PutDataObjectRequestTests {
     }
 
     @Test
+    public void testPutDataObjectRequestWithRouting() {
+        String testRouting = "test-routing";
+        PutDataObjectRequest request = PutDataObjectRequest.builder()
+            .index(testIndex)
+            .id(testId)
+            .tenantId(testTenantId)
+            .routing(testRouting)
+            .dataObject(testDataObject)
+            .build();
+
+        assertEquals(testRouting, request.routing());
+
+        // Test null routing by default
+        PutDataObjectRequest requestNoRouting = PutDataObjectRequest.builder()
+            .index(testIndex)
+            .id(testId)
+            .tenantId(testTenantId)
+            .dataObject(testDataObject)
+            .build();
+        assertNull(requestNoRouting.routing());
+    }
+
+    @Test
     public void testPutDataObjectRequestWithMap() throws IOException {
         Map<String, Object> dataObjectMap = Map.of("key1", "value1", "key2", "value2");
 

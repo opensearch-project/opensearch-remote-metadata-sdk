@@ -75,4 +75,18 @@ public class DeleteDataObjectRequestTests {
         final DeleteDataObjectRequest.Builder onlyPrimaryTermBuilder = DeleteDataObjectRequest.builder().ifPrimaryTerm(testPrimaryTerm);
         assertThrows(IllegalArgumentException.class, () -> onlyPrimaryTermBuilder.build());
     }
+
+    @Test
+    public void testDeleteDataObjectRequestWithRouting() {
+        String testRouting = "test-routing";
+        DeleteDataObjectRequest request = DeleteDataObjectRequest.builder()
+            .index(testIndex)
+            .id(testId)
+            .tenantId(testTenantId)
+            .routing(testRouting)
+            .build();
+
+        assertEquals(testRouting, request.routing());
+        assertNull(DeleteDataObjectRequest.builder().index(testIndex).id(testId).tenantId(testTenantId).build().routing());
+    }
 }

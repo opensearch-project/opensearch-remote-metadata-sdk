@@ -1202,6 +1202,157 @@ public class RemoteClusterIndicesClientTests {
     }
 
     @Test
+    public void testSearchDataObjectWithRouting() throws IOException {
+        String testRouting = "test-monitor-id";
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        SearchDataObjectRequest searchRequest = SearchDataObjectRequest.builder()
+            .indices(TEST_INDEX)
+            .tenantId(TEST_TENANT_ID)
+            .searchSourceBuilder(searchSourceBuilder)
+            .routing(testRouting)
+            .build();
+
+        TotalHits totalHits = new TotalHits.Builder().value(0).relation(TotalHitsRelation.Eq).build();
+        HitsMetadata<Object> hits = new HitsMetadata.Builder<>().hits(Collections.emptyList()).total(totalHits).build();
+        ShardStatistics shards = new ShardStatistics.Builder().failed(0).successful(1).total(1).build();
+        SearchResponse<?> searchResponse = new SearchResponse.Builder<>().hits(hits).took(1).timedOut(false).shards(shards).build();
+
+        ArgumentCaptor<SearchRequest> getRequestCaptor = ArgumentCaptor.forClass(SearchRequest.class);
+        ArgumentCaptor<Class<Map>> mapClassCaptor = ArgumentCaptor.forClass(Class.class);
+        when(mockedOpenSearchAsyncClient.search(getRequestCaptor.capture(), mapClassCaptor.capture())).thenReturn(
+            CompletableFuture.completedFuture((SearchResponse<Map>) searchResponse)
+        );
+
+        sdkClient.searchDataObjectAsync(searchRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join();
+
+        ArgumentCaptor<SearchRequest> requestCaptor = ArgumentCaptor.forClass(SearchRequest.class);
+        verify(mockedOpenSearchAsyncClient, times(1)).search(requestCaptor.capture(), any());
+        assertEquals(testRouting, requestCaptor.getValue().routing());
+    }
+
+    @Test
+    public void testPutDataObjectWithRouting() throws IOException {
+        String testRouting = "test-monitor-id";
+        PutDataObjectRequest putRequest = PutDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .routing(testRouting)
+            .dataObject(testDataObject)
+            .build();
+
+        IndexResponse indexResponse = new IndexResponse.Builder().id(TEST_ID)
+            .index(TEST_INDEX)
+            .primaryTerm(0)
+            .result(Result.Created)
+            .seqNo(0)
+            .shards(new ShardStatistics.Builder().failed(0).successful(1).total(1).build())
+            .version(0)
+            .build();
+
+        ArgumentCaptor<IndexRequest<?>> indexRequestCaptor = ArgumentCaptor.forClass(IndexRequest.class);
+        when(mockedOpenSearchAsyncClient.index(indexRequestCaptor.capture())).thenReturn(CompletableFuture.completedFuture(indexResponse));
+
+        sdkClient.putDataObjectAsync(putRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join();
+
+        verify(mockedOpenSearchAsyncClient, times(1)).index(indexRequestCaptor.capture());
+        assertEquals(testRouting, indexRequestCaptor.getValue().routing());
+    }
+
+    @Test
+    public void testGetDataObjectWithRouting() throws IOException {
+        String testRouting = "test-monitor-id";
+        GetDataObjectRequest getRequest = GetDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .routing(testRouting)
+            .build();
+
+        GetResponse<Map> getResponse = new GetResponse.Builder<Map>().index(TEST_INDEX)
+            .id(TEST_ID)
+            .found(true)
+            .source(Map.of("data", "foo"))
+            .primaryTerm(0L)
+            .seqNo(0L)
+            .version(0L)
+            .build();
+
+        ArgumentCaptor<GetRequest> getRequestCaptor = ArgumentCaptor.forClass(GetRequest.class);
+        ArgumentCaptor<Class<Map>> mapClassCaptor = ArgumentCaptor.forClass(Class.class);
+        when(mockedOpenSearchAsyncClient.get(getRequestCaptor.capture(), mapClassCaptor.capture())).thenReturn(
+            CompletableFuture.completedFuture(getResponse)
+        );
+
+        sdkClient.getDataObjectAsync(getRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join();
+
+        verify(mockedOpenSearchAsyncClient, times(1)).get(getRequestCaptor.capture(), any());
+        assertEquals(testRouting, getRequestCaptor.getValue().routing());
+    }
+
+    @Test
+    public void testUpdateDataObjectWithRouting() throws IOException {
+        String testRouting = "test-monitor-id";
+        UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .routing(testRouting)
+            .dataObject(testDataObject)
+            .build();
+
+        UpdateResponse<Map> updateResponse = new UpdateResponse.Builder<Map>().id(TEST_ID)
+            .index(TEST_INDEX)
+            .primaryTerm(0)
+            .result(Result.Updated)
+            .seqNo(0)
+            .shards(new ShardStatistics.Builder().failed(0).successful(1).total(1).build())
+            .version(0)
+            .build();
+
+        ArgumentCaptor<UpdateRequest<Map, Map>> updateRequestCaptor = ArgumentCaptor.forClass(UpdateRequest.class);
+        ArgumentCaptor<Class<Map>> mapClassCaptor = ArgumentCaptor.forClass(Class.class);
+        when(mockedOpenSearchAsyncClient.update(updateRequestCaptor.capture(), mapClassCaptor.capture())).thenReturn(
+            CompletableFuture.completedFuture(updateResponse)
+        );
+
+        sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join();
+
+        verify(mockedOpenSearchAsyncClient, times(1)).update(updateRequestCaptor.capture(), any());
+        assertEquals(testRouting, updateRequestCaptor.getValue().routing());
+    }
+
+    @Test
+    public void testDeleteDataObjectWithRouting() throws IOException {
+        String testRouting = "test-monitor-id";
+        DeleteDataObjectRequest deleteRequest = DeleteDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .routing(testRouting)
+            .build();
+
+        DeleteResponse deleteResponse = new DeleteResponse.Builder().id(TEST_ID)
+            .index(TEST_INDEX)
+            .primaryTerm(0)
+            .result(Result.Deleted)
+            .seqNo(0)
+            .shards(new ShardStatistics.Builder().failed(0).successful(1).total(1).build())
+            .version(0)
+            .build();
+
+        ArgumentCaptor<DeleteRequest> deleteRequestCaptor = ArgumentCaptor.forClass(DeleteRequest.class);
+        when(mockedOpenSearchAsyncClient.delete(deleteRequestCaptor.capture())).thenReturn(
+            CompletableFuture.completedFuture(deleteResponse)
+        );
+
+        sdkClient.deleteDataObjectAsync(deleteRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join();
+
+        verify(mockedOpenSearchAsyncClient, times(1)).delete(deleteRequestCaptor.capture());
+        assertTrue(deleteRequestCaptor.getValue().routing().contains(testRouting));
+    }
+
+    @Test
     public void testSearchDataObject_Exception() throws IOException {
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
         SearchDataObjectRequest searchRequest = SearchDataObjectRequest.builder()

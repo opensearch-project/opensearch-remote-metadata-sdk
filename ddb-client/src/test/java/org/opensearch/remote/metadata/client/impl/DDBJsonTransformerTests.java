@@ -8,11 +8,6 @@
  */
 package org.opensearch.remote.metadata.client.impl;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 import org.opensearch.core.common.Strings;
@@ -26,6 +21,11 @@ import org.junit.Test;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
 
 public class DDBJsonTransformerTests extends OpenSearchTestCase {
 

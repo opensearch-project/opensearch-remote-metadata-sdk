@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 public class SearchDataObjectRequestTests {
 
@@ -29,15 +30,26 @@ public class SearchDataObjectRequestTests {
     }
 
     @Test
-    public void testGetDataObjectRequest() {
+    public void testSearchDataObjectRequest() {
+        String testRouting = "test-routing";
         SearchDataObjectRequest request = SearchDataObjectRequest.builder()
             .indices(testIndices)
             .tenantId(testTenantId)
             .searchSourceBuilder(testSearchSourceBuilder)
+            .routing(testRouting)
             .build();
 
         assertArrayEquals(testIndices, request.indices());
         assertEquals(testTenantId, request.tenantId());
         assertEquals(testSearchSourceBuilder, request.searchSourceBuilder());
+        assertEquals(testRouting, request.routing());
+
+        // Test null routing
+        SearchDataObjectRequest requestNoRouting = SearchDataObjectRequest.builder()
+            .indices(testIndices)
+            .tenantId(testTenantId)
+            .searchSourceBuilder(testSearchSourceBuilder)
+            .build();
+        assertNull(requestNoRouting.routing());
     }
 }

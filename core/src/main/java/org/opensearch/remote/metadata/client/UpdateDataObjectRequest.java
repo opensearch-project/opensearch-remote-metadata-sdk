@@ -49,7 +49,35 @@ public class UpdateDataObjectRequest extends WriteDataObjectRequest<UpdateDataOb
         int retryOnConflict,
         ToXContentObject dataObject
     ) {
-        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, false, null, null);
+        this(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, retryOnConflict, dataObject, null);
+    }
+
+    /**
+     * Overloaded constructor with routing support.
+     * @param index the index location
+     * @param id the document id
+     * @param tenantId the tenant id
+     * @param ifSeqNo the sequence number to match or null if not required
+     * @param ifPrimaryTerm the primary term to match or null if not required
+     * @param refreshPolicy when should the written data be refreshed
+     * @param timeout A timeout to wait if the index operation can't be performed immediately
+     * @param retryOnConflict the number of retries on version conflict
+     * @param dataObject the data object
+     * @param routing optional routing value for shard selection (nullable)
+     */
+    public UpdateDataObjectRequest(
+        String index,
+        String id,
+        String tenantId,
+        Long ifSeqNo,
+        Long ifPrimaryTerm,
+        RefreshPolicy refreshPolicy,
+        TimeValue timeout,
+        int retryOnConflict,
+        ToXContentObject dataObject,
+        String routing
+    ) {
+        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, false, null, null, routing);
         this.retryOnConflict = retryOnConflict;
         this.dataObject = dataObject;
     }
@@ -131,7 +159,7 @@ public class UpdateDataObjectRequest extends WriteDataObjectRequest<UpdateDataOb
          */
         public UpdateDataObjectRequest build() {
             WriteDataObjectRequest.validateSeqNoAndPrimaryTerm(this.ifSeqNo, this.ifPrimaryTerm, false);
-            return new UpdateDataObjectRequest(
+            UpdateDataObjectRequest request = new UpdateDataObjectRequest(
                 this.index,
                 this.id,
                 this.tenantId,
@@ -140,8 +168,10 @@ public class UpdateDataObjectRequest extends WriteDataObjectRequest<UpdateDataOb
                 this.refreshPolicy,
                 this.timeout,
                 this.retryOnConflict,
-                this.dataObject
+                this.dataObject,
+                this.routing
             );
+            return request;
         }
     }
 }

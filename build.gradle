@@ -8,7 +8,7 @@ import org.opensearch.gradle.VersionProperties
 buildscript {
     ext {
         opensearch_group = "org.opensearch"
-        opensearch_version = System.getProperty("opensearch.version", "3.6.0-SNAPSHOT")
+        opensearch_version = System.getProperty("opensearch.version", "3.7.0-SNAPSHOT")
         is_snapshot = "true" == System.getProperty("build.snapshot", "true")
         build_version_qualifier = System.getProperty("build.version_qualifier", "")
 
@@ -21,10 +21,10 @@ buildscript {
             opensearch_build += "-SNAPSHOT"
         }
 
-        opensearch_java_version = '3.7.0'
+        opensearch_java_version = '3.8.0'
         aws_sdk_version = '2.30.18'
-        junit_version = '5.14.3' // version catalog is 4.x
-        junit_platform_version = '1.14.3' // version catalog brings in earlier
+        junit_version = '5.14.4' // version catalog is 4.x
+        junit_platform_version = '1.14.4' // version catalog brings in earlier
         aws_crypto_material_providers_version = '1.11.0' // version for crypto material provider
         aws_database_encryption_sdk_dynamodb_version = '3.9.0' // version for ddb encrypt
     }
@@ -38,7 +38,7 @@ buildscript {
 
     dependencies {
         classpath "org.opensearch.gradle:build-tools:${opensearch_version}"
-        classpath "com.diffplug.spotless:spotless-plugin-gradle:8.3.0"
+        classpath "com.diffplug.spotless:spotless-plugin-gradle:8.4.0"
     }
 }
 
@@ -100,9 +100,8 @@ subprojects {
         implementation "org.apache.logging.log4j:log4j-core:${versions.log4j}"
 
         implementation("com.fasterxml.jackson.core:jackson-annotations:${versions.jackson_annotations}")
-        implementation("com.fasterxml.jackson.core:jackson-databind:${versions.jackson_databind}")
-        implementation "com.fasterxml.jackson.core:jackson-core:${versions.jackson_databind}"
-        implementation "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:${versions.jackson_databind}"
+        implementation("tools.jackson.core:jackson-databind:${versions.jackson3_databind}")
+        implementation "tools.jackson.core:jackson-core:${versions.jackson3}"
 
         implementation "org.apache.httpcomponents.client5:httpclient5:${versions.httpclient5}"
         implementation "org.apache.httpcomponents.core5:httpcore5:${versions.httpcore5}"
@@ -118,6 +117,14 @@ subprojects {
 
     configurations {
         testImplementation.extendsFrom testFixtures
+    }
+
+    configurations.all {
+        resolutionStrategy {
+            force "net.bytebuddy:byte-buddy:${versions.bytebuddy}"
+            force "net.bytebuddy:byte-buddy-agent:${versions.bytebuddy}"
+            force "org.codehaus.plexus:plexus-utils:3.6.1"
+        }
     }
 
     test {

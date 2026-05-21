@@ -37,7 +37,31 @@ public class DeleteDataObjectRequest extends WriteDataObjectRequest<DeleteDataOb
         RefreshPolicy refreshPolicy,
         TimeValue timeout
     ) {
-        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, false, null, null);
+        this(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, null);
+    }
+
+    /**
+     * Overloaded constructor with routing support.
+     * @param index the index location
+     * @param id the document id
+     * @param tenantId the tenant id
+     * @param ifSeqNo the sequence number to match or null if not required
+     * @param ifPrimaryTerm the primary term to match or null if not required
+     * @param refreshPolicy when should the written data be refreshed
+     * @param timeout A timeout to wait if the index operation can't be performed immediately
+     * @param routing optional routing value for shard selection (nullable)
+     */
+    public DeleteDataObjectRequest(
+        String index,
+        String id,
+        String tenantId,
+        Long ifSeqNo,
+        Long ifPrimaryTerm,
+        RefreshPolicy refreshPolicy,
+        TimeValue timeout,
+        String routing
+    ) {
+        super(index, id, tenantId, ifSeqNo, ifPrimaryTerm, refreshPolicy, timeout, false, null, null, routing);
     }
 
     /**
@@ -59,15 +83,17 @@ public class DeleteDataObjectRequest extends WriteDataObjectRequest<DeleteDataOb
          */
         public DeleteDataObjectRequest build() {
             WriteDataObjectRequest.validateSeqNoAndPrimaryTerm(this.ifSeqNo, this.ifPrimaryTerm, false);
-            return new DeleteDataObjectRequest(
+            DeleteDataObjectRequest request = new DeleteDataObjectRequest(
                 this.index,
                 this.id,
                 this.tenantId,
                 this.ifSeqNo,
                 this.ifPrimaryTerm,
                 this.refreshPolicy,
-                this.timeout
+                this.timeout,
+                this.routing
             );
+            return request;
         }
     }
 }

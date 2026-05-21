@@ -8,6 +8,8 @@
  */
 package org.opensearch.remote.metadata.client;
 
+import org.opensearch.common.Nullable;
+
 /**
  * A superclass for common fields in Data Object Request classes
  */
@@ -18,6 +20,7 @@ public abstract class DataObjectRequest {
     private String tenantId;
     private final String cmkRoleArn;
     private final String assumeRoleArn;
+    private final @Nullable String routing;
 
     /**
      * Instantiate this request with an index and id.
@@ -28,24 +31,22 @@ public abstract class DataObjectRequest {
      * @param tenantId the tenant id
      */
     protected DataObjectRequest(String index, String id, String tenantId) {
-        this(index, id, tenantId, null, null);
+        this(index, id, tenantId, null, null, null);
     }
 
     /**
      * Overloaded constructor allowing optional CMK role ARN.
-     * Existing subclasses can continue using the 3-arg constructor.
      * @param index the index location to delete the object
      * @param id the document id
      * @param tenantId the tenant id
      * @param cmkRoleArn optional CMK role ARN (nullable)
      */
     protected DataObjectRequest(String index, String id, String tenantId, String cmkRoleArn) {
-        this(index, id, tenantId, cmkRoleArn, null);
+        this(index, id, tenantId, cmkRoleArn, null, null);
     }
 
     /**
-     * Overloaded constructor allowing optional CMK role ARN.
-     * Existing subclasses can continue using the 3-arg constructor.
+     * Overloaded constructor allowing optional CMK role ARN and assume role ARN.
      * @param index the index location to delete the object
      * @param id the document id
      * @param tenantId the tenant id
@@ -53,11 +54,32 @@ public abstract class DataObjectRequest {
      * @param assumeRoleArn optional role ARN to assume (nullable)
      */
     protected DataObjectRequest(String index, String id, String tenantId, String cmkRoleArn, String assumeRoleArn) {
+        this(index, id, tenantId, cmkRoleArn, assumeRoleArn, null);
+    }
+
+    /**
+     * Overloaded constructor with all fields including routing.
+     * @param index the index location to delete the object
+     * @param id the document id
+     * @param tenantId the tenant id
+     * @param cmkRoleArn optional CMK role ARN (nullable)
+     * @param assumeRoleArn optional role ARN to assume (nullable)
+     * @param routing optional routing value for shard selection (nullable)
+     */
+    protected DataObjectRequest(
+        String index,
+        String id,
+        String tenantId,
+        String cmkRoleArn,
+        String assumeRoleArn,
+        @Nullable String routing
+    ) {
         this.index = index;
         this.id = id;
         this.tenantId = tenantId;
         this.cmkRoleArn = cmkRoleArn;
         this.assumeRoleArn = assumeRoleArn;
+        this.routing = routing;
     }
 
     /**
@@ -117,6 +139,14 @@ public abstract class DataObjectRequest {
     }
 
     /**
+     * Returns the routing value for shard selection. May not be applicable on all clients.
+     * @return the routing value or null if not set
+     */
+    public @Nullable String routing() {
+        return this.routing;
+    }
+
+    /**
      * Returns whether the subclass can be used in a {@link BulkDataObjectRequest}
      * @return whether the subclass is a write request
      */
@@ -133,6 +163,7 @@ public abstract class DataObjectRequest {
         protected String tenantId = null;
         protected String cmkRoleArn = null;
         protected String assumeRoleArn = null;
+        protected String routing = null;
 
         /**
          * Empty constructor to initialize
@@ -186,6 +217,16 @@ public abstract class DataObjectRequest {
          */
         public T assumeRoleArn(String assumeRoleArn) {
             this.assumeRoleArn = assumeRoleArn;
+            return self();
+        }
+
+        /**
+         * Add a routing value for shard selection. May not be applicable on all clients.
+         * @param routing the routing value
+         * @return the updated builder
+         */
+        public T routing(String routing) {
+            this.routing = routing;
             return self();
         }
 

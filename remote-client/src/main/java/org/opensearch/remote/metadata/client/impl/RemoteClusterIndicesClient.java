@@ -179,6 +179,9 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 if (request.ifPrimaryTerm() != null) {
                     builder.ifPrimaryTerm(request.ifPrimaryTerm());
                 }
+                if (request.routing() != null) {
+                    builder.routing(request.routing());
+                }
                 IndexRequest<?> indexRequest = builder.build();
                 log.info("Indexing data object in {}", request.index());
 
@@ -271,7 +274,11 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
     ) {
         return doPrivileged(() -> {
             try {
-                GetRequest getRequest = new GetRequest.Builder().index(request.index()).id(request.id()).build();
+                GetRequest.Builder getBuilder = new GetRequest.Builder().index(request.index()).id(request.id());
+                if (request.routing() != null) {
+                    getBuilder.routing(request.routing());
+                }
+                GetRequest getRequest = getBuilder.build();
                 log.info("Getting {} from {}", request.id(), request.index());
                 return openSearchAsyncClient.get(getRequest, MAP_DOCTYPE).thenApply(getResponse -> {
                     log.info("Get found status for id {}: {}", getResponse.id(), getResponse.found());
@@ -339,6 +346,9 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 if (request.retryOnConflict() > 0) {
                     updateRequestBuilder.retryOnConflict(request.retryOnConflict());
                 }
+                if (request.routing() != null) {
+                    updateRequestBuilder.routing(request.routing());
+                }
                 UpdateRequest<Map<String, Object>, ?> updateRequest = updateRequestBuilder.build();
                 log.info("Updating {} in {}", request.id(), request.index());
                 return openSearchAsyncClient.update(updateRequest, MAP_DOCTYPE).thenApply(updateResponse -> {
@@ -400,6 +410,9 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 }
                 if (request.ifPrimaryTerm() != null) {
                     builder.ifPrimaryTerm(request.ifPrimaryTerm());
+                }
+                if (request.routing() != null) {
+                    builder.routing(request.routing());
                 }
                 DeleteRequest deleteRequest = builder.build();
                 log.info("Deleting {} from {}", request.id(), request.index());
@@ -639,6 +652,9 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                     searchRequest = searchRequest.toBuilder().index(Arrays.asList(request.indices())).query(boolQuery.toQuery()).build();
                 } else {
                     searchRequest = searchRequest.toBuilder().index(Arrays.asList(request.indices())).build();
+                }
+                if (request.routing() != null) {
+                    searchRequest = searchRequest.toBuilder().routing(request.routing()).build();
                 }
 
                 return openSearchAsyncClient.search(searchRequest, MAP_DOCTYPE).thenApply(searchResponse -> {

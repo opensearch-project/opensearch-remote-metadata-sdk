@@ -8,6 +8,7 @@
  */
 package org.opensearch.remote.metadata.client;
 
+import org.opensearch.common.Nullable;
 import org.opensearch.search.builder.SearchSourceBuilder;
 
 /**
@@ -18,20 +19,23 @@ public class SearchDataObjectRequest {
     private final String[] indices;
     private final String tenantId;
     private final SearchSourceBuilder searchSourceBuilder;
+    private final @Nullable String routing;
 
     /**
-     * Instantiate this request with an optional list of indices and search source
+     * Instantiate this request with an optional list of indices, search source, and routing.
      * <p>
      * For data storage implementations other than OpenSearch, an index may be referred to as a table
      *
      * @param indices the indices to search for the object
      * @param tenantId the tenant id
      * @param searchSourceBuilder the search body containing the query
+     * @param routing the routing value to control which shard the search hits (nullable)
      */
-    public SearchDataObjectRequest(String[] indices, String tenantId, SearchSourceBuilder searchSourceBuilder) {
+    public SearchDataObjectRequest(String[] indices, String tenantId, SearchSourceBuilder searchSourceBuilder, @Nullable String routing) {
         this.indices = indices;
         this.tenantId = tenantId;
         this.searchSourceBuilder = searchSourceBuilder;
+        this.routing = routing;
     }
 
     /**
@@ -59,6 +63,14 @@ public class SearchDataObjectRequest {
     }
 
     /**
+     * Returns the routing value
+     * @return the routing or null if not set
+     */
+    public @Nullable String routing() {
+        return this.routing;
+    }
+
+    /**
      * Instantiate a builder for this object
      * @return a builder instance
      */
@@ -73,6 +85,7 @@ public class SearchDataObjectRequest {
         private String[] indices = null;
         private String tenantId = null;
         private SearchSourceBuilder searchSourceBuilder;
+        private String routing = null;
 
         /**
          * Empty Constructor for the Builder object
@@ -110,11 +123,21 @@ public class SearchDataObjectRequest {
         }
 
         /**
+         * Add a routing value to this builder
+         * @param routing the routing value
+         * @return the updated builder
+         */
+        public Builder routing(String routing) {
+            this.routing = routing;
+            return this;
+        }
+
+        /**
          * Builds the request
          * @return A {@link SearchDataObjectRequest}
          */
         public SearchDataObjectRequest build() {
-            return new SearchDataObjectRequest(this.indices, this.tenantId, this.searchSourceBuilder);
+            return new SearchDataObjectRequest(this.indices, this.tenantId, this.searchSourceBuilder, this.routing);
         }
     }
 }

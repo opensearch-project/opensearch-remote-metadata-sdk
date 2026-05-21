@@ -8,11 +8,6 @@
  */
 package org.opensearch.remote.metadata.client.impl;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 import java.util.ArrayList;
@@ -20,6 +15,11 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
 
 /**
  * Utility methods for transforming JSON to objects
@@ -37,7 +37,7 @@ public class DDBJsonTransformer {
      */
     public static Map<String, AttributeValue> convertJsonObjectToDDBAttributeMap(JsonNode jsonNode) {
         Map<String, AttributeValue> item = new HashMap<>();
-        Iterator<Map.Entry<String, JsonNode>> fields = jsonNode.fields();
+        Iterator<Map.Entry<String, JsonNode>> fields = jsonNode.properties().iterator();
 
         while (fields.hasNext()) {
             Map.Entry<String, JsonNode> field = fields.next();

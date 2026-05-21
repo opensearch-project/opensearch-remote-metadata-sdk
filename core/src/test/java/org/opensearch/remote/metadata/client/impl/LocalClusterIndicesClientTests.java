@@ -193,6 +193,31 @@ public class LocalClusterIndicesClientTests {
     }
 
     @Test
+    public void testPutDataObjectWithRouting() throws IOException {
+        String testRouting = "test-monitor-id";
+        PutDataObjectRequest putRequest = PutDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .routing(testRouting)
+            .dataObject(testDataObject)
+            .build();
+
+        IndexResponse indexResponse = new IndexResponse(new ShardId(TEST_INDEX, "_na_", 0), TEST_ID, 1, 0, 2, true);
+        doAnswer(invocation -> {
+            ActionListener<IndexResponse> listener = invocation.getArgument(1);
+            listener.onResponse(indexResponse);
+            return null;
+        }).when(mockedClient).index(any(IndexRequest.class), any());
+
+        sdkClient.putDataObjectAsync(putRequest).toCompletableFuture().join();
+
+        ArgumentCaptor<IndexRequest> requestCaptor = ArgumentCaptor.forClass(IndexRequest.class);
+        verify(mockedClient, times(1)).index(requestCaptor.capture(), any());
+        assertEquals(testRouting, requestCaptor.getValue().routing());
+    }
+
+    @Test
     public void testPutDataObject_Exception() throws IOException {
         PutDataObjectRequest putRequest = PutDataObjectRequest.builder()
             .index(TEST_INDEX)
@@ -345,6 +370,32 @@ public class LocalClusterIndicesClientTests {
     }
 
     @Test
+    public void testGetDataObjectWithRouting() throws IOException {
+        String testRouting = "test-monitor-id";
+        GetDataObjectRequest getRequest = GetDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .routing(testRouting)
+            .build();
+
+        String json = testDataObject.toJson();
+        GetResponse getResponse = new GetResponse(new GetResult(TEST_INDEX, TEST_ID, -2, 0, 1, true, new BytesArray(json), null, null));
+
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(1);
+            listener.onResponse(getResponse);
+            return null;
+        }).when(mockedClient).get(any(GetRequest.class), any());
+
+        sdkClient.getDataObjectAsync(getRequest).toCompletableFuture().join();
+
+        ArgumentCaptor<GetRequest> requestCaptor = ArgumentCaptor.forClass(GetRequest.class);
+        verify(mockedClient, times(1)).get(requestCaptor.capture(), any());
+        assertEquals(testRouting, requestCaptor.getValue().routing());
+    }
+
+    @Test
     public void testGetDataObject_Exception() throws IOException {
         GetDataObjectRequest getRequest = GetDataObjectRequest.builder().index(TEST_INDEX).id(TEST_ID).tenantId(TEST_TENANT_ID).build();
 
@@ -491,6 +542,40 @@ public class LocalClusterIndicesClientTests {
     }
 
     @Test
+    public void testUpdateDataObjectWithRouting() throws IOException {
+        String testRouting = "test-monitor-id";
+        UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .routing(testRouting)
+            .dataObject(testDataObject)
+            .build();
+
+        UpdateResponse updateResponse = new UpdateResponse(
+            new ShardInfo(1, 1),
+            new ShardId(TEST_INDEX, "_na_", 0),
+            TEST_ID,
+            1,
+            0,
+            2,
+            DocWriteResponse.Result.UPDATED
+        );
+
+        doAnswer(invocation -> {
+            ActionListener<UpdateResponse> listener = invocation.getArgument(1);
+            listener.onResponse(updateResponse);
+            return null;
+        }).when(mockedClient).update(any(UpdateRequest.class), any());
+
+        sdkClient.updateDataObjectAsync(updateRequest).toCompletableFuture().join();
+
+        ArgumentCaptor<UpdateRequest> requestCaptor = ArgumentCaptor.forClass(UpdateRequest.class);
+        verify(mockedClient, times(1)).update(requestCaptor.capture(), any());
+        assertEquals(testRouting, requestCaptor.getValue().routing());
+    }
+
+    @Test
     public void testUpdateDataObject_Exception() throws IOException {
         UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
             .index(TEST_INDEX)
@@ -596,6 +681,30 @@ public class LocalClusterIndicesClientTests {
     }
 
     @Test
+    public void testDeleteDataObjectWithRouting() throws IOException {
+        String testRouting = "test-monitor-id";
+        DeleteDataObjectRequest deleteRequest = DeleteDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .routing(testRouting)
+            .build();
+
+        DeleteResponse deleteResponse = new DeleteResponse(new ShardId(TEST_INDEX, "_na_", 0), TEST_ID, 1, 0, 2, true);
+
+        doAnswer(invocation -> {
+            ActionListener<DeleteResponse> listener = invocation.getArgument(1);
+            listener.onResponse(deleteResponse);
+            return null;
+        }).when(mockedClient).delete(any(DeleteRequest.class), any());
+
+        sdkClient.deleteDataObjectAsync(deleteRequest).toCompletableFuture().join();
+
+        ArgumentCaptor<DeleteRequest> requestCaptor = ArgumentCaptor.forClass(DeleteRequest.class);
+        verify(mockedClient, times(1)).delete(requestCaptor.capture(), any());
+        assertEquals(testRouting, requestCaptor.getValue().routing());
+    }
+
     public void testDeleteDataObject_Exception() throws IOException {
         DeleteDataObjectRequest deleteRequest = DeleteDataObjectRequest.builder()
             .index(TEST_INDEX)
@@ -983,6 +1092,45 @@ public class LocalClusterIndicesClientTests {
         assertEquals(OpenSearchStatusException.class, cause.getClass());
         assertEquals(RestStatus.INTERNAL_SERVER_ERROR, ((OpenSearchStatusException) cause).status());
         assertEquals("Failed to search indices [test_index]", cause.getMessage());
+    }
+
+    @Test
+    public void testSearchDataObjectWithRouting() throws IOException {
+        String testRouting = "test-monitor-id";
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        SearchDataObjectRequest searchRequest = SearchDataObjectRequest.builder()
+            .indices(TEST_INDEX)
+            .tenantId(TEST_TENANT_ID)
+            .searchSourceBuilder(searchSourceBuilder)
+            .routing(testRouting)
+            .build();
+
+        SearchResponse searchResponse = new SearchResponse(
+            InternalSearchResponse.empty(),
+            null,
+            1,
+            1,
+            0,
+            123,
+            new SearchResponse.PhaseTook(
+                EnumSet.allOf(SearchPhaseName.class).stream().collect(Collectors.toMap(SearchPhaseName::getName, e -> (long) e.ordinal()))
+            ),
+            new ShardSearchFailure[0],
+            SearchResponse.Clusters.EMPTY,
+            null
+        );
+
+        doAnswer(invocation -> {
+            ActionListener<SearchResponse> listener = invocation.getArgument(1);
+            listener.onResponse(searchResponse);
+            return null;
+        }).when(mockedClient).search(any(SearchRequest.class), any());
+
+        SearchDataObjectResponse response = sdkClient.searchDataObjectAsync(searchRequest).toCompletableFuture().join();
+
+        ArgumentCaptor<SearchRequest> requestCaptor = ArgumentCaptor.forClass(SearchRequest.class);
+        verify(mockedClient, times(1)).search(requestCaptor.capture(), any());
+        assertEquals(testRouting, requestCaptor.getValue().routing());
     }
 
     @Test
