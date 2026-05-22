@@ -10,15 +10,15 @@ on:
 
 jobs:
   Get-CI-Image-Tag:
-    uses: opensearch-project/opensearch-build/.github/workflows/get-ci-image-tag.yml@main
+    uses: opensearch-project/opensearch-build/.github/workflows/get-ci-image-tag.yml@c2498b758c08fb7bc48476509a5fc1b8dd5f7493 # main
     with:
       product: opensearch
   spotless:
     if: github.repository == 'opensearch-project/opensearch-remote-metadata-sdk'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           java-version: 25
           distribution: temurin
@@ -29,8 +29,8 @@ jobs:
     if: github.repository == 'opensearch-project/opensearch-remote-metadata-sdk'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           java-version: 25
           distribution: temurin
@@ -58,9 +58,9 @@ jobs:
     steps:
     - name: Run start commands
       run: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-command }}
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
     - name: Set up JDK ${{ matrix.java }}
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
       with:
         java-version: ${{ matrix.java }}
         distribution: temurin
@@ -74,7 +74,7 @@ jobs:
                              echo "Publish to Maven Local" && ./gradlew publishToMavenLocal'
     - name: Upload Coverage Report Artifacts
       if: contains(matrix.java, '25')
-      uses: actions/upload-artifact@v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
       with:
         name: coverage-report-linux-jdk${{ matrix.java }}
         path: '**/build/reports/jacoco/test/jacocoTestReport.xml'
@@ -85,9 +85,9 @@ jobs:
     steps:
       # The checkout step should not be necessary but adding to work around CodeCov upload issue
       # see: https://github.com/codecov/codecov-action/issues/1801
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: Download Coverage Report Artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: coverage-report-linux-jdk25
           path: ./coverage-reports
@@ -97,7 +97,7 @@ jobs:
           REPORTS=$(find ./coverage-reports -name "jacocoTestReport.xml" | tr '\n' ',' | sed 's/,$//')
           echo "report_files=$REPORTS" >> $GITHUB_OUTPUT
       - name: Upload Coverage Report
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ${{ steps.find-jacoco-reports.outputs.report_files }}
@@ -113,9 +113,9 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
     - name: Set up JDK ${{ matrix.java }}
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
       with:
         java-version: ${{ matrix.java }}
         distribution: temurin
