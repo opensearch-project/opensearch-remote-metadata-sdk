@@ -13,7 +13,3 @@ Compatible with OpenSearch and OpenSearch Dashboards version 3.7.0
 ### Infrastructure
 
 * Add Gradle dependency caching to setup-java steps in CI workflows to reduce build times ([#364](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/364))
-
-### Maintenance
-
-* Add release notes for 3.6.0 ([#353](https://github.com/opensearch-project/opensearch-remote-metadata-sdk/pull/353))
