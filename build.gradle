@@ -26,7 +26,7 @@ buildscript {
         junit_version = '5.14.4' // version catalog is 4.x
         junit_platform_version = '1.14.4' // version catalog brings in earlier
         aws_crypto_material_providers_version = '1.11.0' // version for crypto material provider
-        aws_database_encryption_sdk_dynamodb_version = '3.9.0' // version for ddb encrypt
+        aws_database_encryption_sdk_dynamodb_version = '4.0.0' // version for ddb encrypt
     }
 
     repositories {
