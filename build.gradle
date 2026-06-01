@@ -89,6 +89,8 @@ allprojects {
         exclude group: 'org.apache.httpcomponents', module: 'httpcore'
         // Fix for CVE-2025-48924
         exclude group: 'org.apache.commons', module: 'commons-lang3'
+        // Fix for CVE-2025-67030
+        exclude group: 'org.codehaus.plexus', module: 'plexus-utils'
     }
 }
 
