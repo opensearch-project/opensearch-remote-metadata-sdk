@@ -126,6 +126,8 @@ subprojects {
             force "net.bytebuddy:byte-buddy:${versions.bytebuddy}"
             force "net.bytebuddy:byte-buddy-agent:${versions.bytebuddy}"
             force "org.codehaus.plexus:plexus-utils:4.0.3"
+            // Fix for CVE-2026-5598 and CVE-2026-0636
+            force "org.bouncycastle:bcprov-jdk18on:1.84"
         }
     }
 
