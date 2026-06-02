@@ -12,8 +12,14 @@ dependencies {
     implementation(platform("software.amazon.awssdk:bom:${versions.aws}"))
     implementation("software.amazon.awssdk:kms:${versions.aws}")
     implementation "software.amazon.awssdk:dynamodb"
-    implementation "software.amazon.cryptography:aws-database-encryption-sdk-dynamodb:${rootProject.ext.aws_database_encryption_sdk_dynamodb_version}"
-    implementation "software.amazon.cryptography:aws-cryptographic-material-providers:${rootProject.ext.aws_crypto_material_providers_version}"
+    implementation("software.amazon.cryptography:aws-database-encryption-sdk-dynamodb:${rootProject.ext.aws_database_encryption_sdk_dynamodb_version}") {
+        // OpenSearch 3.x uses bc-fips; exclude non-FIPS bcprov to avoid CVE-2026-5598
+        exclude group: "org.bouncycastle", module: "bcprov-jdk18on"
+    }
+    implementation("software.amazon.cryptography:aws-cryptographic-material-providers:${rootProject.ext.aws_crypto_material_providers_version}") {
+        // OpenSearch 3.x uses bc-fips; exclude non-FIPS bcprov to avoid CVE-2026-5598
+        exclude group: "org.bouncycastle", module: "bcprov-jdk18on"
+    }
     implementation "software.amazon.awssdk:sts:${versions.aws}"
     implementation "software.amazon.awssdk:netty-nio-client:${versions.aws}"
     implementation "io.netty:netty-codec-http:${versions.netty}"
