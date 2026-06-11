@@ -20,7 +20,7 @@ jobs:
       (github.event_name == 'issues' &&
        github.event.issue.user.type != 'Bot' &&
        github.repository == 'opensearch-project/opensearch-remote-metadata-sdk')
-    uses: opensearch-project/opensearch-build/.github/workflows/issue-dedupe-detect.yml@b2d99a40d4cec48d1545cd41ed8e18f1817b165f # main
+    uses: opensearch-project/opensearch-build/.github/workflows/issue-dedupe-detect.yml@27f1ebc46c1ca3f4823848ad7ba5622e55dfa562 # main
     permissions:
       contents: read
       issues: write
@@ -33,7 +33,7 @@ jobs:
 
   auto-close-issue:
     if: github.event_name == 'schedule' && github.repository == 'opensearch-project/opensearch-remote-metadata-sdk'
-    uses: opensearch-project/opensearch-build/.github/workflows/issue-dedupe-autoclose.yml@b2d99a40d4cec48d1545cd41ed8e18f1817b165f # main
+    uses: opensearch-project/opensearch-build/.github/workflows/issue-dedupe-autoclose.yml@27f1ebc46c1ca3f4823848ad7ba5622e55dfa562 # main
     permissions:
       issues: write
     with:
