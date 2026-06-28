@@ -128,6 +128,11 @@ subprojects {
             force "net.bytebuddy:byte-buddy:${versions.bytebuddy}"
             force "net.bytebuddy:byte-buddy-agent:${versions.bytebuddy}"
             force "org.codehaus.plexus:plexus-utils:4.0.3"
+            // Fix for CVE-2026-33870 and CVE-2026-33871
+            force "io.netty:netty-codec-http:${versions.netty}"
+            force "io.netty:netty-codec-http2:${versions.netty}"
+            // Fix for CVE-2026-40542
+            force "org.apache.httpcomponents.client5:httpclient5:${versions.httpclient5}"
         }
     }
 
