@@ -80,7 +80,7 @@ allprojects {
     project.getExtensions().getExtraProperties().set("versions", VersionProperties.getVersions())
 
     checkstyle {
-        toolVersion = "latest.release"
+        toolVersion = "13.9.0"
     }
 
     configurations.checkstyle {
