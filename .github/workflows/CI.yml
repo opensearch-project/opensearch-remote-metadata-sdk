@@ -43,6 +43,7 @@ jobs:
   build-linux:
     needs: [Get-CI-Image-Tag, spotless, javadoc]
     strategy:
+      fail-fast: false
       matrix:
         java:
           - 11
@@ -84,6 +85,7 @@ jobs:
   build-windows:
     needs: [spotless, javadoc]
     strategy:
+      fail-fast: false
       matrix:
         java:
           - 11
