@@ -46,6 +46,11 @@
         ],
         "groupName": "AWS Database Encryption SDK for DynamoDB",
         "separateMajorMinor": false
+      },
+      {
+        "description": "Mend does not allow Renovate to run the Gradle wrapper, so its wrapper PRs change distributionUrl without updating distributionSha256Sum, the wrapper jar, or scripts. Update the wrapper manually with ./gradlew wrapper instead.",
+        "matchManagers": ["gradle-wrapper"],
+        "enabled": false
       }
     ],
     "workflowRules": {
