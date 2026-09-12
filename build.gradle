@@ -21,7 +21,7 @@ buildscript {
             opensearch_build += "-SNAPSHOT"
         }
 
-        opensearch_java_version = '3.9.0'
+        opensearch_java_version = '3.10.0'
         aws_sdk_version = '2.30.18'
         junit_version = '6.1.3' // version catalog is 4.x
         junit_platform_version = '6.1.3' // version catalog brings in earlier
