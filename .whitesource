@@ -37,6 +37,17 @@
       "github>whitesource/merge-confidence:beta"
     ],
     "addLabels": ["skip-changelog"],
+    "packageRules": [
+      {
+        "description": "aws-database-encryption-sdk-dynamodb pins an exact aws-cryptographic-material-providers version. Update both together so the published POM never contains two versions, which fails downstream plugin builds using failOnVersionConflict.",
+        "matchPackageNames": [
+          "software.amazon.cryptography:aws-database-encryption-sdk-dynamodb",
+          "software.amazon.cryptography:aws-cryptographic-material-providers"
+        ],
+        "groupName": "AWS Database Encryption SDK for DynamoDB",
+        "separateMajorMinor": false
+      }
+    ],
     "workflowRules": {
       "enabled": true
     }
