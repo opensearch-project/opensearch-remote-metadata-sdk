@@ -22,8 +22,8 @@ buildscript {
         }
 
         opensearch_java_version = '2.19.0'
-        apache_http_components_version = '5.5'
-        apache_http_core_version = '5.3.4'
+        apache_http_components_version = '5.6.3'
+        apache_http_core_version = '5.4.3'
         aws_sdk_version = '2.30.18'
         junit_version = '5.11.4' // version catalog is 4.x
     }
@@ -137,6 +137,11 @@ subprojects {
     }
 
     configurations {
+        all {
+            resolutionStrategy {
+                force 'org.apache.httpcomponents.core5:httpcore5-h2:5.4.3'
+            }
+        }
         testImplementation.extendsFrom testFixtures
     }
 
