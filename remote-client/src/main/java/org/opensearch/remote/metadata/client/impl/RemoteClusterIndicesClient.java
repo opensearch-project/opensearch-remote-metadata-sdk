@@ -250,7 +250,10 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 ).map();
                 UpdateRequest.Builder<Map<String, Object>, Map<String, Object>> updateRequestBuilder = new UpdateRequest.Builder<
                     Map<String, Object>,
-                    Map<String, Object>>().index(request.index()).id(request.id()).doc(docMap);
+                    Map<String, Object>>().index(request.index())
+                    .id(request.id())
+                    .doc(docMap)
+                    .tPartialDocumentSerializer(new JsonTransformer.MapJsonpSerializer());
                 if (request.ifSeqNo() != null) {
                     updateRequestBuilder.ifSeqNo(request.ifSeqNo());
                 }
@@ -438,8 +441,11 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 LoggingDeprecationHandler.INSTANCE,
                 builder.toString()
             ).map();
-            operations.add(BulkOperation.of(op -> op.update(u -> {
-                u.index(updateRequest.index()).id(updateRequest.id()).document(docMap);
+            operations.add(BulkOperation.of(op -> op.<Map<String, Object>>update(u -> {
+                u.index(updateRequest.index())
+                    .id(updateRequest.id())
+                    .document(docMap)
+                    .tDocumentSerializer(new JsonTransformer.MapJsonpSerializer());
                 if (updateRequest.ifSeqNo() != null) {
                     u.ifSeqNo(updateRequest.ifSeqNo());
                 }
