@@ -335,6 +335,7 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                     Map<String, Object>>().index(request.index())
                     .id(request.id())
                     .doc(docMap)
+                    .tPartialDocumentSerializer(new JsonTransformer.MapJsonpSerializer())
                     .refresh(convertRefreshPolicyToRefresh(request.getRefreshPolicy()))
                     .timeout(convertTimeValueToTime(request.timeout()));
                 if (request.ifSeqNo() != null) {
@@ -561,8 +562,11 @@ public class RemoteClusterIndicesClient extends AbstractSdkClient {
                 LoggingDeprecationHandler.INSTANCE,
                 builder.toString()
             ).map();
-            operations.add(BulkOperation.of(op -> op.update(u -> {
-                u.index(updateRequest.index()).id(updateRequest.id()).document(docMap);
+            operations.add(BulkOperation.of(op -> op.<Map<String, Object>>update(u -> {
+                u.index(updateRequest.index())
+                    .id(updateRequest.id())
+                    .document(docMap)
+                    .tDocumentSerializer(new JsonTransformer.MapJsonpSerializer());
                 if (updateRequest.ifSeqNo() != null) {
                     u.ifSeqNo(updateRequest.ifSeqNo());
                 }
