@@ -19,6 +19,7 @@ import org.opensearch.action.DocWriteResponse;
 import org.opensearch.action.search.SearchPhaseExecutionException;
 import org.opensearch.action.search.ShardSearchFailure;
 import org.opensearch.client.json.JsonData;
+import org.opensearch.client.json.JsonpSerializable;
 import org.opensearch.client.json.jackson.JacksonJsonpMapper;
 import org.opensearch.client.opensearch.OpenSearchAsyncClient;
 import org.opensearch.client.opensearch._types.ErrorCause;
@@ -84,8 +85,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.io.StringWriter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -94,6 +99,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
+import jakarta.json.stream.JsonGenerator;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -450,6 +456,66 @@ public class RemoteClusterIndicesClientTests {
     }
 
     @Test
+    public void testUpdateDataObjectWithNullValues() throws IOException {
+        Map<String, Object> inner = new HashMap<>();
+        inner.put("input", null);
+        inner.put("output", "x");
+        Map<String, Object> doc = new HashMap<>();
+        doc.put("interface", null);
+        doc.put("iface2", inner);
+        doc.put("name", "n");
+        UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
+            .index(TEST_INDEX)
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .dataObject(doc)
+            .build();
+
+        UpdateResponse<Map<String, Object>> updateResponse = new UpdateResponse.Builder<Map<String, Object>>().id(TEST_ID)
+            .index(TEST_INDEX)
+            .primaryTerm(0)
+            .result(Result.Updated)
+            .seqNo(0)
+            .shards(new ShardStatistics.Builder().failed(0).successful(1).total(1).build())
+            .version(0)
+            .build();
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<UpdateRequest<Map<String, Object>, ?>> updateRequestCaptor = ArgumentCaptor.forClass(UpdateRequest.class);
+        when(mockedOpenSearchAsyncClient.update(updateRequestCaptor.capture(), any())).thenReturn(
+            CompletableFuture.completedFuture(updateResponse)
+        );
+
+        sdkClient.updateDataObjectAsync(updateRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join();
+
+        // Serialize the captured request with both the remote cluster client's mapper configuration and the
+        // default mapper used by the AOS client: explicit nulls must be sent so OpenSearch clears those fields
+        for (JacksonJsonpMapper mapper : List.of(
+            new JacksonJsonpMapper(
+                new ObjectMapper().setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
+                    .setSerializationInclusion(JsonInclude.Include.NON_NULL)
+            ),
+            new JacksonJsonpMapper()
+        )) {
+            StringWriter writer = new StringWriter();
+            try (JsonGenerator generator = mapper.jsonProvider().createGenerator(writer)) {
+                updateRequestCaptor.getValue().serialize(generator, mapper);
+            }
+            Map<String, Object> body = XContentHelper.convertToMap(XContentType.JSON.xContent(), writer.toString(), false);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> sentDoc = (Map<String, Object>) body.get("doc");
+            assertTrue(sentDoc.containsKey("interface"), "Top-level null was dropped: " + writer);
+            assertNull(sentDoc.get("interface"));
+            assertEquals("n", sentDoc.get("name"));
+            @SuppressWarnings("unchecked")
+            Map<String, Object> sentInner = (Map<String, Object>) sentDoc.get("iface2");
+            assertTrue(sentInner.containsKey("input"), "Nested null was dropped: " + writer);
+            assertNull(sentInner.get("input"));
+            assertEquals("x", sentInner.get("output"));
+        }
+    }
+
+    @Test
     public void testUpdateDataObject_NotFound() throws IOException {
         UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
             .index(TEST_INDEX)
@@ -499,7 +565,7 @@ public class RemoteClusterIndicesClientTests {
             .dataObject(testDataObject)
             .build();
 
-        ArgumentCaptor<UpdateRequest<?, ?>> updateRequestCaptor = ArgumentCaptor.forClass(UpdateRequest.class);
+        ArgumentCaptor<UpdateRequest<Map<String, Object>, ?>> updateRequestCaptor = ArgumentCaptor.forClass(UpdateRequest.class);
         when(mockedOpenSearchAsyncClient.update(updateRequestCaptor.capture(), any())).thenReturn(
             CompletableFuture.failedFuture(new IOException("test"))
         );
@@ -524,7 +590,7 @@ public class RemoteClusterIndicesClientTests {
             .ifPrimaryTerm(2)
             .build();
 
-        ArgumentCaptor<UpdateRequest<?, ?>> updateRequestCaptor = ArgumentCaptor.forClass(UpdateRequest.class);
+        ArgumentCaptor<UpdateRequest<Map<String, Object>, ?>> updateRequestCaptor = ArgumentCaptor.forClass(UpdateRequest.class);
         OpenSearchException conflictException = new OpenSearchException(
             new ErrorResponse.Builder().status(RestStatus.CONFLICT.getStatus())
                 .error(new ErrorCause.Builder().type("test").reason("test").build())
@@ -806,6 +872,70 @@ public class RemoteClusterIndicesClientTests {
         assertEquals(OpenSearchException.class, cause.getClass());
         assertEquals(RestStatus.INTERNAL_SERVER_ERROR.getStatus(), ((OpenSearchException) cause).status());
         assertTrue(cause.getMessage().contains("Failed to parse data object in a bulk response"));
+    }
+
+    @Test
+    public void testBulkDataObject_UpdateWithNullValues() throws IOException {
+        Map<String, Object> inner = new HashMap<>();
+        inner.put("input", null);
+        inner.put("output", "x");
+        Map<String, Object> doc = new HashMap<>();
+        doc.put("interface", null);
+        doc.put("iface2", inner);
+        doc.put("name", "n");
+        UpdateDataObjectRequest updateRequest = UpdateDataObjectRequest.builder()
+            .id(TEST_ID)
+            .tenantId(TEST_TENANT_ID)
+            .dataObject(doc)
+            .build();
+
+        BulkDataObjectRequest bulkRequest = BulkDataObjectRequest.builder().globalIndex(TEST_INDEX).build().add(updateRequest);
+
+        BulkResponse bulkResponse = new BulkResponse.Builder().took(100L)
+            .items(
+                List.of(
+                    new BulkResponseItem.Builder().id(TEST_ID)
+                        .index(TEST_INDEX)
+                        .operationType(OperationType.Update)
+                        .result(Result.Updated.jsonValue())
+                        .status(RestStatus.OK.getStatus())
+                        .build()
+                )
+            )
+            .errors(false)
+            .build();
+
+        ArgumentCaptor<BulkRequest> bulkRequestCaptor = ArgumentCaptor.forClass(BulkRequest.class);
+        when(mockedOpenSearchAsyncClient.bulk(bulkRequestCaptor.capture())).thenReturn(CompletableFuture.completedFuture(bulkResponse));
+
+        sdkClient.bulkDataObjectAsync(bulkRequest, testThreadPool.executor(TEST_THREAD_POOL)).toCompletableFuture().join();
+
+        // Serialize each NDJSON line of the update operation; the second line holds the doc
+        JacksonJsonpMapper mapper = new JacksonJsonpMapper(
+            new ObjectMapper().setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
+                .setSerializationInclusion(JsonInclude.Include.NON_NULL)
+        );
+        List<String> lines = new ArrayList<>();
+        Iterator<?> serializables = bulkRequestCaptor.getValue().operations().get(0).update()._serializables();
+        while (serializables.hasNext()) {
+            StringWriter writer = new StringWriter();
+            try (JsonGenerator generator = mapper.jsonProvider().createGenerator(writer)) {
+                ((JsonpSerializable) serializables.next()).serialize(generator, mapper);
+            }
+            lines.add(writer.toString());
+        }
+        assertEquals(2, lines.size());
+        Map<String, Object> body = XContentHelper.convertToMap(XContentType.JSON.xContent(), lines.get(1), false);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> sentDoc = (Map<String, Object>) body.get("doc");
+        assertTrue(sentDoc.containsKey("interface"), "Top-level null was dropped: " + lines.get(1));
+        assertNull(sentDoc.get("interface"));
+        assertEquals("n", sentDoc.get("name"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> sentInner = (Map<String, Object>) sentDoc.get("iface2");
+        assertTrue(sentInner.containsKey("input"), "Nested null was dropped: " + lines.get(1));
+        assertNull(sentInner.get("input"));
+        assertEquals("x", sentInner.get("output"));
     }
 
     @Test
